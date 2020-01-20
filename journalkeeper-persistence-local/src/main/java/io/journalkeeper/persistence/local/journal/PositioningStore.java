@@ -46,17 +46,13 @@ public class PositioningStore implements JournalPersistence, MonitoredPersistenc
     private File base;
     private final PreloadBufferPool bufferPool;
     private final NavigableMap<Long, StoreFile> storeFileMap = new ConcurrentSkipListMap<>();
-    private AtomicLong flushPosition = new AtomicLong(0L);
-    private AtomicLong writePosition =  new AtomicLong(0L);
-    private AtomicLong leftPosition = new AtomicLong(0L);
     // 删除和回滚不能同时操作fileMap，需要做一下互斥。
     private final Object fileMapMutex = new Object();    // 正在写入的
-    private StoreFile writeStoreFile = null;
     private Config config = null;
     public PositioningStore() {
         this.bufferPool = PreloadBufferPool.getInstance();
     }
-
+    private AtomicLong leftPosition = new AtomicLong(0L);
 
     /**
      * 将位置回滚到position
@@ -71,7 +67,7 @@ public class PositioningStore implements JournalPersistence, MonitoredPersistenc
                     ThreadSafeFormat.formatWithComma(givenMax),
                     ThreadSafeFormat.formatWithComma(min()),
                     ThreadSafeFormat.formatWithComma(max()),
-                    ThreadSafeFormat.formatWithComma(flushPosition.get()),
+                    ThreadSafeFormat.formatWithComma(flushed()),
                     base.getAbsolutePath());
 
             if (givenMax < min() || givenMax > max()) {
@@ -84,22 +80,15 @@ public class PositioningStore implements JournalPersistence, MonitoredPersistenc
                 );
             } else if (givenMax < max()) {
                 rollbackFiles(givenMax);
-                this.writePosition.set(givenMax);
-                if (this.flushPosition.get() > givenMax) this.flushPosition.set(givenMax);
-                resetWriteStoreFile();
             }
         }
     }
 
     private void clearData() throws IOException {
         for(StoreFile storeFile :this.storeFileMap.values()) {
-            if(storeFile.hasPage()) storeFile.unload();
-            File file = storeFile.file();
-            if(file.exists() && !file.delete())
-                throw new IOException(String.format("Can not delete file: %s.", file.getAbsolutePath()));
+            forceDeleteStoreFile(storeFile);
         }
         this.storeFileMap.clear();
-        this.writeStoreFile = null;
     }
 
     public void delete() throws IOException {
@@ -126,9 +115,6 @@ public class PositioningStore implements JournalPersistence, MonitoredPersistenc
             for(StoreFile sf : toBeRemoved.values()) {
                 logger.info("Delete store file {}.", sf.file().getAbsolutePath());
                 forceDeleteStoreFile(sf);
-                if (writeStoreFile == sf) {
-                    writeStoreFile = null;
-                }
             }
             toBeRemoved.clear();
         }
@@ -136,31 +122,14 @@ public class PositioningStore implements JournalPersistence, MonitoredPersistenc
 
     }
 
-
-    private void resetWriteStoreFile() {
-        if(!storeFileMap.isEmpty()) {
-            StoreFile storeFile = storeFileMap.lastEntry().getValue();
-            if(storeFile.position() + config.getFileDataSize() > writePosition.get()) {
-                writeStoreFile = storeFile;
-            }
-        }
-    }
     public void recover(Path path, long min, Properties properties) throws IOException {
         Files.createDirectories(path);
         this.base = path.toFile();
         this.config = toConfig(properties);
 
         bufferPool.addPreLoad(config.getFileDataSize(), config.getCachedFileCoreCount(), config.getCachedFileMaxCount());
-
+        leftPosition.set(min);
         recoverFileMap(min);
-
-        long recoverPosition = this.storeFileMap.isEmpty()? min : this.storeFileMap.lastKey() + this.storeFileMap.lastEntry().getValue().fileDataSize();
-        flushPosition.set(recoverPosition);
-        writePosition.set(recoverPosition);
-
-        leftPosition.set(this.storeFileMap.isEmpty()? min : this.storeFileMap.firstKey());
-
-        resetWriteStoreFile();
         if(logger.isDebugEnabled()) {
             logger.debug("Store loaded, left: {}, right: {},  base: {}.",
                     ThreadSafeFormat.formatWithComma(min()),
@@ -232,18 +201,17 @@ public class PositioningStore implements JournalPersistence, MonitoredPersistenc
         if(bytes.length > config.fileDataSize) {
             throw new TooManyBytesException(bytes.length, config.fileDataSize, base.toPath());
         }
-
         // Wait for flush
         maybeWaitForFlush();
 
         ByteBuffer buffer = ByteBuffer.wrap(bytes);
-        if (null == writeStoreFile) writeStoreFile = createStoreFile(writePosition.get());
+        StoreFile writeStoreFile = currentWriteFile();
         if (config.getFileDataSize() - writeStoreFile.writePosition() < buffer.remaining()) {
             writeStoreFile.closeWrite();
-            writeStoreFile = createStoreFile(writePosition.get());
+            writeStoreFile = createStoreFile();
         }
-
-        return writePosition.addAndGet(writeStoreFile.append(buffer));
+        writeStoreFile.append(buffer);
+        return writeStoreFile.position() + writeStoreFile.writePosition();
     }
 
 
@@ -266,42 +234,59 @@ public class PositioningStore implements JournalPersistence, MonitoredPersistenc
 
     @Override
     public long max() {
-        return writePosition.get();
+        Map.Entry<Long, StoreFile> lastEntry = storeFileMap.lastEntry();
+        return lastEntry == null ? min() : lastEntry.getValue().position() + lastEntry.getValue().writePosition();
     }
 
     @Override
     public long flushed() {
-        return flushPosition.get();
+        StoreFile flushFile = nextFlushFile();
+        return flushFile == null ? max() : flushFile.position() + flushFile.flushPosition();
+    }
+
+    private StoreFile nextFlushFile() {
+        StoreFile last = null;
+        for (Map.Entry<Long, StoreFile> entry : storeFileMap.descendingMap().entrySet()) {
+            if (entry.getValue().isClean()) {
+                break;
+            }
+            last = entry.getValue();
+        }
+        return last;
     }
 
     @Override
     public void flush() throws IOException {
-        if (flushPosition.get() < writePosition.get()) {
-            Map.Entry<Long, StoreFile> entry = storeFileMap.floorEntry(flushPosition.get());
-            if (null == entry) return;
-            StoreFile storeFile = entry.getValue();
-            if (!storeFile.isClean()) storeFile.flush();
-            if (flushPosition.get() < storeFile.position() + storeFile.flushPosition()) {
-                flushPosition.set(storeFile.position() + storeFile.flushPosition());
+        StoreFile flushFile = nextFlushFile();
+        while (flushFile != null) {
+            final boolean writeClosed = flushFile.writeClosed();
+            flushFile.flush();
+            if (writeClosed) {
+                flushFile = storeFileMap.get(flushFile.position() + flushFile.writePosition());
+            } else {
+                break;
             }
         }
     }
 
-    private StoreFile createStoreFile(long position) {
+    private StoreFile currentWriteFile() {
+        Map.Entry<Long, StoreFile> last = storeFileMap.lastEntry();
+        StoreFile storeFile;
+        if (last != null && !(storeFile = last.getValue()).writeClosed()) {
+           return storeFile;
+        } else {
+            return createStoreFile();
+        }
+    }
+
+    private StoreFile createStoreFile() {
+        long position = max();
         StoreFile storeFile = new LocalStoreFile(position, base, config.getFileHeaderSize(), bufferPool, config.getFileDataSize());
         StoreFile present;
         if((present = storeFileMap.putIfAbsent(position, storeFile)) != null){
             storeFile = present;
-        } else {
-            checkDiskFreeSpace(base, config.getFileDataSize() + config.getFileHeaderSize());
         }
         return storeFile;
-    }
-
-    private void checkDiskFreeSpace(File file, long fileSize) {
-        if(file.getFreeSpace() < fileSize) {
-            throw new DiskFullException(file);
-        }
     }
 
     public byte [] read(long position, int length) throws IOException{
@@ -338,15 +323,6 @@ public class PositioningStore implements JournalPersistence, MonitoredPersistenc
             if( givenMin <= min()) {
                 return 0L;
             }
-            if (givenMin > flushPosition.get()) {
-                throw new IllegalArgumentException(
-                        String.format("GivenMax %s should less than flush position %s!",
-                                ThreadSafeFormat.formatWithComma(givenMin),
-                                ThreadSafeFormat.formatWithComma(flushPosition.get())
-                        )
-                );
-            }
-
             leftPosition.set(givenMin);
             Iterator<Map.Entry<Long, StoreFile>> iterator =
                     storeFileMap.entrySet().iterator();
@@ -491,9 +467,9 @@ public class PositioningStore implements JournalPersistence, MonitoredPersistenc
     @Override
     public String toString() {
         return "PositioningStore{" +
-                "flushPosition=" + flushPosition +
-                ", writePosition(max)=" + writePosition +
-                ", leftPosition(min)=" + leftPosition +
+                "flushPosition=" + flushed() +
+                ", writePosition(max)=" + max() +
+                ", leftPosition(min)=" + min() +
                 '}';
     }
 }

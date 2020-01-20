@@ -20,6 +20,7 @@ import java.nio.ByteBuffer;
 public interface StoreFile extends Timed {
     void closeWrite();
 
+    boolean writeClosed();
     /**
      * 对应的文件
      * @return StoreFile对应的文件

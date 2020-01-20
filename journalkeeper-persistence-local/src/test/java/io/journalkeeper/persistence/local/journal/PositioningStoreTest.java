@@ -160,7 +160,7 @@ public class PositioningStoreTest {
     @Test
     public void writePerformanceTest() throws IOException, InterruptedException {
         // 总共写入消息的的大小
-        long maxSize = 2L * 1024L * 1024 * 1024;
+        long maxSize = 5L * 1024L * 1024 * 1024;
         // 每条消息消息体大小
         int logSize = 1024;
 
@@ -173,7 +173,7 @@ public class PositioningStoreTest {
     @Test
     public void readPerformanceTest() throws IOException, InterruptedException, TimeoutException {
         // 总共写入消息的的大小
-        long maxSize = 1024L * 1024 * 1024;
+        long maxSize = 5L * 1024 * 1024 * 1024;
         // 每条消息消息体大小
         int batchSize = 1024 * 10;
 

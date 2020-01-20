@@ -89,6 +89,12 @@ public class LocalStoreFile implements StoreFile, BufferHolder {
     public void closeWrite() {
         writeClosed = true;
     }
+
+    @Override
+    public boolean writeClosed() {
+        return writeClosed;
+    }
+
     @Override
     public File file() {
         return file;
@@ -426,7 +432,7 @@ public class LocalStoreFile implements StoreFile, BufferHolder {
 
     @Override
     public boolean isFree() {
-        return flushPosition >= writePosition;
+        return isClean();
     }
 
     @Override
