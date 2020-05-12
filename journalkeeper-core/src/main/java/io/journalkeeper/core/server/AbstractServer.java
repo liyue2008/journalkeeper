@@ -29,6 +29,7 @@ import io.journalkeeper.core.entry.internal.ReservedPartition;
 import io.journalkeeper.core.entry.internal.ScalePartitionsEntry;
 import io.journalkeeper.core.entry.internal.UpdateVotersS1Entry;
 import io.journalkeeper.core.entry.internal.UpdateVotersS2Entry;
+import io.journalkeeper.core.journal.UnPooledBufferPool;
 import io.journalkeeper.core.state.EntryFutureImpl;
 import io.journalkeeper.core.state.Snapshot;
 import io.journalkeeper.exceptions.JournalException;
@@ -47,7 +48,7 @@ import io.journalkeeper.exceptions.NoSuchSnapshotException;
 import io.journalkeeper.metric.JMetric;
 import io.journalkeeper.metric.JMetricFactory;
 import io.journalkeeper.metric.JMetricSupport;
-import io.journalkeeper.persistence.BufferPool;
+import io.journalkeeper.core.journal.BufferPool;
 import io.journalkeeper.persistence.LockablePersistence;
 import io.journalkeeper.persistence.MetadataPersistence;
 import io.journalkeeper.persistence.PersistenceFactory;
@@ -252,7 +253,7 @@ public abstract class AbstractServer
         this.eventBus = new EventBus(config.getRpcTimeoutMs());
         persistenceFactory = ServiceSupport.load(PersistenceFactory.class);
         metadataPersistence = persistenceFactory.createMetadataPersistenceInstance();
-        bufferPool = ServiceSupport.load(BufferPool.class);
+        bufferPool = ServiceSupport.tryLoad(BufferPool.class).orElse(new UnPooledBufferPool());
         journal = new Journal(
                 persistenceFactory,
                 bufferPool, journalEntryParser);

@@ -20,7 +20,6 @@ import io.journalkeeper.core.api.RaftJournal;
 import io.journalkeeper.exceptions.IndexOverflowException;
 import io.journalkeeper.exceptions.IndexUnderflowException;
 import io.journalkeeper.exceptions.JournalException;
-import io.journalkeeper.persistence.BufferPool;
 import io.journalkeeper.persistence.JournalPersistence;
 import io.journalkeeper.persistence.PersistenceFactory;
 import io.journalkeeper.persistence.TooManyBytesException;

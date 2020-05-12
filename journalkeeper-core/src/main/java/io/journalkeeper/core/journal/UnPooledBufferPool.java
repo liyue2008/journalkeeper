@@ -11,15 +11,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.journalkeeper.persistence;
+package io.journalkeeper.core.journal;
 
-import java.nio.ByteBuffer;
-
-public interface BufferPool {
-    default ByteBuffer allocate(int capacity) {
-        return ByteBuffer.allocate(capacity);
-    }
-
-    default void release(ByteBuffer buffer) {
-    }
+/**
+ * @author LiYue
+ * Date: 2019-03-22
+ */
+public class UnPooledBufferPool implements BufferPool {
 }

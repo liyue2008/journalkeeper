@@ -19,7 +19,6 @@ import io.journalkeeper.core.entry.DefaultJournalEntryParser;
 import io.journalkeeper.metric.JMetric;
 import io.journalkeeper.metric.JMetricFactory;
 import io.journalkeeper.metric.JMetricSupport;
-import io.journalkeeper.persistence.BufferPool;
 import io.journalkeeper.persistence.PersistenceFactory;
 import io.journalkeeper.utils.format.Format;
 import io.journalkeeper.utils.spi.ServiceSupport;
@@ -751,7 +750,7 @@ public class JournalTest {
 
     private Journal createJournal(long commitIndex, Properties properties) throws IOException, InterruptedException {
         PersistenceFactory persistenceFactory = ServiceSupport.load(PersistenceFactory.class);
-        BufferPool bufferPool = ServiceSupport.load(BufferPool.class);
+        BufferPool bufferPool = new UnPooledBufferPool();
         Journal journal = new Journal(
                 persistenceFactory,
                 bufferPool, journalEntryParser);
