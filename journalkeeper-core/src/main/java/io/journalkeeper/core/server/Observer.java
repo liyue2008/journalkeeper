@@ -20,7 +20,6 @@ import io.journalkeeper.exceptions.InstallSnapshotException;
 import io.journalkeeper.exceptions.NotLeaderException;
 import io.journalkeeper.exceptions.NotVoterException;
 import io.journalkeeper.metric.JMetric;
-import io.journalkeeper.persistence.ServerMetadata;
 import io.journalkeeper.rpc.BaseResponse;
 import io.journalkeeper.rpc.StatusCode;
 import io.journalkeeper.rpc.client.CheckLeadershipResponse;

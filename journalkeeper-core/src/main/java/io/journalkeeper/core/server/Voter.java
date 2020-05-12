@@ -29,7 +29,6 @@ import io.journalkeeper.exceptions.UpdateConfigurationException;
 import io.journalkeeper.core.journal.Journal;
 import io.journalkeeper.core.state.ConfigState;
 import io.journalkeeper.exceptions.NotLeaderException;
-import io.journalkeeper.persistence.ServerMetadata;
 import io.journalkeeper.rpc.client.CheckLeadershipResponse;
 import io.journalkeeper.rpc.client.CompleteTransactionRequest;
 import io.journalkeeper.rpc.client.CompleteTransactionResponse;

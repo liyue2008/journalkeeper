@@ -13,7 +13,6 @@
  */
 package io.journalkeeper.persistence.local.metadata;
 
-import io.journalkeeper.persistence.ServerMetadata;
 import io.journalkeeper.utils.test.TestPathUtils;
 import org.junit.After;
 import org.junit.Assert;
