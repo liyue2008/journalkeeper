@@ -67,8 +67,6 @@
         <module>journalkeeper-core-api</module>
         <module>journalkeeper-core</module>
         <module>journalkeeper-rpc</module>
-        <module>journalkeeper-persistence</module>
-        <module>journalkeeper-persistence-local</module>
         <module>journalkeeper-rpc-netty</module>
         <module>journalkeeper-journal-store</module>
         <module>journalkeeper-coordinating</module>

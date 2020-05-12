@@ -28,8 +28,8 @@ import io.journalkeeper.monitor.MonitoredServer;
 import io.journalkeeper.monitor.NodeMonitorInfo;
 import io.journalkeeper.monitor.ServerMonitorInfo;
 import io.journalkeeper.monitor.VoterMonitorInfo;
-import io.journalkeeper.persistence.JournalPersistence;
-import io.journalkeeper.persistence.MonitoredPersistence;
+import io.journalkeeper.core.persistence.JournalPersistence;
+import io.journalkeeper.core.persistence.MonitoredPersistence;
 
 import java.net.URI;
 import java.util.ArrayList;

@@ -10,7 +10,7 @@ import io.journalkeeper.core.api.StateResult;
 import io.journalkeeper.core.journal.Journal;
 import io.journalkeeper.exceptions.StateQueryException;
 import io.journalkeeper.exceptions.StateRecoverException;
-import io.journalkeeper.persistence.MetadataPersistence;
+import io.journalkeeper.core.persistence.MetadataPersistence;
 import io.journalkeeper.utils.files.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

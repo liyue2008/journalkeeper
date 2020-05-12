@@ -38,8 +38,6 @@
  */
 package io.journalkeeper.core.state;
 
-import io.journalkeeper.base.Replicable;
-import io.journalkeeper.base.ReplicableIterator;
 import io.journalkeeper.core.api.EntryFuture;
 import io.journalkeeper.core.api.JournalEntry;
 import io.journalkeeper.core.api.RaftJournal;
@@ -52,7 +50,7 @@ import io.journalkeeper.core.entry.internal.ScalePartitionsEntry;
 import io.journalkeeper.core.entry.internal.SetPreferredLeaderEntry;
 import io.journalkeeper.core.journal.JournalSnapshot;
 import io.journalkeeper.exceptions.StateRecoverException;
-import io.journalkeeper.persistence.MetadataPersistence;
+import io.journalkeeper.core.persistence.MetadataPersistence;
 import io.journalkeeper.utils.files.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

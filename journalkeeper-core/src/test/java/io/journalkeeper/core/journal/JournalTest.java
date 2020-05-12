@@ -19,7 +19,7 @@ import io.journalkeeper.core.entry.DefaultJournalEntryParser;
 import io.journalkeeper.metric.JMetric;
 import io.journalkeeper.metric.JMetricFactory;
 import io.journalkeeper.metric.JMetricSupport;
-import io.journalkeeper.persistence.PersistenceFactory;
+import io.journalkeeper.core.persistence.PersistenceFactory;
 import io.journalkeeper.utils.format.Format;
 import io.journalkeeper.utils.spi.ServiceSupport;
 import io.journalkeeper.utils.test.ByteUtils;
