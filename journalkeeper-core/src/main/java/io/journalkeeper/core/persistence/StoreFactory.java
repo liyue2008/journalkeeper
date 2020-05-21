@@ -11,15 +11,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.journalkeeper.core.persistence.local;
+package io.journalkeeper.core.persistence;
 
-import io.journalkeeper.core.persistence.local.journal.PositioningStore;
-import io.journalkeeper.core.persistence.local.metadata.JsonDoubleCopiesPersistence;
-import io.journalkeeper.core.persistence.JournalPersistence;
-import io.journalkeeper.core.persistence.LockablePersistence;
-import io.journalkeeper.core.persistence.MetadataPersistence;
-import io.journalkeeper.core.persistence.PersistenceFactory;
-import io.journalkeeper.core.persistence.local.lock.FileLock;
+import io.journalkeeper.core.persistence.journal.PositioningStore;
+import io.journalkeeper.core.persistence.metadata.JsonDoubleCopiesPersistence;
+import io.journalkeeper.core.persistence.lock.FileLock;
 
 import java.nio.file.Path;
 

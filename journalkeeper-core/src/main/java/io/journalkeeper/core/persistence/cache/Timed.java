@@ -11,7 +11,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.journalkeeper.core.persistence.local.journal;
+package io.journalkeeper.core.persistence.cache;
 
 public interface Timed {
     long lastAccessTime();

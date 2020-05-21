@@ -11,7 +11,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.journalkeeper.core.persistence.local.cache;
+package io.journalkeeper.core.persistence.cache;
 
 import io.journalkeeper.utils.format.Format;
 import io.journalkeeper.utils.spi.Singleton;

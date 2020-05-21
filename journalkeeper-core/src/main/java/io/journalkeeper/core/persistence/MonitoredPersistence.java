@@ -13,6 +13,7 @@
  */
 package io.journalkeeper.core.persistence;
 
+import java.io.IOException;
 import java.nio.file.Path;
 
 /**
@@ -22,9 +23,10 @@ import java.nio.file.Path;
  * Date: 2019/12/9
  */
 public interface MonitoredPersistence {
+
     Path getPath();
 
-    long getFreeSpace();
+    long getFreeSpace() throws IOException;
 
-    long getTotalSpace();
+    long getTotalSpace() throws IOException;
 }

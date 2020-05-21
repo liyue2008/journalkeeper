@@ -1,1 +1,1 @@
-io.journalkeeper.core.persistence.local.StoreFactory
+io.journalkeeper.core.persistence.StoreFactory

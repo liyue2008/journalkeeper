@@ -11,14 +11,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.journalkeeper.core.persistence.local.journal;
+package io.journalkeeper.core.persistence.journal;
 
 /**
  * @author LiYue
- * Date: 2018/8/27
+ * Date: 2018-12-12
  */
-class TruncateException extends RuntimeException {
-    TruncateException(String message) {
-        super(message);
+class PositionOverflowException extends RuntimeException {
+
+    PositionOverflowException(long position, long right) {
+        super(String.format("Read position %d should be less than store right position %d.", position, right));
     }
 }

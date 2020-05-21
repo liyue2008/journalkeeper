@@ -11,34 +11,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.journalkeeper.core.persistence.local.cache;
+package io.journalkeeper.core.persistence.journal;
 
 /**
- * 可管理的Buffer持有者
+ * 文件已损坏
  * @author LiYue
- * Date: 2019-03-28
+ * Date: 2018/9/29
  */
-public interface BufferHolder extends Timed {
-    /**
-     * Buffer大小
-     * @return Buffer的大小
-     */
-    int size();
+public class CorruptedStoreException extends RuntimeException {
+    public CorruptedStoreException() {
+        super();
+    }
 
-    /**
-     * 是否可以释放？
-     * @return 是否可以释放？
-     */
-    boolean isFree();
-
-    /**
-     * 尝试释放
-     * @return 释放成功返回true，否则返回false
-     */
-    boolean evict();
-    /**
-     * 是否可写？
-     * @return true：可写，false：只读
-     */
-    boolean writable();
+    public CorruptedStoreException(String msg) {
+        super(msg);
+    }
 }

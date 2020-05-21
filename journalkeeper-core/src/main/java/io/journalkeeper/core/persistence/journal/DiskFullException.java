@@ -11,16 +11,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.journalkeeper.core.persistence.local.journal;
+package io.journalkeeper.core.persistence.journal;
+
+import java.io.File;
 
 /**
  * @author LiYue
- * Date: 2018-12-12
+ * Date: 2019-05-10
  */
-class PositionUnderflowException extends RuntimeException {
+public class DiskFullException extends RuntimeException {
+    private File file;
 
-    PositionUnderflowException(long position, long left) {
-        super(String.format("Read position %d should be greater than or equal to store left position %d.", position, left));
+    public DiskFullException(File file) {
+        super(String.format("No enough space on disk, create file %s failed!", file.getAbsolutePath()));
+        this.file = file;
     }
-
 }

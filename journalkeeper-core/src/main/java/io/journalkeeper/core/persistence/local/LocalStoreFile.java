@@ -11,11 +11,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.journalkeeper.core.persistence.local.journal;
+package io.journalkeeper.core.persistence.local;
 
 
-import io.journalkeeper.core.persistence.local.cache.MemoryCacheManager;
-import io.journalkeeper.core.persistence.local.cache.BufferHolder;
+import io.journalkeeper.core.persistence.cache.MemoryCacheManager;
+import io.journalkeeper.core.persistence.cache.BufferHolder;
+import io.journalkeeper.core.persistence.StoreFile;
 import io.journalkeeper.utils.locks.CasLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -76,7 +77,7 @@ public class LocalStoreFile implements StoreFile, BufferHolder {
     private FileChannel fileChannel;
     private RandomAccessFile raf;
 
-    LocalStoreFile(long filePosition, File base, int headerSize, MemoryCacheManager bufferPool, int maxFileDataLength) {
+    public LocalStoreFile(long filePosition, File base, int headerSize, MemoryCacheManager bufferPool, int maxFileDataLength) {
         this.filePosition = filePosition;
         this.headerSize = headerSize;
         this.bufferPool = bufferPool;
@@ -214,7 +215,6 @@ public class LocalStoreFile implements StoreFile, BufferHolder {
         }
     }
 
-    @Override
     public boolean hasPage() {
         return this.bufferType != NO_BUFFER;
     }

@@ -1,4 +1,4 @@
-package io.journalkeeper.core.persistence.local.cache;
+package io.journalkeeper.core.persistence.cache;
 
 import java.io.Closeable;
 import java.nio.ByteBuffer;

@@ -11,14 +11,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.journalkeeper.core.persistence.local.journal;
+package io.journalkeeper.core.persistence;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
 
-public interface StoreFile extends Timed {
+public interface StoreFile{
 
     /**
      * 对应的文件

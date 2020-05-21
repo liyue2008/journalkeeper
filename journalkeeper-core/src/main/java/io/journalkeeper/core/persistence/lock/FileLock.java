@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.journalkeeper.core.persistence.local.lock;
+package io.journalkeeper.core.persistence.lock;
 
 import io.journalkeeper.core.persistence.LockablePersistence;
 import io.journalkeeper.core.persistence.PersistenceLockedException;

@@ -14,9 +14,11 @@
 package io.journalkeeper.core.persistence;
 
 import java.io.Closeable;
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.NavigableMap;
 import java.util.Properties;
 
 /**
@@ -139,4 +141,11 @@ public interface JournalPersistence extends Closeable {
 
 
     Path getBasePath();
+
+    /**
+     * 获取只读的文件列表，文件按照由新到旧排序。
+     *
+     * @return 文件列表
+     */
+    List<File> getFileList();
 }

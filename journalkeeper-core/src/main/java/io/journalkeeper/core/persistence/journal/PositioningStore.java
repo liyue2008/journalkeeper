@@ -11,13 +11,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.journalkeeper.core.persistence.local.journal;
+package io.journalkeeper.core.persistence.journal;
 
 
-import io.journalkeeper.core.persistence.local.cache.MemoryCacheManager;
+import io.journalkeeper.core.persistence.IdentifiablePersistence;
+import io.journalkeeper.core.persistence.PersistenceID;
+import io.journalkeeper.core.persistence.StoreFile;
+import io.journalkeeper.core.persistence.StringPersistenceID;
+import io.journalkeeper.core.persistence.cache.MemoryCacheManager;
 import io.journalkeeper.core.persistence.JournalPersistence;
 import io.journalkeeper.core.persistence.MonitoredPersistence;
 import io.journalkeeper.core.persistence.TooManyBytesException;
+import io.journalkeeper.core.persistence.local.LocalStoreFile;
 import io.journalkeeper.utils.ThreadSafeFormat;
 import io.journalkeeper.utils.spi.ServiceSupport;
 import org.slf4j.Logger;
@@ -30,6 +35,7 @@ import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -38,22 +44,24 @@ import java.util.Properties;
 import java.util.SortedMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 /**
  * 带缓存的、无锁、高性能、多文件、基于位置的、Append Only的日志存储存储。
  * @author LiYue
  * Date: 2018/8/14
  */
-public class PositioningStore implements JournalPersistence, MonitoredPersistence, Closeable {
-    private final Logger logger = LoggerFactory.getLogger(PositioningStore.class);
+public class PositioningStore implements JournalPersistence, MonitoredPersistence, IdentifiablePersistence, Closeable {
+    private static final Logger logger = LoggerFactory.getLogger(PositioningStore.class);
+    private static final String LOCAL_PERSISTENCE_ID = "local";
     private final MemoryCacheManager bufferPool;
     private final NavigableMap<Long, StoreFile> storeFileMap = new ConcurrentSkipListMap<>();
     // 删除和回滚不能同时操作fileMap，需要做一下互斥。
     private final Object fileMapMutex = new Object();    // 正在写入的
     private File base;
-    private AtomicLong flushPosition = new AtomicLong(0L);
-    private AtomicLong writePosition = new AtomicLong(0L);
-    private AtomicLong leftPosition = new AtomicLong(0L);
+    private final AtomicLong flushPosition = new AtomicLong(0L);
+    private final AtomicLong writePosition = new AtomicLong(0L);
+    private final AtomicLong leftPosition = new AtomicLong(0L);
     private StoreFile writeStoreFile = null;
     private Config config = null;
 
@@ -447,6 +455,15 @@ public class PositioningStore implements JournalPersistence, MonitoredPersistenc
     }
 
     @Override
+    public List<File> getFileList() {
+        return Collections.unmodifiableList(
+                storeFileMap.values().stream()
+                        .map(StoreFile::file)
+                        .collect(Collectors.toList())
+        );
+    }
+
+    @Override
     public void close() throws IOException {
         for (StoreFile storeFile : storeFileMap.values()) {
             storeFile.flush();
@@ -477,6 +494,11 @@ public class PositioningStore implements JournalPersistence, MonitoredPersistenc
                 ", writePosition(max)=" + writePosition +
                 ", leftPosition(min)=" + leftPosition +
                 '}';
+    }
+
+    @Override
+    public PersistenceID getID() {
+        return new StringPersistenceID(LOCAL_PERSISTENCE_ID);
     }
 
     public static class Config {
