@@ -13,7 +13,7 @@
  */
 package io.journalkeeper.core.persistence;
 
-import io.journalkeeper.core.persistence.journal.PositioningStore;
+import io.journalkeeper.core.persistence.local.PositioningStore;
 import io.journalkeeper.core.persistence.metadata.JsonDoubleCopiesPersistence;
 import io.journalkeeper.core.persistence.lock.FileLock;
 
@@ -21,6 +21,10 @@ import java.nio.file.Path;
 
 public class StoreFactory implements PersistenceFactory {
 
+    @Override
+    public boolean isDistributed() {
+        return true;
+    }
     @Override
     public MetadataPersistence createMetadataPersistenceInstance() {
         return new JsonDoubleCopiesPersistence();

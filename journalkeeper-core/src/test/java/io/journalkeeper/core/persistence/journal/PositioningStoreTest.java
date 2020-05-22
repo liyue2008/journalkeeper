@@ -15,6 +15,7 @@ package io.journalkeeper.core.persistence.journal;
 
 
 import io.journalkeeper.core.persistence.JournalPersistence;
+import io.journalkeeper.core.persistence.local.PositioningStore;
 import io.journalkeeper.utils.format.Format;
 import io.journalkeeper.utils.test.ByteUtils;
 import io.journalkeeper.utils.test.TestPathUtils;

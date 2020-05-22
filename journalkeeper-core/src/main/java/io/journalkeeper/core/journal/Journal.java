@@ -95,7 +95,7 @@ public class Journal implements RaftJournal, Flushable, Closeable {
     // Journal 读写锁。
     // 所有对Journal的Read、Append、Flush操作加读锁
     // 其它对Journal的写操作加写锁
-    private ReadWriteLock readWriteLock = new ReentrantReadWriteLock();
+    private final ReadWriteLock readWriteLock = new ReentrantReadWriteLock();
 
     public Journal(PersistenceFactory persistenceFactory, BufferPool bufferPool, JournalEntryParser journalEntryParser) {
         this.indexPersistence = persistenceFactory.createJournalPersistenceInstance();

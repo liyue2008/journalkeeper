@@ -17,12 +17,12 @@ package io.journalkeeper.core.persistence.local;
 import io.journalkeeper.core.persistence.cache.MemoryCacheManager;
 import io.journalkeeper.core.persistence.cache.BufferHolder;
 import io.journalkeeper.core.persistence.StoreFile;
+import io.journalkeeper.exceptions.JournalException;
 import io.journalkeeper.utils.locks.CasLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import sun.misc.Cleaner;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.lang.reflect.Method;
@@ -30,6 +30,8 @@ import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedByInterruptException;
 import java.nio.channels.FileChannel;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.StampedLock;
@@ -49,8 +51,8 @@ public class LocalStoreFile implements StoreFile, BufferHolder {
     private final long filePosition;
     // 文件头长度
     private final int headerSize;
-    // 对应的File
-    private final File file;
+    // 对应的Path
+    private final Path path;
     // buffer读写锁：
     // 访问(包括读和写）buffer时加读锁；
     // 加载、释放buffer时加写锁；
@@ -62,7 +64,7 @@ public class LocalStoreFile implements StoreFile, BufferHolder {
     private ByteBuffer pageBuffer = null;
     private int bufferType = NO_BUFFER;
 
-    private MemoryCacheManager bufferPool;
+    private final MemoryCacheManager bufferPool;
     private final int capacity;
     private long lastAccessTime = System.currentTimeMillis();
 
@@ -72,26 +74,26 @@ public class LocalStoreFile implements StoreFile, BufferHolder {
     private int writePosition = 0;
 
     private long timestamp = -1L;
-    private AtomicBoolean forced = new AtomicBoolean(false);
+    private final AtomicBoolean forced = new AtomicBoolean(false);
     private volatile boolean writeClosed = true;
     private FileChannel fileChannel;
     private RandomAccessFile raf;
 
-    public LocalStoreFile(long filePosition, File base, int headerSize, MemoryCacheManager bufferPool, int maxFileDataLength) {
+    public LocalStoreFile(long filePosition, Path path, int headerSize, MemoryCacheManager bufferPool, int maxFileDataLength) throws IOException {
         this.filePosition = filePosition;
         this.headerSize = headerSize;
         this.bufferPool = bufferPool;
-        this.file = new File(base, String.valueOf(filePosition));
-        if (file.exists() && file.length() > headerSize) {
-            this.writePosition = (int) (file.length() - headerSize);
+        this.path = path;
+        if (Files.exists(path) && Files.size(path) > headerSize) {
+            this.writePosition = (int) (Files.size(path) - headerSize);
             this.flushPosition = writePosition;
         }
-        this.capacity = Math.max(maxFileDataLength, (int )(file.length() - headerSize));
+        this.capacity = Math.max(maxFileDataLength, (int )(Files.size(path) - headerSize));
     }
 
     @Override
-    public File file() {
-        return file;
+    public Path path() {
+        return null;
     }
 
     @Override
@@ -103,9 +105,9 @@ public class LocalStoreFile implements StoreFile, BufferHolder {
         if (null != pageBuffer) throw new IOException("Buffer already loaded!");
         bufferPool.allocateMMap(this);
         ByteBuffer loadBuffer;
-        try (RandomAccessFile raf = new RandomAccessFile(file, "r"); FileChannel fileChannel = raf.getChannel()) {
+        try (RandomAccessFile raf = new RandomAccessFile(path.toFile(), "r"); FileChannel fileChannel = raf.getChannel()) {
             loadBuffer =
-                    fileChannel.map(FileChannel.MapMode.READ_ONLY, headerSize, file.length() - headerSize);
+                    fileChannel.map(FileChannel.MapMode.READ_ONLY, headerSize, Files.size(path) - headerSize);
             pageBuffer = loadBuffer;
             bufferType = MAPPED_BUFFER;
             pageBuffer.clear();
@@ -134,17 +136,17 @@ public class LocalStoreFile implements StoreFile, BufferHolder {
     }
 
     private void loadDirectBuffer(ByteBuffer buffer) throws IOException {
-        boolean needLoadFileContent = file.exists() && file.length() > headerSize;
-        boolean writeTimestamp = !file.exists();
+        boolean needLoadFileContent = Files.exists(path) && Files.size(path) > headerSize;
+        boolean writeTimestamp = !Files.exists(path);
         // 打开文件描述符
-        raf = new RandomAccessFile(file, "rw");
+        raf = new RandomAccessFile(path.toFile(), "rw");
         fileChannel = raf.getChannel();
         if (writeTimestamp) {
             // 第一次创建文件写入头部预留128字节中0位置开始的前8字节长度:文件创建时间戳
             writeTimestamp();
         }
         if (needLoadFileContent) {
-            logger.warn("Reload file for write! size: {}, file: {}.", file.length(), file);
+            logger.warn("Reload file for write! size: {}, file: {}.", Files.size(path), path);
             fileChannel.position(headerSize);
             int length;
             do {
@@ -166,7 +168,7 @@ public class LocalStoreFile implements StoreFile, BufferHolder {
 
     private void readTimestamp() {
         ByteBuffer timeBuffer = ByteBuffer.allocate(8);
-        try (RandomAccessFile raf = new RandomAccessFile(file, "r"); FileChannel fileChannel = raf.getChannel()) {
+        try (RandomAccessFile raf = new RandomAccessFile(path.toFile(), "r"); FileChannel fileChannel = raf.getChannel()) {
             fileChannel.position(0);
             fileChannel.read(timeBuffer);
         } catch (Exception e) {
@@ -180,7 +182,7 @@ public class LocalStoreFile implements StoreFile, BufferHolder {
         ByteBuffer timeBuffer = ByteBuffer.allocate(8);
         long creationTime = System.currentTimeMillis();
         timeBuffer.putLong(0, creationTime);
-        try (RandomAccessFile raf = new RandomAccessFile(file, "rw"); FileChannel fileChannel = raf.getChannel()) {
+        try (RandomAccessFile raf = new RandomAccessFile(path.toFile(), "rw"); FileChannel fileChannel = raf.getChannel()) {
             fileChannel.position(0);
             fileChannel.write(timeBuffer);
         } catch (Exception e) {
@@ -373,7 +375,7 @@ public class LocalStoreFile implements StoreFile, BufferHolder {
             if (writePosition > flushPosition && fileLock.tryLock()) {
 
                 try {
-                    if (!file.exists()) {
+                    if (!Files.exists(path)) {
                         // 第一次创建文件写入头部预留128字节中0位置开始的前8字节长度:文件创建时间戳
                         writeTimestamp();
                     }
@@ -393,7 +395,7 @@ public class LocalStoreFile implements StoreFile, BufferHolder {
         if (fileChannel == null || !fileChannel.isOpen()) {
             throw new IllegalStateException(
                     String.format(
-                            "File %s is not open!", file.getAbsolutePath()
+                            "File %s is not open!", path
                     )
             );
         }
@@ -429,7 +431,7 @@ public class LocalStoreFile implements StoreFile, BufferHolder {
                     if (fileChannel != null && fileChannel.isOpen()) {
                         fileChannel.truncate(position + headerSize);
                     } else {
-                        try (RandomAccessFile raf = new RandomAccessFile(file, "rw"); FileChannel fileChannel = raf.getChannel()) {
+                        try (RandomAccessFile raf = new RandomAccessFile(path.toFile(), "rw"); FileChannel fileChannel = raf.getChannel()) {
                             fileChannel.truncate(position + headerSize);
                         }
                     }
@@ -453,8 +455,12 @@ public class LocalStoreFile implements StoreFile, BufferHolder {
     }
 
     @Override
-    public int fileDataSize() {
-        return Math.max((int) file.length() - headerSize, 0);
+    public int fileDataSize()  {
+        try {
+            return Math.max((int) Files.size(path) - headerSize, 0);
+        } catch (IOException e) {
+            throw new JournalException(e);
+        }
     }
 
     @Override
@@ -477,7 +483,7 @@ public class LocalStoreFile implements StoreFile, BufferHolder {
         try {
             closeFileChannel();
         } catch (IOException e) {
-            logger.warn("Close file {} exception: ", file.getAbsolutePath(), e);
+            logger.warn("Close file {} exception: ", path, e);
         }
         writeClosed = true;
     }

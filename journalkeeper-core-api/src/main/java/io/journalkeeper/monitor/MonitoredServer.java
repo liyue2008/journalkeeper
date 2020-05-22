@@ -13,6 +13,7 @@
  */
 package io.journalkeeper.monitor;
 
+import java.io.IOException;
 import java.net.URI;
 
 /**
@@ -27,5 +28,5 @@ public interface MonitoredServer {
      * 采集监控数据
      * @return 节点监控数据
      */
-    ServerMonitorInfo collect();
+    ServerMonitorInfo collect() throws IOException;
 }

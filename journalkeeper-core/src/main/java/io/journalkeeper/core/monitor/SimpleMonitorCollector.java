@@ -18,6 +18,7 @@ import io.journalkeeper.monitor.MonitoredServer;
 import io.journalkeeper.monitor.ServerMonitorInfo;
 import io.journalkeeper.utils.spi.Singleton;
 
+import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -53,7 +54,7 @@ public class SimpleMonitorCollector implements MonitorCollector {
         return new HashSet<>(monitoredServers.values());
     }
 
-    public Collection<ServerMonitorInfo> collectAll() {
+    public Collection<ServerMonitorInfo> collectAll() throws IOException {
         List<ServerMonitorInfo> monitorInfos = new ArrayList<>();
         if (null != monitoredServers) {
             for (MonitoredServer monitoredServer : monitoredServers.values()) {

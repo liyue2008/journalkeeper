@@ -11,7 +11,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.journalkeeper.core.persistence.journal;
+package io.journalkeeper.core.persistence.local;
 
 
 import io.journalkeeper.core.persistence.IdentifiablePersistence;
@@ -22,7 +22,10 @@ import io.journalkeeper.core.persistence.cache.MemoryCacheManager;
 import io.journalkeeper.core.persistence.JournalPersistence;
 import io.journalkeeper.core.persistence.MonitoredPersistence;
 import io.journalkeeper.core.persistence.TooManyBytesException;
-import io.journalkeeper.core.persistence.local.LocalStoreFile;
+import io.journalkeeper.core.persistence.journal.CorruptedStoreException;
+import io.journalkeeper.core.persistence.journal.DiskFullException;
+import io.journalkeeper.core.persistence.journal.PositionOverflowException;
+import io.journalkeeper.core.persistence.journal.PositionUnderflowException;
 import io.journalkeeper.utils.ThreadSafeFormat;
 import io.journalkeeper.utils.spi.ServiceSupport;
 import org.slf4j.Logger;
@@ -44,7 +47,6 @@ import java.util.Properties;
 import java.util.SortedMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.Collectors;
 
 /**
  * 带缓存的、无锁、高性能、多文件、基于位置的、Append Only的日志存储存储。
@@ -106,9 +108,10 @@ public class PositioningStore implements JournalPersistence, MonitoredPersistenc
     private void clearData() throws IOException {
         for (StoreFile storeFile : this.storeFileMap.values()) {
             if (storeFile.hasPage()) storeFile.unload();
-            File file = storeFile.file();
-            if (file.exists() && !file.delete())
-                throw new IOException(String.format("Can not delete file: %s.", file.getAbsolutePath()));
+            if(Files.exists(storeFile.path())) {
+                Files.delete(storeFile.path());
+                logger.debug("File {} deleted.", storeFile.path());
+            }
         }
         this.storeFileMap.clear();
         this.writeStoreFile = null;
@@ -129,14 +132,14 @@ public class PositioningStore implements JournalPersistence, MonitoredPersistenc
             StoreFile storeFile = entry.getValue();
             if (position > storeFile.position()) {
                 int relPos = (int) (position - storeFile.position());
-                logger.info("Truncate store file {} to relative position {}.", storeFile.file().getAbsolutePath(), relPos);
+                logger.info("Truncate store file {} to relative position {}.", storeFile.path(), relPos);
                 storeFile.rollback(relPos);
             }
 
             SortedMap<Long, StoreFile> toBeRemoved = storeFileMap.tailMap(position);
 
             for (StoreFile sf : toBeRemoved.values()) {
-                logger.info("Delete store file {}.", sf.file().getAbsolutePath());
+                logger.info("Delete store file {}.", sf.path());
                 forceDeleteStoreFile(sf);
                 if (writeStoreFile == sf) {
                     writeStoreFile = null;
@@ -212,14 +215,14 @@ public class PositioningStore implements JournalPersistence, MonitoredPersistenc
         return config;
     }
 
-    private void recoverFileMap(long min) {
+    private void recoverFileMap(long min) throws IOException {
         File[] files = base.listFiles(file -> file.isFile() && file.getName().matches("\\d+"));
         long filePosition;
         if (null != files) {
             for (File file : files) {
                 filePosition = Long.parseLong(file.getName());
                 if (filePosition >= min || filePosition + file.length() - config.getFileHeaderSize() > min) {
-                    storeFileMap.put(filePosition, new LocalStoreFile(filePosition, base, config.getFileHeaderSize(), bufferPool, config.getFileDataSize()));
+                    storeFileMap.put(filePosition, new LocalStoreFile(filePosition, base.toPath().resolve(String.valueOf(filePosition)), config.getFileHeaderSize(), bufferPool, config.getFileDataSize()));
                 } else {
                     logger.info("Ignore file {}, cause file position is smaller than given min position {}.", file.getAbsolutePath(), min);
                 }
@@ -233,7 +236,7 @@ public class PositioningStore implements JournalPersistence, MonitoredPersistenc
                 if (position != fileEntry.getKey()) {
                     throw new CorruptedStoreException(String.format("Files are not continuous! expect: %d, actual file name: %d, store: %s.", position, fileEntry.getKey(), base.getAbsolutePath()));
                 }
-                position += fileEntry.getValue().file().length() - config.getFileHeaderSize();
+                position += fileEntry.getValue().fileDataSize();
             }
         }
     }
@@ -338,8 +341,10 @@ public class PositioningStore implements JournalPersistence, MonitoredPersistenc
         }
     }
 
-    private StoreFile createStoreFile(long position) {
-        StoreFile storeFile = new LocalStoreFile(position, base, config.getFileHeaderSize(), bufferPool, config.getFileDataSize());
+    private StoreFile createStoreFile(long position) throws IOException {
+        StoreFile storeFile = new LocalStoreFile(
+                position, base.toPath().resolve(String.valueOf(position)),
+                config.getFileHeaderSize(), bufferPool, config.getFileDataSize());
         StoreFile present;
         if ((present = storeFileMap.putIfAbsent(position, storeFile)) != null) {
             storeFile = present;
@@ -433,19 +438,20 @@ public class PositioningStore implements JournalPersistence, MonitoredPersistenc
         }
     }
 
+    @Override
+    public void appendFile(Path srcPath) {
+        throw new UnsupportedOperationException();
+    }
+
 
     /**
      * 删除文件，丢弃未刷盘的数据，用于rollback
      */
     private void forceDeleteStoreFile(StoreFile storeFile) throws IOException {
         storeFile.forceUnload();
-        File file = storeFile.file();
-        if (file.exists()) {
-            if (file.delete()) {
-                logger.debug("File {} deleted.", file.getAbsolutePath());
-            } else {
-                throw new IOException(String.format("Delete file %s failed!", file.getAbsolutePath()));
-            }
+        if(Files.exists(storeFile.path())) {
+            Files.delete(storeFile.path());
+            logger.debug("File {} deleted.", storeFile.path());
         }
     }
 
@@ -455,11 +461,9 @@ public class PositioningStore implements JournalPersistence, MonitoredPersistenc
     }
 
     @Override
-    public List<File> getFileList() {
+    public List<StoreFile> getStoreFiles() {
         return Collections.unmodifiableList(
-                storeFileMap.values().stream()
-                        .map(StoreFile::file)
-                        .collect(Collectors.toList())
+                new ArrayList<>(storeFileMap.values())
         );
     }
 

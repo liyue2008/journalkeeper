@@ -17,9 +17,9 @@ package io.journalkeeper.core.persistence.journal;
  * @author LiYue
  * Date: 2018-12-12
  */
-class PositionUnderflowException extends RuntimeException {
+public class PositionUnderflowException extends RuntimeException {
 
-    PositionUnderflowException(long position, long left) {
+    public PositionUnderflowException(long position, long left) {
         super(String.format("Read position %d should be greater than or equal to store left position %d.", position, left));
     }
 

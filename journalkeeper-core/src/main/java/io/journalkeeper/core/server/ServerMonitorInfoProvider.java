@@ -31,6 +31,7 @@ import io.journalkeeper.monitor.VoterMonitorInfo;
 import io.journalkeeper.core.persistence.JournalPersistence;
 import io.journalkeeper.core.persistence.MonitoredPersistence;
 
+import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
@@ -56,7 +57,7 @@ public class ServerMonitorInfoProvider implements MonitoredServer {
     }
 
     @Override
-    public ServerMonitorInfo collect() {
+    public ServerMonitorInfo collect() throws IOException {
         ServerMonitorInfo serverMonitorInfo = new ServerMonitorInfo();
         serverMonitorInfo.setUri(server.serverUri());
         serverMonitorInfo.setState(server.serverState());
@@ -83,7 +84,7 @@ public class ServerMonitorInfoProvider implements MonitoredServer {
         return serverMonitorInfo;
     }
 
-    private DiskMonitorInfo collectDistMonitorInfo(JournalPersistence journalPersistence) {
+    private DiskMonitorInfo collectDistMonitorInfo(JournalPersistence journalPersistence) throws IOException {
         DiskMonitorInfo diskMonitorInfo = new DiskMonitorInfo();
         if (journalPersistence instanceof MonitoredPersistence) {
             MonitoredPersistence monitoredPersistence = (MonitoredPersistence) journalPersistence;

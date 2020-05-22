@@ -21,6 +21,11 @@ import java.nio.file.Path;
  * Date: 2019-03-20
  */
 public interface PersistenceFactory {
+    /**
+     * 是否是分布式存储
+     * @return true：分布式存储，false：本地存储
+     */
+    boolean isDistributed();
     MetadataPersistence createMetadataPersistenceInstance();
 
     JournalPersistence createJournalPersistenceInstance();

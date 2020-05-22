@@ -16,15 +16,15 @@ package io.journalkeeper.core.persistence;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.file.Path;
 import java.util.List;
 
 public interface StoreFile{
-
     /**
-     * 对应的文件
-     * @return StoreFile对应的文件
+     * 对应文件的Path
+     * @return 对应文件的Path
      */
-    File file();
+    Path path();
 
     /**
      * 文件起始全局位置

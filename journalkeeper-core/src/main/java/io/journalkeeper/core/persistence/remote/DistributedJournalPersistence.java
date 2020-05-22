@@ -11,21 +11,26 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.journalkeeper.core.persistence.journal;
+package io.journalkeeper.core.persistence.remote;
 
 
+import io.journalkeeper.core.persistence.IdentifiablePersistence;
 import io.journalkeeper.core.persistence.JournalPersistence;
 import io.journalkeeper.core.persistence.MonitoredPersistence;
 import io.journalkeeper.core.persistence.StoreFile;
-import io.journalkeeper.core.persistence.remote.DistributedImmutableStoreFile;
+import io.journalkeeper.core.persistence.journal.CorruptedStoreException;
+import io.journalkeeper.core.persistence.journal.PositionOverflowException;
+import io.journalkeeper.core.persistence.journal.PositionUnderflowException;
 import io.journalkeeper.utils.ThreadSafeFormat;
+import io.journalkeeper.utils.locks.CasLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
@@ -41,12 +46,15 @@ import java.util.stream.Collectors;
  * @author LiYue
  * Date: 2018/8/14
  */
-public class DistributedJournalPersistence implements JournalPersistence, MonitoredPersistence {
+public abstract class DistributedJournalPersistence implements JournalPersistence, MonitoredPersistence, IdentifiablePersistence {
     private static final Logger logger = LoggerFactory.getLogger(DistributedJournalPersistence.class);
     private final NavigableMap<Long, StoreFile> storeFileMap = new ConcurrentSkipListMap<>();
     private Path base;
     private Config config = null;
     private final AtomicLong min = new AtomicLong(0L);
+    private final CasLock writeLock = new CasLock();
+    private volatile boolean isRecovered = false;
+
 
     public void truncate(long givenMax) {
         throw new UnsupportedOperationException();
@@ -55,9 +63,10 @@ public class DistributedJournalPersistence implements JournalPersistence, Monito
     private void clearData() throws IOException {
         for (StoreFile storeFile : this.storeFileMap.values()) {
             if (storeFile.hasPage()) storeFile.unload();
-            File file = storeFile.file();
-            if (file.exists() && !file.delete())
-                throw new IOException(String.format("Can not delete file: %s.", file.getAbsolutePath()));
+            if(Files.exists(storeFile.path())) {
+                Files.delete(storeFile.path());
+                logger.debug("File {} deleted.", storeFile.path());
+            }
         }
         this.storeFileMap.clear();
     }
@@ -73,7 +82,7 @@ public class DistributedJournalPersistence implements JournalPersistence, Monito
         this.config = toConfig(properties);
         this.min.set(min);
         recoverFileMap(min);
-
+        isRecovered = true;
         if (logger.isDebugEnabled()) {
             logger.debug("Store loaded, left: {}, right: {},  base: {}.",
                     ThreadSafeFormat.formatWithComma(min()),
@@ -116,22 +125,41 @@ public class DistributedJournalPersistence implements JournalPersistence, Monito
                 if (position != fileEntry.getKey()) {
                     throw new CorruptedStoreException(String.format("Files are not continuous! expect: %d, actual file name: %d, store: %s.", position, fileEntry.getKey(), base));
                 }
-                position += fileEntry.getValue().file().length() - config.getFileHeaderSize();
+                position += fileEntry.getValue().fileDataSize();
             }
         }
     }
 
-    public void appendFile(Path path) throws IOException {
-        if (String.valueOf(max()).equals(path.getFileName().toString()) || max() == 0L) {
-            long filePosition = Long.parseLong(path.getFileName().toString());
-            storeFileMap.put(filePosition, new DistributedImmutableStoreFile(filePosition, path, config.getFileHeaderSize()));
-        } else {
-            throw new IllegalArgumentException(
-                    String.format("Append file failed, cause: invalid file name: %s, expected file name: %s!",
-                            path.getFileName().toString(),
-                            max()
-                    )
-            );
+    private void ensureRecovered() {
+        if (!isRecovered) {
+            throw new IllegalStateException(
+                    String .format(
+                            "DistributedJournalPersistence %s is not recovered!", base));
+        }
+    }
+
+    @Override
+    public void appendFile(Path srcPath) throws IOException {
+        ensureRecovered();
+        writeLock.waitAndLock();
+        try {
+            String filename = srcPath.getFileName().toString();
+            if (String.valueOf(max()).equals(filename) || max() == 0L) {
+                Path path = base.resolve(filename);
+                Files.copy(srcPath, path, StandardCopyOption.REPLACE_EXISTING);
+
+                long filePosition = Long.parseLong(filename);
+                storeFileMap.put(filePosition, new DistributedImmutableStoreFile(filePosition, path, config.getFileHeaderSize()));
+            } else {
+                throw new IllegalArgumentException(
+                        String.format("Append file failed, cause: invalid file name: %s, expected file name: %s!",
+                                filename,
+                                max()
+                        )
+                );
+            }
+        } finally {
+            writeLock.unlock();
         }
     }
 
@@ -148,21 +176,25 @@ public class DistributedJournalPersistence implements JournalPersistence, Monito
 
     @Override
     public long min() {
+        ensureRecovered();
         return min.get();
     }
 
     @Override
     public long physicalMin() {
+        ensureRecovered();
         return storeFileMap.isEmpty() ? min.get() : storeFileMap.firstKey();
     }
 
     @Override
     public long max() {
+        ensureRecovered();
         return storeFileMap.isEmpty() ? min.get() : storeFileMap.lastKey() + storeFileMap.lastEntry().getValue().fileDataSize();
     }
 
     @Override
-    public long flushed() {
+    public long flushed(){
+        ensureRecovered();
         return max();
     }
 
@@ -171,6 +203,7 @@ public class DistributedJournalPersistence implements JournalPersistence, Monito
         throw new UnsupportedOperationException();    }
 
     public byte[] read(long position, int length) throws IOException {
+        ensureRecovered();
         if (length == 0) return new byte[0];
         checkReadPosition(position);
         StoreFile storeFile = getStoreFile(position);
@@ -182,6 +215,7 @@ public class DistributedJournalPersistence implements JournalPersistence, Monito
     }
 
     public Long readLong(long position) throws IOException {
+        ensureRecovered();
         checkReadPosition(position);
         StoreFile storeFile = getStoreFile(position);
         if(null == storeFile) {
@@ -199,7 +233,7 @@ public class DistributedJournalPersistence implements JournalPersistence, Monito
         return storeFileEntry.getValue();
     }
 
-    private void checkReadPosition(long position) {
+    private void checkReadPosition(long position) throws IOException {
         long p;
         if ((p = min()) > position) {
             throw new PositionUnderflowException(position, p);
@@ -214,6 +248,9 @@ public class DistributedJournalPersistence implements JournalPersistence, Monito
      * 删除 position之前的文件
      */
     public long compact(long givenMin) throws IOException {
+        ensureRecovered();
+        writeLock.waitAndLock();
+        try {
             if (givenMin <= min()) {
                 return 0L;
             }
@@ -244,6 +281,9 @@ public class DistributedJournalPersistence implements JournalPersistence, Monito
             }
 
             return deleteSize;
+        } finally {
+            writeLock.unlock();
+        }
     }
 
 
@@ -252,27 +292,22 @@ public class DistributedJournalPersistence implements JournalPersistence, Monito
      */
     private void forceDeleteStoreFile(StoreFile storeFile) throws IOException {
         storeFile.forceUnload();
-        File file = storeFile.file();
-        if (file.exists()) {
-            if (file.delete()) {
-                logger.debug("File {} deleted.", file.getAbsolutePath());
-            } else {
-                throw new IOException(String.format("Delete file %s failed!", file.getAbsolutePath()));
-            }
+        if(Files.exists(storeFile.path())) {
+            Files.delete(storeFile.path());
+            logger.debug("File {} deleted.", storeFile.path());
         }
     }
 
     @Override
     public Path getBasePath() {
+        ensureRecovered();
         return base;
     }
 
     @Override
-    public List<File> getFileList() {
+    public List<StoreFile> getStoreFiles() {
         return Collections.unmodifiableList(
-                storeFileMap.values().stream()
-                        .map(StoreFile::file)
-                        .collect(Collectors.toList())
+                new ArrayList<>(storeFileMap.values())
         );
     }
 
@@ -282,16 +317,19 @@ public class DistributedJournalPersistence implements JournalPersistence, Monito
 
     @Override
     public Path getPath() {
+        ensureRecovered();
         return getBasePath();
     }
 
     @Override
     public long getFreeSpace() throws IOException {
+        ensureRecovered();
         return Files.getFileStore(base).getUsableSpace();
     }
 
     @Override
     public long getTotalSpace() throws IOException {
+        ensureRecovered();
         return Files.getFileStore(base).getTotalSpace();
     }
 

@@ -27,6 +27,8 @@ import java.util.Properties;
  * Date: 2019-03-14
  */
 public interface JournalPersistence extends Closeable {
+
+
     /**
      * 最小位置，初始化为0
      * @return 最小位置
@@ -78,6 +80,14 @@ public interface JournalPersistence extends Closeable {
      * @throws IOException 发生IO异常时抛出
      */
     long compact(long givenMin) throws IOException;
+
+    /**
+     * 从srcPath复制一个文件到存储的尾部
+     *
+     * @param srcPath 源文件Path
+     * @throws IOException 发送IO异常时抛出
+     */
+    void appendFile(Path srcPath) throws IOException;
 
     /**
      * 追加写入，保证原子性
@@ -147,5 +157,5 @@ public interface JournalPersistence extends Closeable {
      *
      * @return 文件列表
      */
-    List<File> getFileList();
+    List<StoreFile> getStoreFiles();
 }

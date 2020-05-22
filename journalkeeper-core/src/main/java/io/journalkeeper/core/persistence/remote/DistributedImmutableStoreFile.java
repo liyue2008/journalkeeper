@@ -4,7 +4,6 @@ import io.journalkeeper.core.persistence.StoreFile;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
@@ -38,8 +37,8 @@ public class DistributedImmutableStoreFile implements StoreFile {
     }
 
     @Override
-    public File file() {
-        return path.toFile();
+    public Path path() {
+        return path;
     }
 
     @Override
