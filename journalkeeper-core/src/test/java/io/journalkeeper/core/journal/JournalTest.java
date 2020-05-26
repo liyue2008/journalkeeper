@@ -752,7 +752,7 @@ public class JournalTest {
         PersistenceFactory persistenceFactory = ServiceSupport.load(PersistenceFactory.class);
         BufferPool bufferPool = new UnPooledBufferPool();
         Journal journal = new Journal(
-                persistenceFactory,
+                persistenceFactory, null,
                 bufferPool, journalEntryParser);
         journal.recover(path, commitIndex, new JournalSnapshotImpl(partitions), properties);
         return journal;

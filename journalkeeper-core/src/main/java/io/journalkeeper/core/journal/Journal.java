@@ -17,6 +17,7 @@ package io.journalkeeper.core.journal;
 import io.journalkeeper.core.api.JournalEntry;
 import io.journalkeeper.core.api.JournalEntryParser;
 import io.journalkeeper.core.api.RaftJournal;
+import io.journalkeeper.core.persistence.journal.TiredPersistenceStore;
 import io.journalkeeper.exceptions.IndexOverflowException;
 import io.journalkeeper.exceptions.IndexUnderflowException;
 import io.journalkeeper.exceptions.JournalException;
@@ -86,6 +87,7 @@ public class Journal implements RaftJournal, Flushable, Closeable {
     private final JournalPersistence journalPersistence;
     private final Map<Integer, JournalPersistence> partitionMap;
     private final PersistenceFactory persistenceFactory;
+    private final PersistenceFactory dfsPersistenceFactory;
     private final BufferPool bufferPool;
     private final JournalEntryParser journalEntryParser;
     private Path basePath = null;
@@ -97,13 +99,27 @@ public class Journal implements RaftJournal, Flushable, Closeable {
     // 其它对Journal的写操作加写锁
     private final ReadWriteLock readWriteLock = new ReentrantReadWriteLock();
 
-    public Journal(PersistenceFactory persistenceFactory, BufferPool bufferPool, JournalEntryParser journalEntryParser) {
-        this.indexPersistence = persistenceFactory.createJournalPersistenceInstance();
-        this.journalPersistence = persistenceFactory.createJournalPersistenceInstance();
+    public Journal(PersistenceFactory persistenceFactory, PersistenceFactory dfsPersistenceFactory, BufferPool bufferPool, JournalEntryParser journalEntryParser) {
+
         this.persistenceFactory = persistenceFactory;
+        this.dfsPersistenceFactory = dfsPersistenceFactory;
+        this.indexPersistence = createJournalPersistence();
+        this.journalPersistence = createJournalPersistence();
         this.journalEntryParser = journalEntryParser;
         this.partitionMap = new ConcurrentHashMap<>();
         this.bufferPool = bufferPool;
+    }
+
+
+    private JournalPersistence createJournalPersistence() {
+        if (dfsPersistenceFactory == null) {
+            return persistenceFactory.createJournalPersistenceInstance();
+        } else {
+            return new TiredPersistenceStore(
+                    persistenceFactory.createJournalPersistenceInstance(),
+                    dfsPersistenceFactory.createJournalPersistenceInstance()
+            );
+        }
     }
 
     @Override
@@ -174,7 +190,7 @@ public class Journal implements RaftJournal, Flushable, Closeable {
             for (Map.Entry<Integer, Long> entry : partitionMinIndices.entrySet()) {
                 int partition = entry.getKey();
                 if (!partitionMap.containsKey(partition)) {
-                    JournalPersistence partitionPersistence = persistenceFactory.createJournalPersistenceInstance();
+                    JournalPersistence partitionPersistence = createJournalPersistence();
                     partitionPersistence.recover(basePath.resolve(PARTITION_PATH).resolve(String.valueOf(partition)),
                             partitionMinIndices.get(partition) * INDEX_STORAGE_SIZE,
                             indexProperties);
@@ -239,7 +255,7 @@ public class Journal implements RaftJournal, Flushable, Closeable {
 
             for (Map.Entry<Integer, Long> entry : partitionMinIndices.entrySet()) {
                 int partition = entry.getKey();
-                JournalPersistence partitionPersistence = persistenceFactory.createJournalPersistenceInstance();
+                JournalPersistence partitionPersistence = createJournalPersistence();
                 partitionPersistence.recover(basePath.resolve(PARTITION_PATH).resolve(String.valueOf(partition)),
                         partitionMinIndices.get(partition) * INDEX_STORAGE_SIZE,
                         indexProperties);
@@ -651,7 +667,7 @@ public class Journal implements RaftJournal, Flushable, Closeable {
         for (Map.Entry<Integer, Long> entry : partitionIndices.entrySet()) {
             int partition = entry.getKey();
             long lastIncludedIndex = entry.getValue();
-            JournalPersistence pp = persistenceFactory.createJournalPersistenceInstance();
+            JournalPersistence pp = createJournalPersistence();
             pp.recover(partitionPath.resolve(String.valueOf(partition)), lastIncludedIndex * INDEX_STORAGE_SIZE, properties);
             // 截掉末尾半条数据
             pp.truncate(pp.max() - pp.max() % INDEX_STORAGE_SIZE);

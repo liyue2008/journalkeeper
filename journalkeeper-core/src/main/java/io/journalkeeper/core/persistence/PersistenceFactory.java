@@ -26,6 +26,7 @@ public interface PersistenceFactory {
      * @return true：分布式存储，false：本地存储
      */
     boolean isDistributed();
+
     MetadataPersistence createMetadataPersistenceInstance();
 
     JournalPersistence createJournalPersistenceInstance();

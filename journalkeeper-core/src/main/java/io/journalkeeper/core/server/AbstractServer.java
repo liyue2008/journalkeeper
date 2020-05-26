@@ -30,6 +30,7 @@ import io.journalkeeper.core.entry.internal.ScalePartitionsEntry;
 import io.journalkeeper.core.entry.internal.UpdateVotersS1Entry;
 import io.journalkeeper.core.entry.internal.UpdateVotersS2Entry;
 import io.journalkeeper.core.journal.UnPooledBufferPool;
+import io.journalkeeper.core.persistence.StoreFactory;
 import io.journalkeeper.core.state.EntryFutureImpl;
 import io.journalkeeper.core.state.Snapshot;
 import io.journalkeeper.exceptions.JournalException;
@@ -91,6 +92,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.ConcurrentModificationException;
 import java.util.HashMap;
@@ -189,10 +191,15 @@ public abstract class AbstractServer
      * 观察者节点
      */
     protected List<URI> observers;
+
     /**
      * 持久化实现接入点
      */
     protected PersistenceFactory persistenceFactory;
+    /**
+     * 分布式持久化实现接入点
+     */
+    protected PersistenceFactory dfsPersistenceFactory;
     /**
      * 元数据持久化服务
      */
@@ -208,8 +215,8 @@ public abstract class AbstractServer
      * 上次保存的元数据
      */
     private ServerMetadata lastSavedServerMetadata = null;
-    private ScheduledFuture flushStateFuture;
-    private ScheduledFuture compactJournalFuture;
+    private ScheduledFuture<?> flushStateFuture;
+    private ScheduledFuture<?> compactJournalFuture;
     private JournalCompactionStrategy journalCompactionStrategy;
     protected AbstractServer(StateFactory stateFactory,
                              JournalEntryParser journalEntryParser, ScheduledExecutorService scheduledExecutor,
@@ -251,11 +258,22 @@ public abstract class AbstractServer
 
 
         this.eventBus = new EventBus(config.getRpcTimeoutMs());
-        persistenceFactory = ServiceSupport.load(PersistenceFactory.class);
+        persistenceFactory = ServiceSupport.load(PersistenceFactory.class, StoreFactory.class);
+
+        if(config.isDfsEnabled()) {
+            if(config.getDfsProviderClass() != null) {
+                dfsPersistenceFactory = ServiceSupport.load(PersistenceFactory.class, config.getDfsProviderClass());
+            } else {
+                dfsPersistenceFactory = ServiceSupport.loadAll(PersistenceFactory.class)
+                        .stream().filter(PersistenceFactory::isDistributed).findFirst()
+                        .orElseThrow(() -> new ServiceLoadException(PersistenceFactory.class));
+            }
+        }
+
         metadataPersistence = persistenceFactory.createMetadataPersistenceInstance();
         bufferPool = ServiceSupport.tryLoad(BufferPool.class).orElse(new UnPooledBufferPool());
         journal = new Journal(
-                persistenceFactory,
+                persistenceFactory, dfsPersistenceFactory,
                 bufferPool, journalEntryParser);
         this.state = new JournalKeeperState(stateFactory, metadataPersistence);
 
@@ -653,6 +671,17 @@ public abstract class AbstractServer
                 properties.getProperty(
                         Config.ENABLE_EVENTS_KEY,
                         String.valueOf(Config.DEFAULT_ENABLE_EVENTS))));
+
+        config.setDfsEnabled(Boolean.parseBoolean(
+                properties.getProperty(
+                        Config.DFS_ENABLED_KEY,
+                        String.valueOf(Config.DEFAULT_DFS_ENABLED))));
+
+        config.setDfsWorkingDir(properties.getProperty(Config.DFS_WORKING_DIR_KEY,
+                        config.getDfsWorkingDir()));
+
+        config.setDfsProviderClass(properties.getProperty(Config.DFS_PROVIDER_CLASS_KEY,
+                        config.getDfsProviderClass()));
 
         return config;
     }
@@ -1263,6 +1292,10 @@ public abstract class AbstractServer
         public final static int DEFAULT_PRINT_METRIC_INTERVAL_SEC = 0;
         public final static int DEFAULT_JOURNAL_RETENTION_MIN = 0;
         public final static boolean DEFAULT_ENABLE_EVENTS = true;
+        public final static boolean DEFAULT_DFS_ENABLED = false;
+        public final static String DEFAULT_DFS_WORKING_DIR = "/journalkeeper";
+        public final static String DEFAULT_DFS_PROVIDER_CLASS = null;
+
         public final static String SNAPSHOT_INTERVAL_SEC_KEY = "snapshot_interval_sec";
         public final static String RPC_TIMEOUT_MS_KEY = "rpc_timeout_ms";
         public final static String FLUSH_INTERVAL_MS_KEY = "flush_interval_ms";
@@ -1273,6 +1306,11 @@ public abstract class AbstractServer
         public final static String PRINT_METRIC_INTERVAL_SEC_KEY = "print_metric_interval_sec";
         public final static String JOURNAL_RETENTION_MIN_KEY = "journal_retention_min";
         public final static String ENABLE_EVENTS_KEY = "enable_events";
+        public final static String DFS_ENABLED_KEY = "dfs.enable";
+        public final static String DFS_WORKING_DIR_KEY = "dfs.working_dir";
+        public final static String DFS_PROVIDER_CLASS_KEY = "dfs.provider_class";
+
+
 
         private int snapshotIntervalSec = DEFAULT_SNAPSHOT_INTERVAL_SEC;
         private long rpcTimeoutMs = DEFAULT_RPC_TIMEOUT_MS;
@@ -1284,6 +1322,10 @@ public abstract class AbstractServer
         private int printMetricIntervalSec = DEFAULT_PRINT_METRIC_INTERVAL_SEC;
         private int journalRetentionMin = DEFAULT_JOURNAL_RETENTION_MIN;
         private boolean enableEvents = DEFAULT_ENABLE_EVENTS;
+        private boolean dfsEnabled = DEFAULT_DFS_ENABLED;
+        private String dfsWorkingDir = DEFAULT_DFS_WORKING_DIR;
+        private String dfsProviderClass = DEFAULT_DFS_PROVIDER_CLASS;
+
         int getSnapshotIntervalSec() {
             return snapshotIntervalSec;
         }
@@ -1362,6 +1404,30 @@ public abstract class AbstractServer
 
         public void setEnableEvents(boolean enableEvents) {
             this.enableEvents = enableEvents;
+        }
+
+        public boolean isDfsEnabled() {
+            return dfsEnabled;
+        }
+
+        public void setDfsEnabled(boolean dfsEnabled) {
+            this.dfsEnabled = dfsEnabled;
+        }
+
+        public String getDfsWorkingDir() {
+            return dfsWorkingDir;
+        }
+
+        public void setDfsWorkingDir(String dfsWorkingDir) {
+            this.dfsWorkingDir = dfsWorkingDir;
+        }
+
+        public String getDfsProviderClass() {
+            return dfsProviderClass;
+        }
+
+        public void setDfsProviderClass(String dfsProviderClass) {
+            this.dfsProviderClass = dfsProviderClass;
         }
     }
 }

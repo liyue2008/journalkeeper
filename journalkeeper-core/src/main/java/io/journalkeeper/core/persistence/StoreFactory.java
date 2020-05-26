@@ -23,7 +23,7 @@ public class StoreFactory implements PersistenceFactory {
 
     @Override
     public boolean isDistributed() {
-        return true;
+        return false;
     }
     @Override
     public MetadataPersistence createMetadataPersistenceInstance() {

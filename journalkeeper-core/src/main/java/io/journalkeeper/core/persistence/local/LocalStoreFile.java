@@ -87,13 +87,16 @@ public class LocalStoreFile implements StoreFile, BufferHolder {
         if (Files.exists(path) && Files.size(path) > headerSize) {
             this.writePosition = (int) (Files.size(path) - headerSize);
             this.flushPosition = writePosition;
+            this.capacity = Math.max(maxFileDataLength, (int )(Files.size(path) - headerSize));
+        } else {
+            this.capacity = maxFileDataLength;
         }
-        this.capacity = Math.max(maxFileDataLength, (int )(Files.size(path) - headerSize));
+
     }
 
     @Override
     public Path path() {
-        return null;
+        return path;
     }
 
     @Override

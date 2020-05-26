@@ -11,11 +11,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.journalkeeper.core.persistence.journal;
+package io.journalkeeper.core.persistence.local;
 
 
 import io.journalkeeper.core.persistence.JournalPersistence;
-import io.journalkeeper.core.persistence.local.PositioningStore;
 import io.journalkeeper.utils.format.Format;
 import io.journalkeeper.utils.test.ByteUtils;
 import io.journalkeeper.utils.test.TestPathUtils;

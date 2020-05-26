@@ -33,7 +33,7 @@ import java.util.stream.Collectors;
 public class Snapshot extends JournalKeeperState implements Replicable {
 private static final Logger logger = LoggerFactory.getLogger(Snapshot.class);
     private static final String SNAPSHOT_FILE = "snapshot";
-    private AtomicBoolean isUserStateAvailable = new AtomicBoolean(false);
+    private final AtomicBoolean isUserStateAvailable = new AtomicBoolean(false);
     private static final int MAX_TRUNK_SIZE = 1024 * 1024;
 
     public Snapshot(StateFactory userStateFactory, MetadataPersistence metadataPersistence) {
