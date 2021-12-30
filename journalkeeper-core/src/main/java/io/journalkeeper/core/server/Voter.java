@@ -122,6 +122,7 @@ class Voter extends AbstractServer implements CheckTermInterceptor {
      */
     private ScheduledFuture checkElectionTimeoutFuture;
     private ScheduledFuture printStateFuture;
+    private ScheduledFuture leaderCheckQuorumFuture;
 
     private Leader leader;
     private Follower follower;
@@ -228,6 +229,16 @@ class Voter extends AbstractServer implements CheckTermInterceptor {
                 properties.getProperty(
                         AbstractServer.Config.ENABLE_EVENTS_KEY,
                         String.valueOf(AbstractServer.Config.DEFAULT_ENABLE_EVENTS))));
+
+        config.setEnableCheckQuorum(Boolean.parseBoolean(
+                properties.getProperty(
+                        Config.ENABLE_CHECK_QUORUM_KEY,
+                        String.valueOf(Config.DEFAULT_ENABLE_CHECK_QUORUM))));
+        config.setCheckQuorumTimeoutMs(Long.parseLong(
+                properties.getProperty(
+                        Config.CHECK_QUORUM_TIMEOUT_MS_KEY,
+                        String.valueOf(Config.DEFAULT_CHECK_QUORUM_TIMEOUT_MS))));
+
 
         return config;
     }
@@ -863,6 +874,22 @@ class Voter extends AbstractServer implements CheckTermInterceptor {
                     config.getPrintStateIntervalSec(), TimeUnit.SECONDS);
         }
 
+        if(config.isEnableCheckQuorum()) {
+            this.leaderCheckQuorumFuture = scheduledExecutor.scheduleAtFixedRate(this::leaderCheckQuorum,
+                    ThreadLocalRandom.current().nextLong(0, config.getCheckQuorumTimeoutMs()),
+                    config.getCheckQuorumTimeoutMs(), TimeUnit.MILLISECONDS);
+        }
+
+    }
+
+    private void leaderCheckQuorum() {
+        if (voterState.getState().equals(VoterState.LEADER) &&
+                null != leader && leader.serverState().equals(ServerState.RUNNING)) {
+            if (!leader.checkQuorum(config.getCheckQuorumTimeoutMs())) {
+                logger.info("Leader check quorum failed, convert myself to follower, {}.", voterInfo());
+                convertToFollower();
+            }
+        }
     }
 
     private void printState() {
@@ -874,6 +901,7 @@ class Voter extends AbstractServer implements CheckTermInterceptor {
         try {
             stopAndWaitScheduledFeature(checkElectionTimeoutFuture, 1000L);
             stopAndWaitScheduledFeature(printStateFuture, 1000L);
+            stopAndWaitScheduledFeature(leaderCheckQuorumFuture, 1000L);
             if (null != leader) {
                 leader.stop();
             }
@@ -1033,11 +1061,13 @@ class Voter extends AbstractServer implements CheckTermInterceptor {
     public static class Config extends AbstractServer.Config {
         public final static long DEFAULT_HEARTBEAT_INTERVAL_MS = 100L;
         public final static long DEFAULT_ELECTION_TIMEOUT_MS = 300L;
+        public final static long DEFAULT_CHECK_QUORUM_TIMEOUT_MS = 300L;
         public final static int DEFAULT_REPLICATION_BATCH_SIZE = 128;
         public final static int DEFAULT_CACHE_REQUESTS = 1024;
         public final static long DEFAULT_TRANSACTION_TIMEOUT_MS = 10L * 60 * 1000;
         public final static int DEFAULT_PRINT_STATE_INTERVAL_SEC = 0;
         public final static boolean DEFAULT_ENABLE_PRE_VOTE = true;
+        public final static boolean DEFAULT_ENABLE_CHECK_QUORUM = true;
 
         public final static String HEARTBEAT_INTERVAL_KEY = "heartbeat_interval_ms";
         public final static String ELECTION_TIMEOUT_KEY = "election_timeout_ms";
@@ -1046,6 +1076,8 @@ class Voter extends AbstractServer implements CheckTermInterceptor {
         public final static String TRANSACTION_TIMEOUT_MS_KEY = "transaction_timeout_ms";
         public final static String PRINT_STATE_INTERVAL_SEC_KEY = "print_state_interval_sec";
         public final static String ENABLE_PRE_VOTE_KEY = "enable_pre_vote";
+        public final static String ENABLE_CHECK_QUORUM_KEY = "enable_check_quorum";
+        public static final String CHECK_QUORUM_TIMEOUT_MS_KEY = "check_quorum_timeout_ms";
 
         private long heartbeatIntervalMs = DEFAULT_HEARTBEAT_INTERVAL_MS;
         private long electionTimeoutMs = DEFAULT_ELECTION_TIMEOUT_MS;  // 最小选举超时
@@ -1054,6 +1086,25 @@ class Voter extends AbstractServer implements CheckTermInterceptor {
         private long transactionTimeoutMs = DEFAULT_TRANSACTION_TIMEOUT_MS;
         private int printStateIntervalSec = DEFAULT_PRINT_STATE_INTERVAL_SEC;
         private boolean enablePreVote = DEFAULT_ENABLE_PRE_VOTE;
+        private long checkQuorumTimeoutMs = DEFAULT_CHECK_QUORUM_TIMEOUT_MS;
+        private boolean enableCheckQuorum = DEFAULT_ENABLE_CHECK_QUORUM;
+
+        public long getCheckQuorumTimeoutMs() {
+            return checkQuorumTimeoutMs;
+        }
+
+        public void setCheckQuorumTimeoutMs(long checkQuorumTimeoutMs) {
+            this.checkQuorumTimeoutMs = checkQuorumTimeoutMs;
+        }
+
+        public boolean isEnableCheckQuorum() {
+            return enableCheckQuorum;
+        }
+
+        public void setEnableCheckQuorum(boolean enableCheckQuorum) {
+            this.enableCheckQuorum = enableCheckQuorum;
+        }
+
         public int getReplicationBatchSize() {
             return replicationBatchSize;
         }

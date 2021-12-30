@@ -79,12 +79,7 @@ import java.util.stream.Collectors;
 
 import static io.journalkeeper.core.api.RaftJournal.INTERNAL_PARTITION;
 import static io.journalkeeper.core.server.MetricNames.METRIC_APPEND_ENTRIES_RPC;
-import static io.journalkeeper.core.server.ThreadNames.FLUSH_JOURNAL_THREAD;
-import static io.journalkeeper.core.server.ThreadNames.LEADER_APPEND_ENTRY_THREAD;
-import static io.journalkeeper.core.server.ThreadNames.LEADER_CALLBACK_THREAD;
-import static io.journalkeeper.core.server.ThreadNames.LEADER_COMMIT_THREAD;
-import static io.journalkeeper.core.server.ThreadNames.LEADER_REPLICATION_THREAD;
-import static io.journalkeeper.core.server.ThreadNames.STATE_MACHINE_THREAD;
+import static io.journalkeeper.core.server.ThreadNames.*;
 
 /**
  * @author LiYue
@@ -227,6 +222,10 @@ class Leader extends ServerStateMachine implements StateServer {
                 .onException(new DefaultExceptionListener(LEADER_CALLBACK_THREAD))
                 .daemon(true)
                 .build();
+    }
+
+    boolean checkQuorum(long checkQuorumTimeoutMs) {
+        return followers.isEmpty() || leaderShipDeadLineMs.get() <= 0 || System.currentTimeMillis() <= leaderShipDeadLineMs.get() + checkQuorumTimeoutMs;
     }
 
     private String threadName(String staticThreadName) {
