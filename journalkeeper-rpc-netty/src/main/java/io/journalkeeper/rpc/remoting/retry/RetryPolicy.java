@@ -69,59 +69,59 @@ public class RetryPolicy implements Serializable {
      */
     public long getTime(final long now, final int retryTimes, final long startTime) {
         long time = 0;
-        int retrys = retryTimes < 1 ? 1 : retryTimes;
+        int retrys = Math.max(retryTimes, 1);
         int maxRetrys = this.maxRetrys == null ? MAX_RETRIES : this.maxRetrys;
         int retryDelay = this.retryDelay == null ? RETRY_DELAY : this.retryDelay;
         int maxRetryDelay = this.maxRetryDelay == null ? MAX_RETRY_DELAY : this.maxRetryDelay;
-        boolean useExponentialBackOff = this.useExponentialBackOff == null ? true : this.useExponentialBackOff;
+        boolean useExponentialBackOff = this.useExponentialBackOff == null || this.useExponentialBackOff;
         double backOffMultiplier =
                 (this.backOffMultiplier == null || this.backOffMultiplier < 1) ? BACKOFF_MULTIPLIER : this
                         .backOffMultiplier;
         int expireTime = this.expireTime == null ? EXPIRE_TIME : this.expireTime;
         // 判断是否超过最大重试次数
-        if (maxRetrys > 0 && retrys > maxRetrys) {
-            time = 0;
-        } else if (retryDelay <= 0) {
-            // 没有时间间隔
-            time = now;
-        } else {
-            long delay = 0;
+        if (maxRetrys <= 0 || retrys <= maxRetrys) {
+            if (retryDelay <= 0) {
+                // 没有时间间隔
+                time = now;
+            } else {
+                long delay = 0;
 
-            // 判断是否使用指数函数
-            if (useExponentialBackOff) {
-                // 指数
-                int exponential = retrys - 1;
-                // 底数为1
-                if (backOffMultiplier == 1) {
-                    delay = retryDelay;
-                } else if (maxRetryDelay > 0) {
-                    // 获取最大的指数
-                    Integer maxExp = maxExponential.get();
-                    // 还没用计算过
-                    if (maxExp == null) {
-                        maxExp = (int) (Math.log(maxRetryDelay) / Math.log(backOffMultiplier));
-                        if (!maxExponential.compareAndSet(null, maxExp)) {
-                            maxExp = maxExponential.get();
+                // 判断是否使用指数函数
+                if (useExponentialBackOff) {
+                    // 指数
+                    int exponential = retrys - 1;
+                    // 底数为1
+                    if (backOffMultiplier == 1) {
+                        delay = retryDelay;
+                    } else if (maxRetryDelay > 0) {
+                        // 获取最大的指数
+                        Integer maxExp = maxExponential.get();
+                        // 还没用计算过
+                        if (maxExp == null) {
+                            maxExp = (int) (Math.log(maxRetryDelay) / Math.log(backOffMultiplier));
+                            if (!maxExponential.compareAndSet(null, maxExp)) {
+                                maxExp = maxExponential.get();
+                            }
                         }
-                    }
-                    // 超过了最大指数
-                    if (exponential >= maxExp) {
-                        delay = maxRetryDelay;
+                        // 超过了最大指数
+                        if (exponential >= maxExp) {
+                            delay = maxRetryDelay;
+                        } else {
+                            delay = Math.round(retryDelay * Math.pow(backOffMultiplier, exponential));
+                        }
                     } else {
                         delay = Math.round(retryDelay * Math.pow(backOffMultiplier, exponential));
                     }
                 } else {
-                    delay = Math.round(retryDelay * Math.pow(backOffMultiplier, exponential));
+                    delay = retryDelay;
                 }
-            } else {
-                delay = retryDelay;
-            }
-            if (delay <= 0) {
-                time = now;
-            } else if (maxRetryDelay > 0 && delay >= maxRetryDelay) {
-                time = now + maxRetryDelay;
-            } else {
-                time = now + delay;
+                if (delay <= 0) {
+                    time = now;
+                } else if (maxRetryDelay > 0 && delay >= maxRetryDelay) {
+                    time = now + maxRetryDelay;
+                } else {
+                    time = now + delay;
+                }
             }
         }
         // 有过期时间设置
