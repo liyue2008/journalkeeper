@@ -14,7 +14,6 @@
 package io.journalkeeper.rpc.remoting.transport.config;
 
 
-import io.journalkeeper.rpc.remoting.retry.RetryPolicy;
 import io.journalkeeper.rpc.remoting.transport.IpUtil;
 
 /**
@@ -73,20 +72,6 @@ public class TransportConfig {
     private double backOffMultiplier = 2.0;
     // 过期时间（默认3天）
     private int expireTime = 0;
-    // 重试
-    private RetryPolicy retryPolicy;
-
-
-    public RetryPolicy getRetryPolicy() {
-        if (this.retryPolicy == null) {
-            this.retryPolicy = new RetryPolicy(getRetryDelay(), getMaxRetryDelay(), getMaxRetrys(), isUseExponentialBackOff(), getBackOffMultiplier(), getExpireTime());
-        }
-        return retryPolicy;
-    }
-
-    public void setRetryPolicy(RetryPolicy retryPolicy) {
-        this.retryPolicy = retryPolicy;
-    }
 
     public String getHost() {
         return host;

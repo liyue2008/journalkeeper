@@ -18,18 +18,13 @@ import io.journalkeeper.rpc.remoting.transport.command.CommandCallback;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 应答Future
  */
-public class ResponseFuture implements Future {
+public class ResponseFuture extends CompletableFuture<Command> {
     protected static Logger logger = LoggerFactory.getLogger(ResponseFuture.class);
     // 开始事件
     private final long beginTime = System.currentTimeMillis();
@@ -292,7 +287,7 @@ public class ResponseFuture implements Future {
     }
 
     @Override
-    public Object get() throws InterruptedException, ExecutionException {
+    public Command get() throws InterruptedException, ExecutionException {
         if (isDone) {
             return getFutureResponse();
         }
@@ -306,7 +301,7 @@ public class ResponseFuture implements Future {
     }
 
     @Override
-    public Object get(long timeout, TimeUnit unit) throws InterruptedException, ExecutionException, TimeoutException {
+    public Command get(long timeout, TimeUnit unit) throws InterruptedException, ExecutionException, TimeoutException {
         if (isDone()) {
             return getFutureResponse();
         }
@@ -322,7 +317,7 @@ public class ResponseFuture implements Future {
         return getFutureResponse();
     }
 
-    protected Object getFutureResponse() throws ExecutionException {
+    protected Command getFutureResponse() throws ExecutionException {
         if (cause != null) {
             throw new ExecutionException(cause);
         }

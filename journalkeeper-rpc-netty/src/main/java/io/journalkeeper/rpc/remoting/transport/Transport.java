@@ -18,6 +18,7 @@ import io.journalkeeper.rpc.remoting.transport.command.CommandCallback;
 import io.journalkeeper.rpc.remoting.transport.exception.TransportException;
 
 import java.net.SocketAddress;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 
 /**
@@ -35,7 +36,9 @@ public interface Transport {
      * @return 应答命令
      * @throws TransportException 传输异常
      */
-    Command sync(Command command) throws TransportException;
+    default Command sync(Command command) throws TransportException {
+        return sync(command, 0);
+    }
 
     /**
      * 同步发送，需要应答
@@ -54,7 +57,9 @@ public interface Transport {
      * @param callback 回调
      * @throws TransportException 传输异常
      */
-    void async(Command command, CommandCallback callback) throws TransportException;
+    default void async(Command command, CommandCallback callback) throws TransportException {
+        async(command, 0, callback);
+    }
 
     /**
      * 异步发送，需要应答
@@ -73,7 +78,9 @@ public interface Transport {
      * @return 异步执行结果Future
      * @throws TransportException 传输异常
      */
-    Future<?> async(Command command) throws TransportException;
+    default CompletableFuture<Command> async(Command command) throws TransportException {
+        return async(command, 0);
+    }
 
     /**
      * 异步发送，需要应答
@@ -83,7 +90,7 @@ public interface Transport {
      * @return 异步执行结果Future
      * @throws TransportException 传输异常
      */
-    Future<?> async(Command command, long timeout) throws TransportException;
+    CompletableFuture<Command> async(Command command, long timeout) throws TransportException;
 
     /**
      * 单向发送，不需要应答
@@ -91,7 +98,9 @@ public interface Transport {
      * @param command 命令
      * @throws TransportException 传输异常
      */
-    void oneway(Command command) throws TransportException;
+    default void oneway(Command command) throws TransportException {
+        oneway(command, 0);
+    }
 
     /**
      * 单向发送，需要应答
@@ -109,7 +118,9 @@ public interface Transport {
      * @param response 响应
      * @throws TransportException 传输异常
      */
-    void acknowledge(Command request, Command response) throws TransportException;
+    default void acknowledge(Command request, Command response) throws TransportException {
+        acknowledge(request, response, null);
+    }
 
     /**
      * 应答

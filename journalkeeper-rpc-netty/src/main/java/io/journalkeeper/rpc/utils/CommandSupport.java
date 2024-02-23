@@ -46,39 +46,24 @@ public class CommandSupport {
     }
 
     public static <Q, R extends BaseResponse> CompletableFuture<R> sendRequest(Q request, int requestType, Transport transport, URI destination, int version) {
-        CompletableFuture<R> future = new CompletableFuture<>();
-        transport.async(
-                null == request ? newRequestCommand(requestType, destination, version) : newRequestCommand(requestType, request, destination, version),
-                new CommandCallback() {
-                    @Override
-                    public void onSuccess(Command request, Command response) {
-
-                        if (response.getHeader().getType() == RpcTypes.VOID_PAYLOAD) {
-                            if (response.getHeader().getStatus() == StatusCode.SERVER_NOT_FOUND.getCode()) {
-                                future.completeExceptionally(
-                                        new ServerNotFoundException(response.getHeader().getError())
-                                );
-                            } else {
-                                future.completeExceptionally(
-                                        new RpcException(
-                                                String.format("StatusCode: (%d)%s, ErrorMessage: %s",
-                                                        response.getHeader().getStatus(),
-                                                        StatusCode.valueOf(response.getHeader().getStatus()).getMessage(),
-                                                        response.getHeader().getError())
-                                        )
-                                );
-                            }
+        Command requestCommand = null == request ? newRequestCommand(requestType, destination, version) : newRequestCommand(requestType, request, destination, version);
+        return transport.async(requestCommand)
+                .thenApply(responseCommand -> {
+                    if (responseCommand.getHeader().getType() == RpcTypes.VOID_PAYLOAD) {
+                        if (responseCommand.getHeader().getStatus() == StatusCode.SERVER_NOT_FOUND.getCode()) {
+                            throw new ServerNotFoundException(responseCommand.getHeader().getError());
                         } else {
-                            future.complete(GenericPayload.get(response.getPayload()));
+                            throw new RpcException(
+                                            String.format("StatusCode: (%d)%s, ErrorMessage: %s",
+                                                    responseCommand.getHeader().getStatus(),
+                                                    StatusCode.valueOf(responseCommand.getHeader().getStatus()).getMessage(),
+                                                    responseCommand.getHeader().getError())
+                                    );
                         }
-                    }
-
-                    @Override
-                    public void onException(Command request, Throwable cause) {
-                        future.completeExceptionally(cause);
+                    } else {
+                        return GenericPayload.get(responseCommand.getPayload());
                     }
                 });
-        return future;
     }
 
     public static void sendResponse(BaseResponse response, int responseType, Command requestCommand, Transport transport) {

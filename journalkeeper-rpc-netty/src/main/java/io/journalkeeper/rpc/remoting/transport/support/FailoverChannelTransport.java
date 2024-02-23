@@ -16,7 +16,6 @@ package io.journalkeeper.rpc.remoting.transport.support;
 import io.journalkeeper.rpc.remoting.concurrent.EventBus;
 import io.journalkeeper.rpc.remoting.event.TransportEvent;
 import io.journalkeeper.rpc.remoting.event.TransportEventType;
-import io.journalkeeper.rpc.remoting.retry.RetryPolicy;
 import io.journalkeeper.rpc.remoting.transport.ChannelTransport;
 import io.journalkeeper.rpc.remoting.transport.IpUtil;
 import io.journalkeeper.rpc.remoting.transport.TransportAttribute;
@@ -32,7 +31,7 @@ import org.slf4j.LoggerFactory;
 
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
-import java.util.concurrent.Future;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * 故障切换通信
@@ -42,14 +41,16 @@ import java.util.concurrent.Future;
  */
 public class FailoverChannelTransport implements ChannelTransport {
 
+    private static final int RETRY_DELAY = 1000;
+
     protected static final Logger logger = LoggerFactory.getLogger(FailoverChannelTransport.class);
 
     private volatile ChannelTransport delegate;
     private SocketAddress address;
-    private long connectionTimeout;
-    private TransportClient transportClient;
-    private TransportConfig config;
-    private EventBus<TransportEvent> transportEventBus;
+    private final long connectionTimeout;
+    private final TransportClient transportClient;
+    private final TransportConfig config;
+    private final EventBus<TransportEvent> transportEventBus;
     private volatile long lastReconnect;
 
     public FailoverChannelTransport(ChannelTransport delegate, SocketAddress address, long connectionTimeout, TransportClient transportClient, TransportConfig config, EventBus<TransportEvent> transportEventBus) {
@@ -67,60 +68,19 @@ public class FailoverChannelTransport implements ChannelTransport {
     }
 
     @Override
-    public Command sync(Command command) throws TransportException {
-        return sync(command, 0);
-    }
-
-    @Override
     public Command sync(Command command, long timeout) throws TransportException {
-        RetryPolicy retryPolicy = config.getRetryPolicy();
-        TransportException lastException = null;
-        Command response = null;
-        int retryTimes = 0;
 
-        for (int i = 0, retryLimit = retryPolicy.getMaxRetrys(); i <= retryLimit; i++) {
-            try {
-                response = delegate.sync(command, timeout);
-                break;
-            } catch (TransportException e) {
-                if (!(e instanceof TransportException.RequestTimeoutException)) {
-                    if (!tryReconnect()) {
-                        // 重连失败，抛出异常
-                        throw e;
-                    }
-                }
-
-                lastException = e;
-                retryTimes++;
-            }
+        if (!checkChannel()) {
+            throw TransportException.RequestErrorException.build(IpUtil.toAddress(delegate.getChannel().remoteAddress()));
         }
-
-        // 如果有过异常，并且没有重试成功，抛出异常
-        if (lastException != null && response == null) {
-            throw lastException;
-        }
-
-        // 有过重试，打印日志
-        if (lastException != null) {
-            logger.warn("transport sync exception, retry {} times success, command: {}, timeout: {}", retryTimes, command, timeout, lastException);
-        }
-
-        return response;
+        return delegate.sync(command, timeout);
     }
 
-    @Override
-    public void async(Command command, CommandCallback callback) throws TransportException {
-        async(command, 0, callback);
-    }
+
 
     @Override
     public void async(final Command command, final long timeout, final CommandCallback callback) throws TransportException {
-        if (command == null) {
-            throw new IllegalArgumentException("command must not be null");
-        }
-        if (callback == null) {
-            throw new IllegalArgumentException("callback must not be null");
-        }
+
         if (!checkChannel()) {
             callback.onException(command, TransportException.RequestErrorException.build(IpUtil.toAddress(delegate.getChannel().remoteAddress())));
             return;
@@ -128,30 +88,19 @@ public class FailoverChannelTransport implements ChannelTransport {
         delegate.async(command, timeout, callback);
     }
 
-    @Override
-    public Future<?> async(Command command) throws TransportException {
-        return delegate.async(command);
-    }
+
 
     @Override
-    public Future<?> async(Command command, long timeout) throws TransportException {
+    public CompletableFuture<Command> async(Command command, long timeout) throws TransportException {
         return delegate.async(command, timeout);
     }
 
-    @Override
-    public void oneway(Command command) throws TransportException {
-        oneway(command, 0);
-    }
 
     @Override
     public void oneway(Command command, long timeout) throws TransportException {
         delegate.oneway(command, timeout);
     }
 
-    @Override
-    public void acknowledge(Command request, Command response) throws TransportException {
-        delegate.acknowledge(request, response);
-    }
 
     @Override
     public void acknowledge(Command request, Command response, CommandCallback callback) throws TransportException {
@@ -183,10 +132,6 @@ public class FailoverChannelTransport implements ChannelTransport {
         delegate.stop();
     }
 
-    @Override
-    public String toString() {
-        return delegate.toString();
-    }
 
     protected boolean checkChannel() {
         if (isChannelActive()) {
@@ -214,7 +159,7 @@ public class FailoverChannelTransport implements ChannelTransport {
     }
 
     protected boolean isNeedReconnect() {
-        return System.currentTimeMillis() - lastReconnect > config.getRetryPolicy().getRetryDelay();
+        return System.currentTimeMillis() - lastReconnect > RETRY_DELAY;
     }
 
     protected boolean reconnect() {

@@ -34,8 +34,9 @@ import org.slf4j.LoggerFactory;
 
 import java.net.SocketAddress;
 import java.nio.channels.ClosedChannelException;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Future;
+import java.util.concurrent.ExecutionException;
 
 /**
  * 默认通信
@@ -47,10 +48,10 @@ public class DefaultChannelTransport implements ChannelTransport {
 
     protected static final Logger logger = LoggerFactory.getLogger(DefaultChannelTransport.class);
 
-    private Channel channel;
+    private final Channel channel;
     private TransportAttribute attribute = new DefaultTransportAttribute();
-    private RequestBarrier barrier;
-    private TransportConfig config;
+    private final RequestBarrier barrier;
+    private final TransportConfig config;
     private SocketAddress address;
 
     public DefaultChannelTransport(Channel channel, RequestBarrier barrier) {
@@ -79,58 +80,18 @@ public class DefaultChannelTransport implements ChannelTransport {
         return channel;
     }
 
-    @Override
-    public Command sync(final Command command) throws TransportException {
-        return sync(command, 0);
-    }
+
 
     @Override
     public Command sync(final Command command, final long timeout) throws TransportException {
-        if (command == null) {
-            throw new IllegalArgumentException("The argument command must not be null");
-        }
-        long sendTimeout = timeout <= 0 ? barrier.getSendTimeout() : timeout;
-        // 同步调用
-        ResponseFuture future = new ResponseFuture(this, command, sendTimeout, null, null, new CountDownLatch(1));
-        barrier.put(command.getHeader().getRequestId(), future);
-        // 发送数据,应答成功回来或超时会自动释放command
-        channel.writeAndFlush(command).addListener(new ResponseListener(future, barrier));
-
+        CompletableFuture<Command> cf = async(command, timeout);
         try {
-            // 等待命令返回
-            Command response = future.await();
-            if (null == response) {
-                // 发送请求成功，等待应答超时
-                if (future.isSuccess()) {
-                    throw TransportException.RequestTimeoutException.build(IpUtil.toAddress(address));
-                } else {
-                    // 发送请求失败
-                    Throwable cause = future.getCause();
-                    if (cause != null) {
-                        throw cause;
-                    }
-                    throw TransportException.RequestErrorException.build(IpUtil.toAddress(address));
-                }
-            }
-
-            return response;
-        } catch (Throwable e) {
-            future.release(e, false);
-            // 出现异常
-            barrier.remove(command.getHeader().getRequestId());
-            if (e instanceof TransportException) {
-                throw (TransportException) e;
-            } else if (e instanceof InterruptedException) {
-                throw TransportException.InterruptedException.build();
-            } else {
-                throw TransportException.RequestErrorException.build("请求错误, " + address, e);
-            }
+            return cf.get();
+        } catch (InterruptedException e) {
+            throw TransportException.InterruptedException.build();
+        } catch (ExecutionException e) {
+            throw TransportException.RequestErrorException.build("请求错误, " + address, e);
         }
-    }
-
-    @Override
-    public void async(final Command command, final CommandCallback callback) throws TransportException {
-        async(command, 0, callback);
     }
 
     @Override
@@ -169,47 +130,24 @@ public class DefaultChannelTransport implements ChannelTransport {
     }
 
     @Override
-    public Future<?> async(Command command) throws TransportException {
-        return async(command);
-    }
+    public CompletableFuture<Command> async(Command command, long timeout) throws TransportException {
 
-    @Override
-    public Future<?> async(Command command, long timeout) throws TransportException {
-        if (command == null) {
-            throw new IllegalArgumentException("command must not be null");
-        }
+        final CompletableFuture<Command> cf = new CompletableFuture<>();
 
-        long sendTimeout = timeout <= 0 ? barrier.getSendTimeout() : timeout;
-        // 获取信号量
-        try {
-            long time = System.currentTimeMillis();
-            barrier.acquire(RequestBarrier.SemaphoreType.ASYNC, sendTimeout);
-            time = System.currentTimeMillis() - time;
-            sendTimeout = (int) (sendTimeout - time);
-            sendTimeout = sendTimeout < 0 ? 0 : sendTimeout;
-
-            // 发送请求
-            ResponseFuture future =
-                    new ResponseFuture(this, command, sendTimeout, null, barrier.asyncSemaphore, null);
-            if (barrier.get(command.getHeader().getRequestId()) != null) {
-                logger.warn("async command(type {}, request id {}) already exist",
-                        command.getHeader().getType(), command.getHeader().getRequestId());
+        async(command, timeout, new CommandCallback() {
+            @Override
+            public void onSuccess(Command request, Command response) {
+                cf.complete(response);
             }
-            barrier.put(command.getHeader().getRequestId(), future);
-            // 应答回来的时候或超时会自动释放command
-            channel.writeAndFlush(command).addListener(new ResponseListener(future, barrier));
-            return future;
-        } catch (TransportException e) {
-            barrier.release(RequestBarrier.SemaphoreType.ASYNC);
-            command.release();
-            throw e;
-        }
+
+            @Override
+            public void onException(Command request, Throwable cause) {
+                cf.completeExceptionally(cause);
+            }
+        });
+        return cf;
     }
 
-    @Override
-    public void oneway(final Command command) throws TransportException {
-        oneway(command, 0);
-    }
 
     @Override
     public void oneway(final Command command, final long timeout) throws TransportException {
@@ -262,9 +200,7 @@ public class DefaultChannelTransport implements ChannelTransport {
             throw e;
         } catch (InterruptedException e) {
             TransportException.InterruptedException ex = TransportException.InterruptedException.build();
-            if (future != null) {
-                future.release(ex, false);
-            }
+            future.release(ex, false);
             throw ex;
         }
     }
@@ -397,7 +333,7 @@ public class DefaultChannelTransport implements ChannelTransport {
      */
     protected static class ResponseListener extends FutureListener {
 
-        private RequestBarrier barrier;
+        private final RequestBarrier barrier;
 
         public ResponseListener(ResponseFuture response, RequestBarrier barrier) {
             super(response);
