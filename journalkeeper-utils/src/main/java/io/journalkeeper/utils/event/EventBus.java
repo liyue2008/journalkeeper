@@ -165,7 +165,7 @@ public class EventBus implements Watchable {
     public List<PullEvent> pullEvents(long pullWatchId) {
         PullEventWatcher pullEventWatcher = pullEventWatchers.get(pullWatchId);
         if (null != pullEventWatcher) {
-            List<PullEvent> pullEvents = cachedEvents.tailMap(pullEventWatcher.sequence.get())
+            List<PullEvent> pullEvents = cachedEvents.tailMap(pullEventWatcher.sequence.get(), false)
                     .entrySet().stream()
                     .map(entry ->
                             new PullEvent(entry.getValue().getEventType(),
