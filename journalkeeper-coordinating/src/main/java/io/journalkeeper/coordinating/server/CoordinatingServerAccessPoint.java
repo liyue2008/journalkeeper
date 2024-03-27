@@ -14,12 +14,7 @@
 package io.journalkeeper.coordinating.server;
 
 import io.journalkeeper.coordinating.state.CoordinatorStateFactory;
-import io.journalkeeper.coordinating.state.domain.ReadRequest;
-import io.journalkeeper.coordinating.state.domain.ReadResponse;
-import io.journalkeeper.coordinating.state.domain.WriteRequest;
-import io.journalkeeper.coordinating.state.domain.WriteResponse;
 import io.journalkeeper.core.api.RaftServer;
-import io.journalkeeper.core.serialize.WrappedStateFactory;
 
 import java.net.URI;
 import java.util.List;
@@ -34,7 +29,7 @@ import java.util.Properties;
 public class CoordinatingServerAccessPoint {
 
     private Properties config;
-    private WrappedStateFactory<WriteRequest, WriteResponse, ReadRequest, ReadResponse> stateFactory;
+    private CoordinatorStateFactory stateFactory;
 
     public CoordinatingServerAccessPoint(Properties config) {
         this(config,
@@ -43,7 +38,7 @@ public class CoordinatingServerAccessPoint {
 
 
     public CoordinatingServerAccessPoint(Properties config,
-                                         WrappedStateFactory<WriteRequest, WriteResponse, ReadRequest, ReadResponse> stateFactory) {
+                                         CoordinatorStateFactory stateFactory) {
         this.config = config;
         this.stateFactory = stateFactory;
     }

@@ -13,8 +13,8 @@
  */
 package io.journalkeeper.examples.kv;
 
-import io.journalkeeper.core.serialize.WrappedBootStrap;
-import io.journalkeeper.core.serialize.WrappedRaftClient;
+import io.journalkeeper.core.BootStrap;
+import io.journalkeeper.core.easy.JkClient;
 import io.journalkeeper.utils.net.NetworkingUtils;
 import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
@@ -43,7 +43,7 @@ public class KvExampleApplicationMain {
             serverURIs.add(uri);
         }
 
-        List<WrappedBootStrap<String, String, String, String>> serverBootStraps = new ArrayList<>(serverURIs.size());
+        List<BootStrap> serverBootStraps = new ArrayList<>(serverURIs.size());
 
         KvStateFactory stateFactory = new KvStateFactory();
         for (int i = 0; i < serverURIs.size(); i++) {
@@ -51,47 +51,47 @@ public class KvExampleApplicationMain {
             FileUtils.deleteDirectory(workingDir.toFile());
             Properties properties = new Properties();
             properties.put("working_dir", workingDir.toString());
-            WrappedBootStrap<String, String, String, String> bootStrap = new WrappedBootStrap<>(stateFactory, properties);
+            BootStrap bootStrap = BootStrap.builder().stateFactory(stateFactory).properties(properties).build();
             bootStrap.getServer().init(serverURIs.get(i), serverURIs);
             bootStrap.getServer().recover();
             bootStrap.getServer().start();
             serverBootStraps.add(bootStrap);
         }
 
-        WrappedBootStrap<String, String, String, String> clientBootStrap = new WrappedBootStrap<>(serverURIs, new Properties());
+        BootStrap clientBootStrap = BootStrap.builder().servers(serverURIs).build();
 
-        WrappedRaftClient<String, String, String, String> kvClient = clientBootStrap.getClient();
+        JkClient kvClient = new JkClient(clientBootStrap.getClient());
         kvClient.waitForClusterReady();
         logger.info("SET key1 hello!");
-        String result = kvClient.update("SET key1 hello!").get();
+        String result = kvClient.<String,String>update("SET", "key1 hello!").get();
         logger.info(result);
 
         logger.info("SET key2 world!");
-        result = kvClient.update("SET key2 world!").get();
+        result = kvClient.<String, String>update("SET", "key2 world!").get();
         logger.info(result);
 
         logger.info("GET key1");
-        result = kvClient.query("GET key1").get();
+        result = kvClient.<String, String>query("GET", "key1").get();
         logger.info(result);
 
         logger.info("KEYS");
-        result = kvClient.query("KEYS").get();
+        result = kvClient.<String>query("KEYS").get();
         logger.info(result);
 
         logger.info("DEL key2");
-        result = kvClient.update("DEL key2").get();
+        result = kvClient.<String, String>update("DEL","key2").get();
         logger.info(result);
 
         logger.info("GET key2");
-        result = kvClient.query("GET key2").get();
+        result = kvClient.<String, String>query("GET","key2").get();
         logger.info(result);
 
         logger.info("KEYS");
-        result = kvClient.query("KEYS").get();
+        result = kvClient.<String>query("KEYS").get();
         logger.info(result);
 
         clientBootStrap.shutdown();
-        serverBootStraps.forEach(WrappedBootStrap::shutdown);
+        serverBootStraps.forEach(BootStrap::shutdown);
     }
 
 }

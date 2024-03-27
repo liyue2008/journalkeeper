@@ -21,9 +21,9 @@ import java.util.Map;
  */
 public class Event {
     private final int eventType;
-    private final Map<String, String> eventData;
+    private final byte [] eventData;
 
-    public Event(int eventType, Map<String, String> eventData) {
+    public Event(int eventType, byte [] eventData) {
         this.eventType = eventType;
         this.eventData = eventData;
     }
@@ -32,7 +32,7 @@ public class Event {
         return eventType;
     }
 
-    public Map<String, String> getEventData() {
+    public byte [] getEventData() {
         return eventData;
     }
 }

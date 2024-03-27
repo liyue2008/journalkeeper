@@ -15,13 +15,10 @@ package io.journalkeeper.coordinating.server;
 
 import io.journalkeeper.coordinating.client.CoordinatingClient;
 import io.journalkeeper.coordinating.exception.CoordinatingException;
-import io.journalkeeper.coordinating.state.domain.ReadRequest;
-import io.journalkeeper.coordinating.state.domain.ReadResponse;
-import io.journalkeeper.coordinating.state.domain.WriteRequest;
-import io.journalkeeper.coordinating.state.domain.WriteResponse;
+import io.journalkeeper.coordinating.state.CoordinatorStateFactory;
+import io.journalkeeper.core.BootStrap;
 import io.journalkeeper.core.api.RaftServer;
-import io.journalkeeper.core.serialize.WrappedBootStrap;
-import io.journalkeeper.core.serialize.WrappedStateFactory;
+import io.journalkeeper.core.easy.JkClient;
 import io.journalkeeper.utils.state.StateServer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,17 +42,17 @@ public class CoordinatingServer implements StateServer {
     private RaftServer.Roll role;
     private Properties config;
 
-    private WrappedBootStrap<WriteRequest, WriteResponse, ReadRequest, ReadResponse> bootStrap;
+    private BootStrap bootStrap;
     private volatile CoordinatingClient client;
 
     public CoordinatingServer(URI current, List<URI> servers, Properties config,
                               RaftServer.Roll role,
-                              WrappedStateFactory<WriteRequest, WriteResponse, ReadRequest, ReadResponse> stateFactory) {
+                              CoordinatorStateFactory stateFactory) {
         this.current = current;
         this.servers = servers;
         this.role = role;
         this.config = config;
-        this.bootStrap = new WrappedBootStrap<>(role, stateFactory, config);
+        this.bootStrap = BootStrap.builder().stateFactory(stateFactory).roll(role).properties(config).build();
     }
 
 
@@ -75,7 +72,7 @@ public class CoordinatingServer implements StateServer {
         if (client == null) {
             synchronized (this) {
                 if (client == null) {
-                    client = new CoordinatingClient(servers, config, bootStrap.getClient());
+                    client = new CoordinatingClient(new JkClient(bootStrap.getClient()));
                 }
             }
         }

@@ -39,7 +39,7 @@ import java.util.concurrent.CompletableFuture;
  * @author LiYue
  * Date: 2019-04-23
  */
-public interface PartitionedJournalStore extends Watchable {
+public interface PartitionedJournalStore {
 
     /**
      * 写入日志。

@@ -23,6 +23,10 @@ public enum InternalEntryType {
     TYPE_SET_PREFERRED_LEADER(6),
     TYPE_RECOVER_SNAPSHOT(7),
 
+    TYPE_ON_STATE_CHANGE_EVENT(8),
+
+    TYPE_ON_LEADER_CHANGE_EVENT(9)
+
     ;
 
     private int value;

@@ -13,7 +13,7 @@
  */
 package io.journalkeeper.coordinating.state.domain;
 
-import java.util.Arrays;
+import java.io.Serializable;
 
 /**
  * WriteRequest
@@ -21,7 +21,9 @@ import java.util.Arrays;
  *
  * date: 2019/5/30
  */
-public class WriteRequest extends StateRequest {
+public class WriteRequest implements Serializable {
+
+    private final static long serialVersionUID = -4739600399351950014L;
 
     private byte[] key;
     private byte[] expect;
@@ -31,19 +33,16 @@ public class WriteRequest extends StateRequest {
 
     }
 
-    public WriteRequest(int type, byte[] key) {
-        super(type);
+    public WriteRequest( byte[] key) {
         this.key = key;
     }
 
-    public WriteRequest(int type, byte[] key, byte[] value) {
-        super(type);
+    public WriteRequest( byte[] key, byte[] value) {
         this.key = key;
         this.value = value;
     }
 
-    public WriteRequest(int type, byte[] key, byte[] expect, byte[] value) {
-        super(type);
+    public WriteRequest(byte[] key, byte[] expect, byte[] value) {
         this.key = key;
         this.expect = expect;
         this.value = value;
@@ -73,13 +72,4 @@ public class WriteRequest extends StateRequest {
         this.value = value;
     }
 
-    @Override
-    public String toString() {
-        return "WriteRequest{" +
-                "type=" + getType() +
-                "key=" + Arrays.toString(key) +
-                ", expect=" + Arrays.toString(expect) +
-                ", value=" + Arrays.toString(value) +
-                '}';
-    }
 }

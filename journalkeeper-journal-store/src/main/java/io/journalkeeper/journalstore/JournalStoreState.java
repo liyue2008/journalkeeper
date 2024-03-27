@@ -47,6 +47,8 @@ public class JournalStoreState implements State, Flushable {
     private final Serializer<Long> appendResultSerializer;
     private final Serializer<JournalStoreQuery> querySerializer;
     private final Serializer<JournalStoreQueryResult> queryResultSerializer;
+
+    private final OnJournalChangeEventSerializer onJournalChangeEventSerializer;
     private AppliedIndicesFile appliedIndices;
     private Path path;
 
@@ -54,6 +56,7 @@ public class JournalStoreState implements State, Flushable {
         this.appendResultSerializer = new LongSerializer();
         this.querySerializer = new JournalStoreQuerySerializer();
         this.queryResultSerializer = new JournalStoreQueryResultSerializer(journalEntryParser);
+        this.onJournalChangeEventSerializer = new OnJournalChangeEventSerializer();
     }
 
 
@@ -94,12 +97,12 @@ public class JournalStoreState implements State, Flushable {
         appliedIndices.put(partition, partitionIndex + batchSize);
         long minIndex = journal.minIndex(partition);
         long maxIndex = appliedIndices.getOrDefault(partition, 0L);
-        StateResult result = new StateResult(appendResultSerializer.serialize(partitionIndex));
-        Map<String, String> eventData = result.getEventData();
-        eventData.put("partition", String.valueOf(partition));
-        eventData.put("minIndex", String.valueOf(minIndex));
-        eventData.put("maxIndex", String.valueOf(maxIndex));
-        return result;
+
+
+        return  new StateResult(
+                appendResultSerializer.serialize(partitionIndex),
+                onJournalChangeEventSerializer.serialize(new OnJournalChangeEvent(partition, minIndex, maxIndex))
+        );
     }
 
     @Override

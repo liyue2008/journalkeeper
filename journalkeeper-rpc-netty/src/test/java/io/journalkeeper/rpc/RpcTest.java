@@ -81,16 +81,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Properties;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -469,9 +460,8 @@ public class RpcTest {
                 .getMethodName());
         long pullWatchId = 666L;
         long ackSequence = 888888L;
-        Map<String, String> eventData = new HashMap<>();
-        eventData.put("key1", "value1");
-        eventData.put("key2", "value2");
+        byte [] eventData = new byte[20];
+        new Random().nextBytes(eventData);
         List<PullEvent> pullEvents = Collections.singletonList(new PullEvent(23, 83999L, eventData));
 
 
@@ -485,7 +475,7 @@ public class RpcTest {
 
         Assert.assertEquals(pullEvents.size(), response.getPullEvents().size());
         Assert.assertEquals(pullEvents.get(0).getSequence(), response.getPullEvents().get(0).getSequence());
-        Assert.assertEquals(pullEvents.get(0).getEventData(), response.getPullEvents().get(0).getEventData());
+        Assert.assertArrayEquals(pullEvents.get(0).getEventData(), response.getPullEvents().get(0).getEventData());
 
         verify(serverRpcMock).pullEvents(argThat((PullEventsRequest r) ->
                 r.getPullWatchId() == pullWatchId &&
@@ -499,9 +489,8 @@ public class RpcTest {
                 .getMethodName());
         long pullWatchId = 666L;
         long pullIntervalMs = 100L;
-        Map<String, String> eventData = new HashMap<>();
-        eventData.put("key1", "value1");
-        eventData.put("key2", "value2");
+        byte [] eventData = new byte[20];
+        new Random().nextBytes(eventData);
         List<PullEvent> pullEvents = Collections.singletonList(new PullEvent(23, 83999L, eventData));
 
 
@@ -531,7 +520,7 @@ public class RpcTest {
         clientServerRpc.unWatch(eventWatcher);
 
         Assert.assertEquals(pullEvents.size(), eventList.size());
-        Assert.assertEquals(pullEvents.get(0).getEventData(), eventList.get(0).getEventData());
+        Assert.assertArrayEquals(pullEvents.get(0).getEventData(), eventList.get(0).getEventData());
     }
 
     @Test

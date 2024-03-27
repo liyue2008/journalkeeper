@@ -1,12 +1,11 @@
 package io.journalkeeper.core;
 
-import io.journalkeeper.core.api.AdminClient;
 import io.journalkeeper.core.api.QueryConsistency;
 import io.journalkeeper.core.api.RaftServer;
-import io.journalkeeper.core.serialize.WrappedBootStrap;
-import io.journalkeeper.core.serialize.WrappedRaftClient;
-import io.journalkeeper.core.serialize.WrappedState;
-import io.journalkeeper.core.serialize.WrappedStateFactory;
+import io.journalkeeper.core.api.State;
+import io.journalkeeper.core.api.StateFactory;
+import io.journalkeeper.core.easy.JkClient;
+import io.journalkeeper.core.easy.JkState;
 import io.journalkeeper.utils.test.TestPathUtils;
 import org.junit.Assert;
 import org.junit.Test;
@@ -29,8 +28,8 @@ import java.util.stream.Collectors;
  */
 public class ConsistencyTest {
     private static final Logger logger = LoggerFactory.getLogger(ConsistencyTest.class);
-    private void stopServers(List<WrappedBootStrap<Integer, Integer, Integer, Integer>> kvServers) {
-        for (WrappedBootStrap<Integer, Integer, Integer, Integer> serverBootStraps : kvServers) {
+    private void stopServers(List<BootStrap> kvServers) {
+        for (BootStrap serverBootStraps : kvServers) {
             try {
                 serverBootStraps.shutdown();
             } catch (Throwable t) {
@@ -42,13 +41,13 @@ public class ConsistencyTest {
     @Test
     public void testSequential() throws Exception {
         Path path = TestPathUtils.prepareBaseDir("TestSequential");
-        List<WrappedBootStrap<Integer, Integer, Integer, Integer>> serverBootStraps = createServers(3, path);
+        List<BootStrap> serverBootStraps = createServers(3, path);
         try {
             for (int j = 0; j < 3; j++) {
-                WrappedRaftClient<Integer, Integer, Integer, Integer> client = serverBootStraps.get(j).getClient();
+                JkClient client = new JkClient(serverBootStraps.get(j).getClient());
                 for (int i = 0; i < 100; i++) {
-                    Integer value = client.update(1).get();
-                    Assert.assertEquals(value, client.query(null, QueryConsistency.SEQUENTIAL).get());
+                    Integer value = client.<Integer, Integer>update(1).get();
+                    Assert.assertEquals(value, client.<Integer>query(QueryConsistency.SEQUENTIAL).get());
                 }
             }
         } finally {
@@ -59,18 +58,18 @@ public class ConsistencyTest {
     @Test
     public void testAvailability() throws Exception {
         Path path = TestPathUtils.prepareBaseDir("TestSequential");
-        List<WrappedBootStrap<Integer, Integer, Integer, Integer>> serverBootStraps = createServers(3, path);
+        List<BootStrap> serverBootStraps = createServers(3, path);
         List<URI> serverUris = serverBootStraps.stream().map(b -> b.getServer().serverUri()).collect(Collectors.toList());
-        WrappedBootStrap<Integer, Integer, Integer, Integer> clientBootStrap = new WrappedBootStrap<Integer, Integer, Integer, Integer>(serverUris, new Properties());
-        WrappedRaftClient<Integer, Integer, Integer, Integer> client = clientBootStrap.getClient();
+        BootStrap clientBootStrap = BootStrap.builder().servers(serverUris).build();
+        JkClient client = new JkClient(clientBootStrap.getClient());
         try {
             for (int i = 0; i < 100; i++) {
-                client.update(1).get();
+                client.<Integer, Integer>update(1).get();
             }
-            List<WrappedBootStrap<Integer, Integer, Integer, Integer>> tobeStopped = serverBootStraps.subList(0, 2);
+            List<BootStrap> tobeStopped = serverBootStraps.subList(0, 2);
             stopServers(tobeStopped);
             serverBootStraps.removeAll(tobeStopped);
-            Assert.assertTrue(client.query(null, QueryConsistency.NONE).get() >= 0);
+            Assert.assertTrue(client.<Integer>query(QueryConsistency.NONE).get() >= 0);
 
         } finally {
             clientBootStrap.shutdown();
@@ -78,11 +77,11 @@ public class ConsistencyTest {
         }
     }
 
-    private List<WrappedBootStrap<Integer, Integer, Integer, Integer>> createServers(int nodes, Path path) throws IOException, ExecutionException, InterruptedException, TimeoutException {
+    private List<BootStrap> createServers(int nodes, Path path) throws IOException, ExecutionException, InterruptedException, TimeoutException {
         return createServers(nodes, path, RaftServer.Roll.VOTER, true);
     }
 
-    private List<WrappedBootStrap<Integer, Integer, Integer, Integer>> createServers(int nodes, Path path, RaftServer.Roll roll, boolean waitForLeader) throws IOException, ExecutionException, InterruptedException, TimeoutException {
+    private List<BootStrap> createServers(int nodes, Path path, RaftServer.Roll roll, boolean waitForLeader) throws IOException, ExecutionException, InterruptedException, TimeoutException {
         logger.info("Create {} nodes servers", nodes);
         List<URI> serverURIs = new ArrayList<>(nodes);
         List<Properties> propertiesList = new ArrayList<>(nodes);
@@ -107,11 +106,11 @@ public class ConsistencyTest {
     }
 
 
-    private List<WrappedBootStrap<Integer, Integer, Integer, Integer>> createServers(List<URI> serverURIs, List<Properties> propertiesList, RaftServer.Roll roll, boolean waitForLeader) throws IOException, ExecutionException, InterruptedException, TimeoutException {
+    private List<BootStrap> createServers(List<URI> serverURIs, List<Properties> propertiesList, RaftServer.Roll roll, boolean waitForLeader) throws IOException, ExecutionException, InterruptedException, TimeoutException {
 
-        List<WrappedBootStrap<Integer, Integer, Integer, Integer>> serverBootStraps = new ArrayList<>(serverURIs.size());
+        List<BootStrap> serverBootStraps = new ArrayList<>(serverURIs.size());
         for (int i = 0; i < serverURIs.size(); i++) {
-            WrappedBootStrap<Integer, Integer, Integer, Integer> serverBootStrap = new WrappedBootStrap<>(roll, new ConsistencyStateFactory(), propertiesList.get(i));
+            BootStrap serverBootStrap = BootStrap.builder().roll(roll).stateFactory(new ConsistencyStateFactory()).properties(propertiesList.get(i)).build();
             serverBootStraps.add(serverBootStrap);
 
             serverBootStrap.getServer().init(serverURIs.get(i), serverURIs);
@@ -124,28 +123,31 @@ public class ConsistencyTest {
         return serverBootStraps;
     }
 
-    private static class ConsistencyState implements WrappedState<Integer, Integer, Integer, Integer> {
+    private static class ConsistencyState extends JkState {
         private int value = 0;
-        @Override
-        public Integer execute(Integer entry) {
+        public Integer doExecute(Integer entry) {
             return value += entry;
         }
 
-        @Override
-        public Integer query(Integer query) {
+        public Integer doQuery(Integer query) {
             return value;
         }
 
+        public ConsistencyState () {
+            super();
+            registerQueryCommandHandler(this::doQuery);
+            registerExecuteCommandHandler(this::doExecute);
+        }
         @Override
         public void recover(Path path, Properties properties) throws IOException {
 
         }
     }
 
-    private static class ConsistencyStateFactory implements WrappedStateFactory<Integer, Integer, Integer, Integer> {
+    private static class ConsistencyStateFactory implements StateFactory {
 
         @Override
-        public WrappedState<Integer, Integer, Integer, Integer> createState() {
+        public State createState() {
             return new ConsistencyState();
         }
     }

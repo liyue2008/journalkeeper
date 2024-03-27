@@ -25,24 +25,24 @@ import io.journalkeeper.core.api.transaction.TransactionContext;
 import io.journalkeeper.core.api.transaction.TransactionId;
 import io.journalkeeper.core.api.transaction.TransactionalJournalStore;
 import io.journalkeeper.core.entry.DefaultJournalEntryParser;
+import io.journalkeeper.core.entry.internal.OnStateChangeEvent;
 import io.journalkeeper.core.entry.internal.ReservedPartition;
 import io.journalkeeper.exceptions.IndexOverflowException;
 import io.journalkeeper.exceptions.IndexUnderflowException;
+import io.journalkeeper.utils.event.Event;
+import io.journalkeeper.utils.event.EventType;
 import io.journalkeeper.utils.event.EventWatcher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.URI;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 /**
@@ -55,6 +55,7 @@ public class JournalStoreClient implements PartitionedJournalStore, Transactiona
     private final Serializer<Long> appendResultSerializer;
     private final Serializer<JournalStoreQuery> querySerializer;
     private final Serializer<JournalStoreQueryResult> queryResultSerializer;
+
 
     JournalStoreClient(RaftClient raftClient, JournalEntryParser journalEntryParser) {
         this.raftClient = raftClient;
@@ -77,11 +78,8 @@ public class JournalStoreClient implements PartitionedJournalStore, Transactiona
         this.appendResultSerializer = new LongSerializer();
         this.querySerializer = new JournalStoreQuerySerializer();
         this.queryResultSerializer = new JournalStoreQueryResultSerializer(journalEntryParser);
+        BootStrap bootStrap = BootStrap.builder().servers(servers).properties(properties).build();
 
-        BootStrap bootStrap = new BootStrap(
-                servers,
-                properties
-        );
         raftClient = bootStrap.getClient();
     }
 
@@ -89,11 +87,14 @@ public class JournalStoreClient implements PartitionedJournalStore, Transactiona
         this.appendResultSerializer = new LongSerializer();
         this.querySerializer = new JournalStoreQuerySerializer();
         this.queryResultSerializer = new JournalStoreQueryResultSerializer(journalEntryParser);
-        BootStrap bootStrap = new BootStrap(
-                servers,
-                asyncExecutor, scheduledExecutor,
-                properties
-        );
+
+        BootStrap bootStrap = BootStrap.builder()
+                .servers(servers)
+                .properties(properties)
+                .clientAsyncExecutor(asyncExecutor)
+                .clientScheduledExecutor(scheduledExecutor)
+                .build();
+
         raftClient = bootStrap.getClient();
     }
 
@@ -194,14 +195,13 @@ public class JournalStoreClient implements PartitionedJournalStore, Transactiona
         raftClient.waitForClusterReady();
     }
 
-    @Override
-    public void watch(EventWatcher eventWatcher) {
-        raftClient.watch(eventWatcher);
+
+    public void watchJournalChange(Consumer<OnJournalChangeEvent> listener) {
+        raftClient.watch(new ListenerAdapter(listener));
     }
 
-    @Override
-    public void unWatch(EventWatcher eventWatcher) {
-        raftClient.watch(eventWatcher);
+    public void unWatchJournalChange(Consumer<OnJournalChangeEvent> listener) {
+        raftClient.unWatch(new ListenerAdapter(listener));
     }
 
     @Override
@@ -219,4 +219,33 @@ public class JournalStoreClient implements PartitionedJournalStore, Transactiona
         return raftClient.getOpeningTransactions();
     }
 
+    private static class ListenerAdapter implements EventWatcher{
+        private final Serializer<OnJournalChangeEvent> onJournalChangeEventSerializer;
+        private final Consumer<OnJournalChangeEvent> listener;
+
+        public ListenerAdapter(Consumer<OnJournalChangeEvent> listener) {
+            this.listener = listener;
+            this.onJournalChangeEventSerializer = new OnJournalChangeEventSerializer();
+        }
+
+        public void onEvent(Event event) {
+            if(event.getEventType() == EventType.ON_JOURNAL_CHANGE) {
+                OnJournalChangeEvent onJournalChangeEvent = this.onJournalChangeEventSerializer.parse(event.getEventData());
+                listener.accept(onJournalChangeEvent);
+            }
+        }
+
+        @Override
+        public boolean equals(Object object) {
+            if (this == object) return true;
+            if (object == null || getClass() != object.getClass()) return false;
+            ListenerAdapter that = (ListenerAdapter) object;
+            return Objects.equals(listener, that.listener);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(listener);
+        }
+    }
 }

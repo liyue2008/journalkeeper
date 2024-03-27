@@ -18,13 +18,7 @@ import io.journalkeeper.core.BootStrap;
 import io.journalkeeper.core.api.AdminClient;
 import io.journalkeeper.core.api.QueryConsistency;
 import io.journalkeeper.core.api.RaftClient;
-import io.journalkeeper.sql.client.domain.Codes;
-import io.journalkeeper.sql.client.domain.OperationTypes;
-import io.journalkeeper.sql.client.domain.ReadRequest;
-import io.journalkeeper.sql.client.domain.ReadResponse;
-import io.journalkeeper.sql.client.domain.ResultSet;
-import io.journalkeeper.sql.client.domain.WriteRequest;
-import io.journalkeeper.sql.client.domain.WriteResponse;
+import io.journalkeeper.sql.client.domain.*;
 import io.journalkeeper.sql.client.exception.SQLClientException;
 import io.journalkeeper.sql.exception.SQLException;
 import io.journalkeeper.sql.state.config.SQLConfigs;
@@ -51,6 +45,9 @@ public class SQLClient {
     private final Serializer<WriteResponse> writeResponseSerializer;
     private final Serializer<ReadRequest> readRequestSerializer;
     private final Serializer<ReadResponse> readResponseSerializer;
+
+    private final Serializer<SQLEvent> eventSerializer;
+
     private List<URI> servers;
     private Properties config;
     private BootStrap bootStrap;
@@ -63,7 +60,7 @@ public class SQLClient {
                      Serializer<WriteRequest> writeRequestSerializer,
                      Serializer<WriteResponse> writeResponseSerializer,
                      Serializer<ReadRequest> readRequestSerializer,
-                     Serializer<ReadResponse> readResponseSerializer) {
+                     Serializer<ReadResponse> readResponseSerializer, Serializer<SQLEvent> eventSerializer) {
         this.writeRequestSerializer = writeRequestSerializer;
         this.writeResponseSerializer = writeResponseSerializer;
         this.readRequestSerializer = readRequestSerializer;
@@ -73,6 +70,7 @@ public class SQLClient {
         this.config = config;
         this.bootStrap = bootStrap;
         this.client = bootStrap.getClient();
+        this.eventSerializer = eventSerializer;
     }
 
     public void waitClusterReady(long maxWaitMs) throws TimeoutException, InterruptedException {
@@ -166,19 +164,11 @@ public class SQLClient {
     }
 
     public void watch(SQLEventListener listener) {
-        client.watch(new EventWatcherAdapter(listener));
+        client.watch(new EventWatcherAdapter(listener, eventSerializer));
     }
 
     public void unwatch(SQLEventListener listener) {
-        client.unWatch(new EventWatcherAdapter(listener));
-    }
-
-    public void watch(byte[] key, SQLEventListener listener) {
-        client.watch(new EventWatcherAdapter(key, listener));
-    }
-
-    public void unwatch(byte[] key, SQLEventListener listener) {
-        client.unWatch(new EventWatcherAdapter(key, listener));
+        client.unWatch(new EventWatcherAdapter(listener, eventSerializer));
     }
 
     public void stop() {

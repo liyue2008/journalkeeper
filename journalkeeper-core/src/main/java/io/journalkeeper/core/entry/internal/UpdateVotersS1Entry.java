@@ -24,8 +24,7 @@ import static io.journalkeeper.core.entry.internal.InternalEntryType.TYPE_UPDATE
  * @author LiYue
  * Date: 2019-08-26
  */
-public class UpdateVotersS1Entry extends InternalEntry implements Serializable {
-    private static final long serialVersionUID = 2L;
+public class UpdateVotersS1Entry extends InternalEntry {
 
     private final long epoch;
     private final List<URI> configOld;

@@ -15,10 +15,7 @@ package io.journalkeeper.sql.client;
 
 import io.journalkeeper.base.Serializer;
 import io.journalkeeper.core.BootStrap;
-import io.journalkeeper.sql.client.domain.ReadRequest;
-import io.journalkeeper.sql.client.domain.ReadResponse;
-import io.journalkeeper.sql.client.domain.WriteRequest;
-import io.journalkeeper.sql.client.domain.WriteResponse;
+import io.journalkeeper.sql.client.domain.*;
 import io.journalkeeper.sql.serializer.KryoSerializer;
 
 import java.net.URI;
@@ -39,32 +36,37 @@ public class SQLClientAccessPoint {
     private Serializer<ReadRequest> readRequestSerializer;
     private Serializer<ReadResponse> readResponseSerializer;
 
+    private final Serializer<SQLEvent> eventSerializer;
+
+
     public SQLClientAccessPoint(Properties config) {
         this(config,
                 new KryoSerializer<>(WriteRequest.class),
                 new KryoSerializer<>(WriteResponse.class),
                 new KryoSerializer<>(ReadRequest.class),
-                new KryoSerializer<>(ReadResponse.class));
+                new KryoSerializer<>(ReadResponse.class),
+                new KryoSerializer<>(SQLEvent.class));
     }
 
     public SQLClientAccessPoint(Properties config,
                                 Serializer<WriteRequest> writeRequestSerializer,
                                 Serializer<WriteResponse> writeResponseSerializer,
                                 Serializer<ReadRequest> readRequestSerializer,
-                                Serializer<ReadResponse> readResponseSerializer) {
+                                Serializer<ReadResponse> readResponseSerializer,
+                                Serializer<SQLEvent> eventSerializer) {
         this.config = config;
         this.writeRequestSerializer = writeRequestSerializer;
         this.writeResponseSerializer = writeResponseSerializer;
         this.readRequestSerializer = readRequestSerializer;
         this.readResponseSerializer = readResponseSerializer;
+        this.eventSerializer = eventSerializer;
 
     }
 
     public SQLClient createClient(List<URI> servers) {
 
-        BootStrap bootStrap =
-                new BootStrap(servers, config);
+        BootStrap bootStrap = BootStrap.builder().servers(servers).properties(config).build();
 
-        return new SQLClient(servers, config, bootStrap, writeRequestSerializer, writeResponseSerializer, readRequestSerializer, readResponseSerializer);
+        return new SQLClient(servers, config, bootStrap, writeRequestSerializer, writeResponseSerializer, readRequestSerializer, readResponseSerializer, eventSerializer);
     }
 }

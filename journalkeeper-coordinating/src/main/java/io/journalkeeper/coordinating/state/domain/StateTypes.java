@@ -20,46 +20,27 @@ package io.journalkeeper.coordinating.state.domain;
  */
 public enum StateTypes {
 
-    SET(0),
+    SET("SET"),
 
-    GET(1),
+    GET("GET"),
 
-    REMOVE(2),
+    REMOVE("REMOVE"),
 
-    EXIST(3),
+    EXIST("EXIST"),
 
-    COMPARE_AND_SET(4),
+    COMPARE_AND_SET("COMPARE_AND_SET"),
 
-    LIST(5),
+    LIST("LIST"),
 
     ;
 
-    private int type;
+    private final String type;
 
-    StateTypes(int type) {
+    StateTypes(String type) {
         this.type = type;
     }
 
-    public static StateTypes valueOf(int type) {
-        switch (type) {
-            case 0:
-                return SET;
-            case 1:
-                return GET;
-            case 2:
-                return REMOVE;
-            case 3:
-                return EXIST;
-            case 4:
-                return COMPARE_AND_SET;
-            case 5:
-                return LIST;
-            default:
-                throw new UnsupportedOperationException(String.valueOf(type));
-        }
-    }
-
-    public int getType() {
+    public String getType() {
         return type;
     }
 }

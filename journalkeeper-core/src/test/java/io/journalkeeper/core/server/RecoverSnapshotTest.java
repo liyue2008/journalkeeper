@@ -13,8 +13,9 @@
  */
 package io.journalkeeper.core.server;
 
-import io.journalkeeper.core.serialize.WrappedBootStrap;
-import io.journalkeeper.core.serialize.WrappedRaftClient;
+import io.journalkeeper.core.BootStrap;
+import io.journalkeeper.core.api.RaftServer;
+import io.journalkeeper.core.easy.JkClient;
 import io.journalkeeper.core.state.KvStateFactory;
 import io.journalkeeper.utils.files.FileUtils;
 import org.junit.After;
@@ -55,35 +56,35 @@ public class RecoverSnapshotTest {
         Properties properties = new Properties();
         properties.setProperty("working_dir", root.toString());
 
-        WrappedBootStrap<String, String, String, String> kvServer = new WrappedBootStrap<>(new KvStateFactory(), properties);
+        BootStrap kvServer = BootStrap.builder().roll(RaftServer.Roll.VOTER).stateFactory(new KvStateFactory()).properties(properties).build();
         kvServer.getServer().init(uri, Collections.singletonList(uri));
         kvServer.getServer().recover();
         kvServer.getServer().start();
         kvServer.getAdminClient().waitForClusterReady(1000 * 5);
 
-        WrappedRaftClient<String, String, String, String> client = kvServer.getClient();
-        Assert.assertNull(client.update("SET key_1 value_1").get());
-        Assert.assertEquals("value_1", client.query("GET key_1").get());
+        JkClient client = new JkClient(kvServer.getClient());
+        Assert.assertNull(client.update("SET", "key_1 value_1").get());
+        Assert.assertEquals("value_1", client.query("GET", "key_1").get());
 
         kvServer.getAdminClient().takeSnapshot().get();
         Assert.assertEquals(kvServer.getAdminClient().getSnapshots().get().getSnapshots().size(), 2);
 
-        Assert.assertNull(client.update("SET key_2 value_2").get());
-        Assert.assertEquals("value_2", client.query("GET key_2").get());
+        Assert.assertNull(client.update("SET", "key_2 value_2").get());
+        Assert.assertEquals("value_2", client.query("GET", "key_2").get());
 
         kvServer.getAdminClient().recoverSnapshot(2).get();
         Assert.assertEquals(kvServer.getAdminClient().getSnapshots().get().getSnapshots().size(), 3);
-        Assert.assertEquals("value_1", client.query("GET key_1").get());
-        Assert.assertNull(client.query("GET key_2").get());
+        Assert.assertEquals("value_1", client.query("GET", "key_1").get());
+        Assert.assertNull(client.query("GET", "key_2").get());
 
         kvServer.getAdminClient().recoverSnapshot(4).get();
         Assert.assertEquals(kvServer.getAdminClient().getSnapshots().get().getSnapshots().size(), 4);
-        Assert.assertEquals("value_1", client.query("GET key_1").get());
-        Assert.assertEquals("value_2", client.query("GET key_2").get());
+        Assert.assertEquals("value_1", client.query("GET", "key_1").get());
+        Assert.assertEquals("value_2", client.query("GET", "key_2").get());
 
         kvServer.getAdminClient().recoverSnapshot(0).get();
-        Assert.assertNull(client.query("GET key_1").get());
-        Assert.assertNull(client.query("GET key_2").get());
+        Assert.assertNull(client.query("GET", "key_1").get());
+        Assert.assertNull(client.query("GET", "key_2").get());
 
         kvServer.shutdown();
     }
@@ -91,8 +92,8 @@ public class RecoverSnapshotTest {
     @Test
     public void clusterTakeAndRecoverTest() throws Exception {
         List<URI> uris = new ArrayList<>();
-        List<WrappedBootStrap<String, String, String, String>> servers = new ArrayList<>();
-        List<WrappedRaftClient<String, String, String, String>> clients = new ArrayList<>();
+        List<BootStrap> servers = new ArrayList<>();
+        List<JkClient> clients = new ArrayList<>();
         for (int i = 0; i < 3; i++) {
             URI uri = URI.create("local://test" + i);
             uris.add(uri);
@@ -104,18 +105,18 @@ public class RecoverSnapshotTest {
             Properties properties = new Properties();
             properties.setProperty("working_dir", root.toString() + "/" + i);
 
-            WrappedBootStrap<String, String, String, String> kvServer = new WrappedBootStrap<>(new KvStateFactory(), properties);
+            BootStrap kvServer = BootStrap.builder().roll(RaftServer.Roll.VOTER).stateFactory(new KvStateFactory()).properties(properties).build();
             kvServer.getServer().init(uri, uris);
             kvServer.getServer().recover();
             kvServer.getServer().start();
             servers.add(kvServer);
-            clients.add(kvServer.getClient());
+            clients.add(new JkClient(kvServer.getClient()));
         }
         servers.get(0).getAdminClient().waitForClusterReady(1000 * 5);
 
-        for (WrappedRaftClient<String, String, String, String> client : clients) {
-            Assert.assertNull(client.update("SET key_1 value_1").get());
-            Assert.assertEquals("value_1", client.query("GET key_1").get());
+        for (JkClient client : clients) {
+            Assert.assertNull(client.update("SET", "key_1 value_1").get());
+            Assert.assertEquals("value_1", client.query("GET", "key_1").get());
         }
 
         servers.get(0).getAdminClient().takeSnapshot().get();
@@ -124,9 +125,9 @@ public class RecoverSnapshotTest {
             Assert.assertEquals(servers.get(i).getAdminClient().getSnapshots().get().getSnapshots().size(), 2);
         }
 
-        for (WrappedRaftClient<String, String, String, String> client : clients) {
-            Assert.assertNull(client.update("SET key_2 value_2").get());
-            Assert.assertEquals("value_2", client.query("GET key_2").get());
+        for (JkClient client : clients) {
+            Assert.assertNull(client.<String, String>update("SET", "key_2 value_2").get());
+            Assert.assertEquals("value_2", client.<String, String>query("GET", "key_2").get());
         }
 
         servers.get(0).getAdminClient().recoverSnapshot(4).get();
@@ -135,9 +136,9 @@ public class RecoverSnapshotTest {
             Assert.assertEquals(servers.get(i).getAdminClient().getSnapshots().get().getSnapshots().size(), 3);
         }
 
-        for (WrappedRaftClient<String, String, String, String> client : clients) {
-            Assert.assertEquals("value_1", client.query("GET key_1").get());
-            Assert.assertNull(client.query("GET key_2").get());
+        for (JkClient client : clients) {
+            Assert.assertEquals("value_1", client.<String, String>query("GET", "key_1").get());
+            Assert.assertNull(client.<String, String>query("GET", "key_2").get());
         }
 
         servers.get(0).getAdminClient().recoverSnapshot(8).get();
@@ -146,9 +147,9 @@ public class RecoverSnapshotTest {
             Assert.assertEquals(servers.get(i).getAdminClient().getSnapshots().get().getSnapshots().size(), 4);
         }
 
-        for (WrappedRaftClient<String, String, String, String> client : clients) {
-            Assert.assertEquals("value_1", client.query("GET key_1").get());
-            Assert.assertEquals("value_2", client.query("GET key_2").get());
+        for (JkClient client : clients) {
+            Assert.assertEquals("value_1", client.query("GET", "key_1").get());
+            Assert.assertEquals("value_2", client.query("GET", "key_2").get());
         }
 
         servers.get(0).getAdminClient().recoverSnapshot(0).get();
@@ -157,12 +158,12 @@ public class RecoverSnapshotTest {
             Assert.assertEquals(servers.get(i).getAdminClient().getSnapshots().get().getSnapshots().size(), 5);
         }
 
-        for (WrappedRaftClient<String, String, String, String> client : clients) {
-            Assert.assertNull(client.query("GET key_1").get());
-            Assert.assertNull(client.query("GET key_2").get());
+        for (JkClient client : clients) {
+            Assert.assertNull(client.query("GET", "key_1").get());
+            Assert.assertNull(client.query("GET", "key_2").get());
         }
 
-        for (WrappedBootStrap<String, String, String, String> server : servers) {
+        for (BootStrap server : servers) {
             server.shutdown();
         }
 

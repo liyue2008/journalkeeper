@@ -13,13 +13,20 @@
  */
 package io.journalkeeper.coordinating.client;
 
+import java.util.function.Consumer;
+
 /**
  * CoordinatingEventListener
  * author: gaohaoxiang
  *
  * date: 2019/6/11
  */
-public interface CoordinatingEventListener {
+public interface CoordinatingEventListener extends Consumer<CoordinatingEvent> {
+
+    @Override
+    default void accept(CoordinatingEvent coordinatingEvent){
+        onEvent(coordinatingEvent);
+    }
 
     void onEvent(CoordinatingEvent event);
 }

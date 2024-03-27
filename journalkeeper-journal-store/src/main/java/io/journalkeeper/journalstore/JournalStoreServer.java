@@ -43,12 +43,12 @@ public class JournalStoreServer implements StateServer {
     }
 
     public JournalStoreServer(RaftServer.Roll roll, JournalEntryParser journalEntryParser, Properties properties) {
-        bootStrap = new BootStrap(
-                roll,
-                new JournalStoreStateFactory(journalEntryParser),
-                journalEntryParser,
-                properties
-        );
+        bootStrap = BootStrap.builder()
+                .roll(roll)
+                .stateFactory(new JournalStoreStateFactory(journalEntryParser))
+                .journalEntryParser(journalEntryParser)
+                .properties(properties)
+                .build();
     }
 
     public JournalStoreServer(
@@ -59,16 +59,16 @@ public class JournalStoreServer implements StateServer {
             ExecutorService serverAsyncExecutor,
             ScheduledExecutorService serverScheduledExecutor,
             Properties properties) {
-        bootStrap = new BootStrap(
-                roll,
-                new JournalStoreStateFactory(journalEntryParser),
-                journalEntryParser,
-                clientAsyncExecutor,
-                clientScheduledExecutor,
-                serverAsyncExecutor,
-                serverScheduledExecutor,
-                properties
-        );
+        bootStrap = BootStrap.builder()
+                .roll(roll)
+                .stateFactory(new JournalStoreStateFactory(journalEntryParser))
+                .journalEntryParser(journalEntryParser)
+                .clientAsyncExecutor(clientAsyncExecutor)
+                .clientScheduledExecutor(clientScheduledExecutor)
+                .serverAsyncExecutor(serverAsyncExecutor)
+                .serverScheduledExecutor(serverScheduledExecutor)
+                .properties(properties).build();
+
     }
 
     public void init(URI uri, List<URI> voters) throws IOException {

@@ -15,13 +15,15 @@ package io.journalkeeper.sql.client;
 
 import io.journalkeeper.sql.client.domain.OperationTypes;
 
+import java.io.Serializable;
+
 /**
  * SQLEvent
  * author: gaohaoxiang
  *
  * date: 2019/6/11
  */
-public class SQLEvent {
+public class SQLEvent implements Serializable {
 
     private OperationTypes type;
     private String sql;

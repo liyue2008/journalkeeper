@@ -18,10 +18,8 @@ import io.journalkeeper.core.BootStrap;
 import io.journalkeeper.core.api.AdminClient;
 import io.journalkeeper.core.api.RaftServer;
 import io.journalkeeper.sql.client.SQLClient;
-import io.journalkeeper.sql.client.domain.ReadRequest;
-import io.journalkeeper.sql.client.domain.ReadResponse;
-import io.journalkeeper.sql.client.domain.WriteRequest;
-import io.journalkeeper.sql.client.domain.WriteResponse;
+import io.journalkeeper.sql.client.SQLEvent;
+import io.journalkeeper.sql.client.domain.*;
 import io.journalkeeper.sql.exception.SQLException;
 import io.journalkeeper.sql.state.SQLStateFactory;
 import io.journalkeeper.utils.state.StateServer;
@@ -47,6 +45,9 @@ public class SQLServer implements StateServer {
     private final Serializer<WriteResponse> writeResponseSerializer;
     private final Serializer<ReadRequest> readRequestSerializer;
     private final Serializer<ReadResponse> readResponseSerializer;
+
+    private final Serializer<SQLEvent> eventSerializer;
+
     private URI current;
     private List<URI> servers;
     private RaftServer.Roll role;
@@ -61,12 +62,14 @@ public class SQLServer implements StateServer {
         this.writeResponseSerializer = stateFactory.getWriteResponseSerializer();
         this.readRequestSerializer = stateFactory.getReadRequestSerializer();
         this.readResponseSerializer = stateFactory.getReadResponseSerializer();
+        this.eventSerializer = stateFactory.getEventSerializer();
+
 
         this.current = current;
         this.servers = servers;
         this.role = role;
         this.config = config;
-        this.bootStrap = new BootStrap(role, stateFactory, config);
+        this.bootStrap = BootStrap.builder().roll(role).stateFactory(stateFactory).properties(config).build();
     }
 
     public SQLServer(List<URI> servers, Properties config, SQLStateFactory stateFactory) {
@@ -76,7 +79,8 @@ public class SQLServer implements StateServer {
         this.writeResponseSerializer = stateFactory.getWriteResponseSerializer();
         this.readRequestSerializer = stateFactory.getReadRequestSerializer();
         this.readResponseSerializer = stateFactory.getReadResponseSerializer();
-        this.bootStrap = new BootStrap(servers, config);
+        this.eventSerializer = stateFactory.getEventSerializer();
+        this.bootStrap = BootStrap.builder().servers(servers).properties(config).build();
     }
 
     public URI getCurrent() {
@@ -118,7 +122,7 @@ public class SQLServer implements StateServer {
             synchronized (this) {
                 if (client == null) {
                     client = new SQLClient(servers, config, bootStrap,
-                            writeRequestSerializer, writeResponseSerializer, readRequestSerializer, readResponseSerializer);
+                            writeRequestSerializer, writeResponseSerializer, readRequestSerializer, readResponseSerializer, eventSerializer);
                 }
             }
         }

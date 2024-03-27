@@ -13,18 +13,18 @@
  */
 package io.journalkeeper.examples.kv;
 
-import io.journalkeeper.core.serialize.WrappedState;
-import io.journalkeeper.core.serialize.WrappedStateFactory;
+import io.journalkeeper.core.api.StateFactory;
+import io.journalkeeper.core.easy.JkState;
 
 /**
  * @author LiYue
  * Date: 2019-04-03
  */
-public class KvStateFactory implements WrappedStateFactory<String, String, String, String> {
+public class KvStateFactory implements StateFactory {
 
 
     @Override
-    public WrappedState<String, String, String, String> createState() {
+    public JkState createState() {
         return new KvState();
     }
 }

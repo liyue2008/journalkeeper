@@ -22,8 +22,7 @@ import static io.journalkeeper.core.entry.internal.InternalEntryType.TYPE_SET_PR
  * @author LiYue
  * Date: 2019-09-11
  */
-public class SetPreferredLeaderEntry extends InternalEntry implements Serializable {
-    private static final long serialVersionUID = 1L;
+public class SetPreferredLeaderEntry extends InternalEntry {
     private final URI preferredLeader;
 
     public SetPreferredLeaderEntry(URI preferredLeader) {

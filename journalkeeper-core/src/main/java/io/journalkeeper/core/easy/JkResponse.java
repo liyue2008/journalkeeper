@@ -2,7 +2,7 @@ package io.journalkeeper.core.easy;
 
 import java.io.Serializable;
 
-public class JkResponse implements Serializable {
+class JkResponse implements Serializable {
 
     private static final long serialVersionUID = 1899023334612352269L;
     private final String command;

@@ -14,20 +14,14 @@
 package io.journalkeeper.coordinating.client;
 
 import io.journalkeeper.coordinating.client.exception.CoordinatingClientException;
-import io.journalkeeper.coordinating.state.domain.ReadRequest;
-import io.journalkeeper.coordinating.state.domain.ReadResponse;
-import io.journalkeeper.coordinating.state.domain.StateCodes;
 import io.journalkeeper.coordinating.state.domain.StateTypes;
 import io.journalkeeper.coordinating.state.domain.WriteRequest;
-import io.journalkeeper.coordinating.state.domain.WriteResponse;
-import io.journalkeeper.core.serialize.WrappedRaftClient;
+import io.journalkeeper.core.easy.JkClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
@@ -38,86 +32,68 @@ import java.util.concurrent.TimeoutException;
  *
  * date: 2019/6/4
  */
-// TODO response
 public class CoordinatingClient {
 
     protected static final Logger logger = LoggerFactory.getLogger(CoordinatingClient.class);
 
-    private List<URI> servers;
-    private Properties config;
-    private WrappedRaftClient<WriteRequest, WriteResponse, ReadRequest, ReadResponse> client;
+    private final JkClient client;
 
-    public CoordinatingClient(List<URI> servers,
-                              Properties config,
-                              WrappedRaftClient<WriteRequest, WriteResponse, ReadRequest, ReadResponse> client) {
-        this.servers = servers;
-        this.config = config;
+    public CoordinatingClient(JkClient client) {
         this.client = client;
+
     }
 
-    public CompletableFuture<WriteResponse> set(byte[] key, byte[] value) {
-        return doUpdate(new WriteRequest(StateTypes.SET.getType(), key, value))
+    public CompletableFuture<Boolean> set(byte[] key, byte[] value) {
+        return client.<WriteRequest, Boolean>update(StateTypes.SET.getType(), new WriteRequest( key, value))
                 .exceptionally(cause -> {
                     throw convertException(cause);
                 });
     }
 
     public CompletableFuture<byte[]> get(byte[] key) {
-        return doQuery(new ReadRequest(StateTypes.GET.getType(), key))
+        return client.<byte[], byte[]>query(StateTypes.GET.getType(), key)
                 .exceptionally(cause -> {
                     throw convertException(cause);
-                })
-                .thenApply(ReadResponse::getValue);
+                });
     }
 
     public CompletableFuture<List<byte[]>> list(List<byte[]> keys) {
-        return doQuery(new ReadRequest(StateTypes.LIST.getType(), new ArrayList<>(keys)))
-                .thenApply(ReadResponse::getValues)
+        return client.<List<byte[]>, List<byte[]>>query(StateTypes.LIST.getType(), new ArrayList<>(keys))
                 .exceptionally(cause -> {
                     throw convertException(cause);
                 });
     }
 
-    public CompletableFuture<WriteResponse> compareAndSet(byte[] key, byte[] expect, byte[] value) {
-        return doUpdate(new WriteRequest(StateTypes.COMPARE_AND_SET.getType(), key, expect, value))
+    public CompletableFuture<Boolean> compareAndSet(byte[] key, byte[] expect, byte[] value) {
+        return client.<WriteRequest, Boolean>update(StateTypes.COMPARE_AND_SET.getType(), new WriteRequest( key, expect, value))
                 .exceptionally(cause -> {
                     throw convertException(cause);
                 });
     }
 
-    public CompletableFuture<WriteResponse> remove(byte[] key) {
-        return doUpdate(new WriteRequest(StateTypes.REMOVE.getType(), key))
+    public CompletableFuture<Boolean> remove(byte[] key) {
+        return client.<WriteRequest, Boolean>update(StateTypes.REMOVE.getType(), new WriteRequest(key))
                 .exceptionally(cause -> {
                     throw convertException(cause);
                 });
     }
 
     public CompletableFuture<Boolean> exist(byte[] key) {
-        return doQuery(new ReadRequest(StateTypes.EXIST.getType(), key))
+        return client.<WriteRequest, Boolean>update(StateTypes.EXIST.getType(), new WriteRequest(key))
                 .exceptionally(cause -> {
                     throw convertException(cause);
-                })
-                .thenApply(ReadResponse::getValue)
-                .thenApply(response -> response[0] == 1);
+                });
     }
 
     public void watch(CoordinatingEventListener listener) {
-        client.watch(new EventWatcherAdapter(listener));
+        client.watch(listener);
     }
 
     public void unwatch(CoordinatingEventListener listener) {
-        client.unWatch(new EventWatcherAdapter(listener));
+        client.unwatch(listener);
     }
 
-    public void watch(byte[] key, CoordinatingEventListener listener) {
-        client.watch(new EventWatcherAdapter(key, listener));
-    }
-
-    public void unwatch(byte[] key, CoordinatingEventListener listener) {
-        client.unWatch(new EventWatcherAdapter(key, listener));
-    }
-
-    public void waitClusterReady(Long maxWaitMs) throws InterruptedException, TimeoutException {
+    public void waitClusterReady(Long maxWaitMs) throws TimeoutException {
         this.client.waitForClusterReady(maxWaitMs);
     }
 
@@ -134,19 +110,5 @@ public class CoordinatingClient {
         }
     }
 
-    protected CompletableFuture<WriteResponse> doUpdate(WriteRequest request) {
-        return client.update(request);
-    }
 
-    protected CompletableFuture<ReadResponse> doQuery(ReadRequest request) {
-        return client.query(request)
-                .exceptionally(t -> {
-                    throw new CoordinatingClientException(t.getCause());
-                }).thenApply(response -> {
-                    if (response.getCode() != StateCodes.SUCCESS.getCode()) {
-                        throw new CoordinatingClientException(String.format("code: %s, msg: %s", String.valueOf(StateCodes.valueOf(response.getCode())), response.getMsg()));
-                    }
-                    return response;
-                });
-    }
 }

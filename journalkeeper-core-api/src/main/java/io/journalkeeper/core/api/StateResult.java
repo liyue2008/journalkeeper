@@ -47,28 +47,24 @@ import java.util.Map;
  */
 public class StateResult {
     private final byte[] userResult;
-    private final Map<String, String> eventData;
+    private final byte[] eventData;
     private long lastApplied;
 
     public StateResult(byte[] userResult) {
         this(userResult, null);
     }
 
-    public StateResult(byte[] userResult, Map<String, String> eventData) {
+    public StateResult(byte[] userResult, byte [] eventData) {
         this.userResult = userResult;
-        this.eventData = eventData == null ? new HashMap<>() : eventData;
+        this.eventData = eventData;
     }
 
     public byte[] getUserResult() {
         return userResult;
     }
 
-    public Map<String, String> getEventData() {
+    public byte[] getEventData() {
         return eventData;
-    }
-
-    public String putEventData(String key, String value) {
-        return eventData.put(key, value);
     }
 
     public long getLastApplied() {

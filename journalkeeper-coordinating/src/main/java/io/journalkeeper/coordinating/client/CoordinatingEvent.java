@@ -15,21 +15,22 @@ package io.journalkeeper.coordinating.client;
 
 import io.journalkeeper.coordinating.state.domain.StateTypes;
 
+import java.io.Serializable;
+
 /**
  * CoordinatingEvent
  * author: gaohaoxiang
  *
  * date: 2019/6/11
  */
-public class CoordinatingEvent {
+public class CoordinatingEvent implements Serializable {
 
+    private static final long serialVersionUID = 7124472968765728227L;
     private StateTypes type;
     private byte[] key;
     private byte[] value;
 
-    public CoordinatingEvent() {
-
-    }
+    public CoordinatingEvent() {}
 
     public CoordinatingEvent(StateTypes type, byte[] key) {
         this.type = type;

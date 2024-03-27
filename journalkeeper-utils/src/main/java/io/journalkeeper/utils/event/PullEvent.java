@@ -23,7 +23,7 @@ import java.util.Map;
 public class PullEvent extends Event {
     private final long sequence;
 
-    public PullEvent(int eventType, long sequence, Map<String, String> eventData) {
+    public PullEvent(int eventType, long sequence, byte [] eventData) {
         super(eventType, eventData);
         this.sequence = sequence;
     }

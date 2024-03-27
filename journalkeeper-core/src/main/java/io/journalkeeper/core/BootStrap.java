@@ -54,6 +54,11 @@ public class BootStrap implements ClusterAccessPoint {
     private final static int SCHEDULE_EXECUTOR_QUEUE_SIZE = 128;
 
     private final StateFactory stateFactory;
+
+    public Properties getProperties() {
+        return properties;
+    }
+
     private final Properties properties;
     private final RaftServer.Roll roll;
     private final RpcAccessPointFactory rpcAccessPointFactory;
@@ -70,83 +75,6 @@ public class BootStrap implements ClusterAccessPoint {
     private RaftClient localClient = null;
     private AdminClient localAdminClient = null;
 
-    /**
-     * 初始化远程模式的BootStrap，本地没有任何Server，所有操作直接请求远程Server。
-     * @param servers 远程Server 列表
-     * @param properties 配置属性
-     */
-    public BootStrap(List<URI> servers,
-                     Properties properties) {
-        this(null, servers, null, null,
-                null, null, null, null,
-                properties);
-    }
-
-    /**
-     * 初始化远程模式的BootStrap，本地没有任何Server，所有操作直接请求远程Server。
-     * @param servers 远程Server 列表
-     * @param clientAsyncExecutor 用于执行异步任务的Executor
-     * @param clientScheduledExecutor 用于执行定时任务的Executor
-     * @param properties 配置属性
-     */
-    public BootStrap(List<URI> servers,
-                     ExecutorService clientAsyncExecutor, ScheduledExecutorService clientScheduledExecutor,
-                     Properties properties) {
-        this(null, servers, null, null,
-                clientAsyncExecutor, clientScheduledExecutor, null, null,
-                properties);
-    }
-
-    /**
-     * 初始化本地Server模式BootStrap，本地包含一个Server，请求本地Server通信。
-     * @param roll 本地Server的角色。
-     * @param stateFactory 状态机工厂，用户创建状态机实例
-     * @param properties 配置属性
-     */
-    public BootStrap(RaftServer.Roll roll, StateFactory stateFactory,
-                     Properties properties) {
-        this(roll, null, stateFactory, new DefaultJournalEntryParser(), null, null, null, null,
-                properties);
-    }
-
-    /**
-     * 初始化本地Server模式BootStrap，本地包含一个Server，请求本地Server通信。
-     * @param roll 本地Server的角色。
-     * @param stateFactory 状态机工厂，用户创建状态机实例
-     * @param journalEntryParser 操作日志的解析器，一般不需要提供，使用默认解析器即可。
-     * @param properties 配置属性
-     */
-    public BootStrap(RaftServer.Roll roll, StateFactory stateFactory,
-                     JournalEntryParser journalEntryParser,
-                     Properties properties) {
-        this(roll, null, stateFactory, journalEntryParser,
-                null, null, null, null,
-                properties);
-    }
-
-    /**
-     * 初始化本地Server模式BootStrap，本地包含一个Server，请求本地Server通信。
-     * @param roll 本地Server的角色。
-     * @param stateFactory 状态机工厂，用户创建状态机实例
-     * @param journalEntryParser 操作日志的解析器，一般不需要提供，使用默认解析器即可。
-     * @param clientAsyncExecutor Client用于执行异步任务的Executor
-     * @param clientScheduledExecutor Client用于执行定时任务的Executor
-     * @param serverAsyncExecutor Server用于执行异步任务的Executor
-     * @param serverScheduledExecutor Server用于执行定时任务的Executor
-     * @param properties 配置属性
-     */
-    public BootStrap(RaftServer.Roll roll, StateFactory stateFactory,
-                     JournalEntryParser journalEntryParser,
-                     ExecutorService clientAsyncExecutor,
-                     ScheduledExecutorService clientScheduledExecutor,
-                     ExecutorService serverAsyncExecutor,
-                     ScheduledExecutorService serverScheduledExecutor,
-                     Properties properties) {
-        this(roll, null, stateFactory,
-                journalEntryParser,
-                clientAsyncExecutor, clientScheduledExecutor, serverAsyncExecutor, serverScheduledExecutor,
-                properties);
-    }
 
 
     private BootStrap(RaftServer.Roll roll, List<URI> servers, StateFactory stateFactory,
@@ -157,6 +85,9 @@ public class BootStrap implements ClusterAccessPoint {
                       ScheduledExecutorService serverScheduledExecutor,
                       Properties properties) {
         this.stateFactory = stateFactory;
+        if (properties == null) {
+            properties = new Properties();
+        }
         this.properties = properties;
         this.roll = roll;
         this.rpcAccessPointFactory = ServiceSupport.load(RpcAccessPointFactory.class);
@@ -165,6 +96,9 @@ public class BootStrap implements ClusterAccessPoint {
                         clientScheduledExecutor != null ||
                         serverAsyncExecutor != null ||
                         serverScheduledExecutor != null);
+        if (null == journalEntryParser) {
+            journalEntryParser = new DefaultJournalEntryParser();
+        }
         this.journalEntryParser = journalEntryParser;
         this.clientAsyncExecutor = clientAsyncExecutor;
         this.serverAsyncExecutor = serverAsyncExecutor;
@@ -310,5 +244,76 @@ public class BootStrap implements ClusterAccessPoint {
 
     public JournalEntryParser getJournalEntryParser() {
         return this.journalEntryParser;
+    }
+
+    public static Builder builder() {
+        return new Builder();
+
+    }
+
+    public static class Builder {
+        private RaftServer.Roll roll;
+        private StateFactory stateFactory;
+        private JournalEntryParser journalEntryParser;
+        private ExecutorService clientAsyncExecutor;
+        private ScheduledExecutorService clientScheduledExecutor;
+        private ExecutorService serverAsyncExecutor;
+        private ScheduledExecutorService serverScheduledExecutor;
+        private Properties properties;
+        private List<URI> servers;
+
+        private Builder() {
+
+        }
+
+
+        public Builder roll(RaftServer.Roll roll) {
+            this.roll = roll;
+            return this;
+        }
+
+        public Builder servers(List<URI> servers) {
+            this.servers = servers;
+            return this;
+        }
+
+        public Builder stateFactory(StateFactory stateFactory) {
+            this.stateFactory = stateFactory;
+            return this;
+        }
+
+        public Builder journalEntryParser(JournalEntryParser journalEntryParser) {
+            this.journalEntryParser = journalEntryParser;
+            return this;
+        }
+
+        public Builder clientAsyncExecutor(ExecutorService clientAsyncExecutor) {
+            this.clientAsyncExecutor = clientAsyncExecutor;
+            return this;
+        }
+
+        public Builder clientScheduledExecutor(ScheduledExecutorService clientScheduledExecutor) {
+            this.clientScheduledExecutor = clientScheduledExecutor;
+            return this;
+        }
+
+        public Builder serverAsyncExecutor(ExecutorService serverAsyncExecutor) {
+            this.serverAsyncExecutor = serverAsyncExecutor;
+            return this;
+        }
+
+        public Builder serverScheduledExecutor(ScheduledExecutorService serverScheduledExecutor) {
+            this.serverScheduledExecutor = serverScheduledExecutor;
+            return this;
+        }
+
+        public Builder properties(Properties properties) {
+            this.properties = properties;
+            return this;
+        }
+
+        public BootStrap build() {
+            return new BootStrap(roll, servers, stateFactory, journalEntryParser, clientAsyncExecutor, clientScheduledExecutor, serverAsyncExecutor, serverScheduledExecutor, properties);
+        }
     }
 }

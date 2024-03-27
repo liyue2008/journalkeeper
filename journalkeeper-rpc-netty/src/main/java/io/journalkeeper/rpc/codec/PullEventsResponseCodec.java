@@ -36,7 +36,7 @@ public class PullEventsResponseCodec extends ResponseCodec<PullEventsResponse> i
                     PullEvent pullEvent = (PullEvent) obj;
                     CodecSupport.encodeInt(buffer1, pullEvent.getEventType());
                     CodecSupport.encodeLong(buffer1, pullEvent.getSequence());
-                    CodecSupport.encodeMap(buffer1, pullEvent.getEventData(), new StringCodec(), new StringCodec());
+                    CodecSupport.encodeBytes(buffer1, pullEvent.getEventData());
 
                 });
     }
@@ -47,7 +47,7 @@ public class PullEventsResponseCodec extends ResponseCodec<PullEventsResponse> i
                 CodecSupport.decodeList(buffer, buffer1 -> new PullEvent(
                         CodecSupport.decodeInt(buffer1),
                         CodecSupport.decodeLong(buffer1),
-                        CodecSupport.decodeMap(buffer1, new StringCodec(), new StringCodec())
+                        CodecSupport.decodeBytes(buffer1)
                 ))
         );
     }

@@ -17,10 +17,8 @@ import io.journalkeeper.base.Serializer;
 import io.journalkeeper.core.api.RaftJournal;
 import io.journalkeeper.core.api.State;
 import io.journalkeeper.core.api.StateResult;
-import io.journalkeeper.sql.client.domain.ReadRequest;
-import io.journalkeeper.sql.client.domain.ReadResponse;
-import io.journalkeeper.sql.client.domain.WriteRequest;
-import io.journalkeeper.sql.client.domain.WriteResponse;
+import io.journalkeeper.sql.client.SQLEvent;
+import io.journalkeeper.sql.client.domain.*;
 import io.journalkeeper.sql.exception.SQLException;
 import io.journalkeeper.sql.state.config.SQLConfigs;
 import io.journalkeeper.sql.state.handler.SQLStateHandler;
@@ -47,16 +45,19 @@ public class SQLState implements State {
     private final Serializer<WriteResponse> writeResponseSerializer;
     private final Serializer<ReadRequest> readRequestSerializer;
     private final Serializer<ReadResponse> readResponseSerializer;
+
+    private final Serializer<SQLEvent> eventSerializer;
     private Path path;
     private Properties properties;
     private SQLExecutor executor;
     private SQLStateHandler handler;
 
-    public SQLState(Serializer<WriteRequest> writeRequestSerializer, Serializer<WriteResponse> writeResponseSerializer, Serializer<ReadRequest> readRequestSerializer, Serializer<ReadResponse> readResponseSerializer) {
+    public SQLState(Serializer<WriteRequest> writeRequestSerializer, Serializer<WriteResponse> writeResponseSerializer, Serializer<ReadRequest> readRequestSerializer, Serializer<ReadResponse> readResponseSerializer, Serializer<SQLEvent> eventSerializer) {
         this.writeRequestSerializer = writeRequestSerializer;
         this.writeResponseSerializer = writeResponseSerializer;
         this.readRequestSerializer = readRequestSerializer;
         this.readResponseSerializer = readResponseSerializer;
+        this.eventSerializer = eventSerializer;
     }
 
     @Override
@@ -96,13 +97,12 @@ public class SQLState implements State {
     public StateResult execute(byte[] requestEntry, int partition, long index, int batchSize, RaftJournal raftJournal) {
         WriteRequest request = writeRequestSerializer.parse(requestEntry);
         WriteResponse response = handler.handleWrite(request);
+        SQLEvent event = new SQLEvent(OperationTypes.valueOf(request.getType()),request.getSql(), request.getParams().toArray(new String[request.getParams().size()]));
+
         StateResult result = new StateResult(
-                writeResponseSerializer.serialize(response)
+                writeResponseSerializer.serialize(response),
+                eventSerializer.serialize(event)
         );
-        result.getEventData().put("type", String.valueOf(request.getType()));
-        result.getEventData().put("sql", String.valueOf(request.getSql()));
-        result.getEventData().put("batchSql", String.valueOf(request.getSqlList()));
-        result.getEventData().put("params", String.valueOf(request.getParams()));
         return result;
     }
 

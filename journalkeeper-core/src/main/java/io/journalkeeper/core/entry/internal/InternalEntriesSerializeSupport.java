@@ -37,6 +37,8 @@ public class InternalEntriesSerializeSupport {
         registerType(InternalEntryType.TYPE_UPDATE_VOTERS_S2, UpdateVotersS2Entry.class, new UpdateVotersS2EntrySerializer());
         registerType(InternalEntryType.TYPE_SET_PREFERRED_LEADER, SetPreferredLeaderEntry.class, new SetPreferredLeaderEntrySerializer());
         registerType(InternalEntryType.TYPE_RECOVER_SNAPSHOT, RecoverSnapshotEntry.class, new RecoverSnapshotEntrySerializer());
+        registerType(InternalEntryType.TYPE_ON_STATE_CHANGE_EVENT, OnStateChangeEvent.class, new OnStateChangeEventSerializer());
+        registerType(InternalEntryType.TYPE_ON_LEADER_CHANGE_EVENT, OnLeaderChangeEvent.class, new OnLeaderChangeEventSerializer());
     }
 
     @SuppressWarnings("unchecked")

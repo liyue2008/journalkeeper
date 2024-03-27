@@ -23,9 +23,7 @@ import static io.journalkeeper.core.entry.internal.InternalEntryType.TYPE_SCALE_
  * Date: 2019-05-09
  */
 
-public class ScalePartitionsEntry extends InternalEntry implements Serializable {
-    private static final long serialVersionUID = 1L;
-
+public class ScalePartitionsEntry extends InternalEntry {
     private final Set<Integer> partitions;
 
     public ScalePartitionsEntry(Set<Integer> partitions) {

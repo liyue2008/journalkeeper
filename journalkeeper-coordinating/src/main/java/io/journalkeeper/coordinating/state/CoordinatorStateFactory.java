@@ -13,12 +13,8 @@
  */
 package io.journalkeeper.coordinating.state;
 
-import io.journalkeeper.coordinating.state.domain.ReadRequest;
-import io.journalkeeper.coordinating.state.domain.ReadResponse;
-import io.journalkeeper.coordinating.state.domain.WriteRequest;
-import io.journalkeeper.coordinating.state.domain.WriteResponse;
-import io.journalkeeper.core.serialize.WrappedState;
-import io.journalkeeper.core.serialize.WrappedStateFactory;
+import io.journalkeeper.core.api.StateFactory;
+import io.journalkeeper.core.easy.JkState;
 
 /**
  * CoordinatorStateFactory
@@ -26,10 +22,10 @@ import io.journalkeeper.core.serialize.WrappedStateFactory;
  *
  * date: 2019/5/30
  */
-public class CoordinatorStateFactory implements WrappedStateFactory<WriteRequest, WriteResponse, ReadRequest, ReadResponse> {
+public class CoordinatorStateFactory implements StateFactory {
 
     @Override
-    public WrappedState<WriteRequest, WriteResponse, ReadRequest, ReadResponse> createState() {
+    public JkState createState() {
         return new CoordinatingState();
     }
 }

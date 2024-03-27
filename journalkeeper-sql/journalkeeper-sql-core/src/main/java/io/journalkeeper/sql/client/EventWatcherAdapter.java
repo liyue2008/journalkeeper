@@ -13,12 +13,11 @@
  */
 package io.journalkeeper.sql.client;
 
-import io.journalkeeper.sql.client.domain.OperationTypes;
+import io.journalkeeper.base.Serializer;
 import io.journalkeeper.utils.event.Event;
 import io.journalkeeper.utils.event.EventType;
 import io.journalkeeper.utils.event.EventWatcher;
 
-import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -31,15 +30,14 @@ public class EventWatcherAdapter implements EventWatcher {
 
     private byte[] key;
     private SQLEventListener listener;
+    private final Serializer<SQLEvent> eventSerializer;
 
-    public EventWatcherAdapter(SQLEventListener listener) {
+
+    public EventWatcherAdapter(SQLEventListener listener, Serializer<SQLEvent> eventSerializer) {
         this.listener = listener;
+        this.eventSerializer = eventSerializer;
     }
 
-    public EventWatcherAdapter(byte[] key, SQLEventListener listener) {
-        this.key = key;
-        this.listener = listener;
-    }
 
     @Override
     public void onEvent(Event event) {
@@ -47,31 +45,9 @@ public class EventWatcherAdapter implements EventWatcher {
             return;
         }
 
-        Map<String, String> eventData = event.getEventData();
-        if (eventData == null || eventData.isEmpty()) {
-            return;
-        }
+        SQLEvent sqlEvent = eventSerializer.parse(event.getEventData());
+        listener.onEvent(sqlEvent);
 
-        SQLEvent SQLEvent = null;
-        OperationTypes type = OperationTypes.valueOf(Integer.valueOf(eventData.get("type")));
-        String key = eventData.get("key");
-        String value = eventData.get("value");
-
-        switch (type) {
-//            case SET:
-//            case COMPARE_AND_SET: {
-//                SQLEvent = new SQLEvent(type, key.getBytes(Charset.forName("UTF-8")), value.getBytes(Charset.forName("UTF-8")));
-//                break;
-//            }
-//            case REMOVE: {
-//                SQLEvent = new SQLEvent(type, key.getBytes(Charset.forName("UTF-8")));
-//                break;
-//            }
-        }
-
-//        if (SQLEvent != null && (this.key == null || Objects.deepEquals(this.key, SQLEvent.getKey()))) {
-//            listener.onEvent(SQLEvent);
-//        }
     }
 
     @Override

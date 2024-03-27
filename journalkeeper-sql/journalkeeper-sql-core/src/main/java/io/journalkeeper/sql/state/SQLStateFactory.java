@@ -16,10 +16,8 @@ package io.journalkeeper.sql.state;
 import io.journalkeeper.base.Serializer;
 import io.journalkeeper.core.api.State;
 import io.journalkeeper.core.api.StateFactory;
-import io.journalkeeper.sql.client.domain.ReadRequest;
-import io.journalkeeper.sql.client.domain.ReadResponse;
-import io.journalkeeper.sql.client.domain.WriteRequest;
-import io.journalkeeper.sql.client.domain.WriteResponse;
+import io.journalkeeper.sql.client.SQLEvent;
+import io.journalkeeper.sql.client.domain.*;
 
 /**
  * SQLStateFactory
@@ -32,16 +30,23 @@ public class SQLStateFactory implements StateFactory {
     private final Serializer<ReadRequest> readRequestSerializer;
     private final Serializer<ReadResponse> readResponseSerializer;
 
-    public SQLStateFactory(Serializer<WriteRequest> writeRequestSerializer, Serializer<WriteResponse> writeResponseSerializer, Serializer<ReadRequest> readRequestSerializer, Serializer<ReadResponse> readResponseSerializer) {
+    public Serializer<SQLEvent> getEventSerializer() {
+        return eventSerializer;
+    }
+
+    private final Serializer<SQLEvent> eventSerializer;
+
+    public SQLStateFactory(Serializer<WriteRequest> writeRequestSerializer, Serializer<WriteResponse> writeResponseSerializer, Serializer<ReadRequest> readRequestSerializer, Serializer<ReadResponse> readResponseSerializer, Serializer<SQLEvent> eventSerializer) {
         this.writeRequestSerializer = writeRequestSerializer;
         this.writeResponseSerializer = writeResponseSerializer;
         this.readRequestSerializer = readRequestSerializer;
         this.readResponseSerializer = readResponseSerializer;
+        this.eventSerializer = eventSerializer;
     }
 
     @Override
     public State createState() {
-        return new SQLState(writeRequestSerializer, writeResponseSerializer, readRequestSerializer, readResponseSerializer);
+        return new SQLState(writeRequestSerializer, writeResponseSerializer, readRequestSerializer, readResponseSerializer, eventSerializer);
     }
 
     public Serializer<WriteRequest> getWriteRequestSerializer() {

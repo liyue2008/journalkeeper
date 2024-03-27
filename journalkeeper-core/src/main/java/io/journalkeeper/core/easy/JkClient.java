@@ -1,29 +1,47 @@
 package io.journalkeeper.core.easy;
 
-import io.journalkeeper.core.api.ClusterReadyAware;
-import io.journalkeeper.core.api.QueryConsistency;
-import io.journalkeeper.core.api.ServerConfigAware;
+import io.journalkeeper.core.api.*;
 import io.journalkeeper.core.api.transaction.TransactionContext;
 import io.journalkeeper.core.api.transaction.TransactionId;
-import io.journalkeeper.core.serialize.WrappedRaftClient;
+import io.journalkeeper.core.entry.internal.InternalEntriesSerializeSupport;
+import io.journalkeeper.core.entry.internal.OnLeaderChangeEvent;
+import io.journalkeeper.core.serialize.JavaSerializeExtensionPoint;
+import io.journalkeeper.core.serialize.SerializeExtensionPoint;
+import io.journalkeeper.utils.event.EventType;
 import io.journalkeeper.utils.event.EventWatcher;
-import io.journalkeeper.utils.event.Watchable;
+import io.journalkeeper.utils.spi.ServiceSupport;
 
+import java.io.Closeable;
+import java.io.IOException;
 import java.net.URI;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 
-public class JkClient  implements Watchable, ClusterReadyAware, ServerConfigAware {
-    private final WrappedRaftClient<JkRequest, JkResponse, JkRequest, JkResponse> raftClient;
+// TODO: 支持事务
+public class JkClient implements ClusterReadyAware, ServerConfigAware, Closeable {
+    private final RaftClient raftClient;
 
-    public JkClient(WrappedRaftClient<JkRequest, JkResponse, JkRequest, JkResponse> raftClient) {
+    public  static final String DEFAULT_COMMAND = "DEFAULT_COMMAND";
+
+    private final SerializeExtensionPoint serializer = ServiceSupport.tryLoad(SerializeExtensionPoint.class).orElse(new JavaSerializeExtensionPoint());
+
+    public JkClient(RaftClient raftClient) {
         this.raftClient = raftClient;
     }
 
+
+    public <P,R> CompletableFuture<R> update ( P parameter) {
+        return update(DEFAULT_COMMAND, parameter);
+    }
+
+    public <R> CompletableFuture<R> update (String command) {
+
+        return update(command, null);
+    }
     /**
      * 写入操作命令变更状态。集群保证按照提供的顺序写入，保证原子性，服务是线性的，任一时间只能有一个update操作被执行。
      * 日志在集群中复制到大多数节点，并在状态机执行后返回。
@@ -35,7 +53,8 @@ public class JkClient  implements Watchable, ClusterReadyAware, ServerConfigAwar
      * @param <R> 返回结果类型
      */
     public <P,R> CompletableFuture<R> update (String command, P parameter) {
-        return this.raftClient.update(new JkRequest(command, parameter))
+        return this.raftClient.update(serializer.serialize(new JkRequest(command, parameter)))
+                .thenApply(serializer::<JkResponse>parse)
                 .thenApply(response -> {
                     if (response.isSuccess()) {
                         return response.getResult();
@@ -45,6 +64,13 @@ public class JkClient  implements Watchable, ClusterReadyAware, ServerConfigAwar
                 });
     }
 
+    public <P,R> CompletableFuture<R> query (P parameter) {
+        return query(DEFAULT_COMMAND, parameter);
+    }
+
+    public <R> CompletableFuture<R> query (String command) {
+        return query(command, null);
+    }
     /**
      * 查询集群当前的状态，即日志在状态机中执行完成后产生的数据。该服务保证强一致性，保证读到的状态总是集群的最新状态。
      * @param command 查询命令
@@ -54,7 +80,8 @@ public class JkClient  implements Watchable, ClusterReadyAware, ServerConfigAwar
      * @param <R> 查询结果类型
      */
     public <P,R> CompletableFuture<R> query (String command, P parameter) {
-        return this.raftClient.query(new JkRequest(command, parameter))
+        return this.raftClient.query(serializer.serialize(new JkRequest(command, parameter)))
+                .thenApply(serializer::<JkResponse>parse)
                 .thenApply(response -> {
                     if (response.isSuccess()) {
                         return response.getResult();
@@ -64,6 +91,17 @@ public class JkClient  implements Watchable, ClusterReadyAware, ServerConfigAwar
                 });
     }
 
+    public <R> CompletableFuture<R> query (String command, QueryConsistency consistency) {
+        return query(command, null, consistency);
+    }
+
+    public <R> CompletableFuture<R> query (QueryConsistency consistency) {
+        return query(DEFAULT_COMMAND, null, consistency);
+    }
+
+    public <P,R> CompletableFuture<R> query (P parameter, QueryConsistency consistency) {
+        return query(DEFAULT_COMMAND, parameter, consistency);
+    }
     /**
      * 查询集群当前的状态，即日志在状态机中执行完成后产生的数据。该服务保证强一致性，保证读到的状态总是集群的最新状态。
      * @param command 查询命令
@@ -74,7 +112,8 @@ public class JkClient  implements Watchable, ClusterReadyAware, ServerConfigAwar
      * @param <R> 查询结果类型
      */
     public <P,R> CompletableFuture<R> query (String command, P parameter, QueryConsistency consistency) {
-        return this.raftClient.query(new JkRequest(command, parameter), consistency)
+        return this.raftClient.query(serializer.serialize(new JkRequest(command, parameter)), consistency)
+                .thenApply(serializer::<JkResponse>parse)
                 .thenApply(response -> {
                     if (response.isSuccess()) {
                         return response.getResult();
@@ -137,7 +176,7 @@ public class JkClient  implements Watchable, ClusterReadyAware, ServerConfigAwar
     public <P> CompletableFuture<Void> update(TransactionId transactionId, String command, P parameter) {
         return raftClient.update(
                 transactionId,
-                new JkRequest(command, parameter)
+                new UpdateRequest(serializer.serialize(new JkRequest(command, parameter)))
         );
     }
     @Override
@@ -150,13 +189,113 @@ public class JkClient  implements Watchable, ClusterReadyAware, ServerConfigAwar
         this.raftClient.updateServers(servers);
     }
 
-    @Override
-    public void watch(EventWatcher eventWatcher) {
-        this.raftClient.watch(eventWatcher);
+    public void addLeaderChangeListener(Consumer<OnLeaderChangeEvent> listener) {
+        synchronized (leaderChangeListeners) {
+            if (leaderChangeListeners.add(listener) && listenerCounter.getAndIncrement() == 0) {
+                this.raftClient.watch(eventWatcher);
+            }
+        }
     }
 
-    @Override
-    public void unWatch(EventWatcher eventWatcher) {
-        this.raftClient.unWatch(eventWatcher);
+    public void removeLeaderChangeListener(Consumer<OnLeaderChangeEvent> listener) {
+        synchronized (leaderChangeListeners) {
+            if (leaderChangeListeners.remove(listener) && listenerCounter.decrementAndGet() == 0) {
+                this.raftClient.unWatch(eventWatcher);
+            }
+        }
     }
+
+    public <T> void watch(Consumer<T> listener) {
+        synchronized (stateChangeListeners) {
+            if (stateChangeListeners.add(new EventListener(listener)) && listenerCounter.getAndIncrement() == 0) {
+                this.raftClient.watch(eventWatcher);
+            }
+        }
+    }
+
+    public <T> void unwatch(Consumer<T> listener) {
+        synchronized (stateChangeListeners) {
+            if (stateChangeListeners.remove(new EventListener(listener)) && listenerCounter.decrementAndGet() == 0) {
+                this.raftClient.unWatch(eventWatcher);
+            }
+        }
+    }
+
+    private final Set<Consumer<OnLeaderChangeEvent>> leaderChangeListeners = new HashSet<>();
+    private final Set<Consumer<Event>> stateChangeListeners = new HashSet<>();
+    private final AtomicInteger listenerCounter = new AtomicInteger(0);
+    private final EventWatcher eventWatcher = event -> {
+        switch (event.getEventType()) {
+            case EventType.ON_LEADER_CHANGE:
+                synchronized (leaderChangeListeners) {
+                    if (!leaderChangeListeners.isEmpty()) {
+                        OnLeaderChangeEvent leaderChangeEvent = InternalEntriesSerializeSupport.parse(event.getEventData());
+                        this.leaderChangeListeners.forEach(listener -> listener.accept(leaderChangeEvent));
+                    }
+                }
+                break;
+            case EventType.ON_STATE_CHANGE:
+                synchronized (stateChangeListeners) {
+                    if (!stateChangeListeners.isEmpty()) {
+                        Object eventData = serializer.parse(event.getEventData());
+                        this.stateChangeListeners.forEach(listener -> listener.accept(new Event(eventData)));
+                    }
+                }
+                break;
+            default:
+                // nothing to do
+        }
+    };
+    @Override
+    public void close() throws IOException {
+        if (listenerCounter.get() > 0) {
+            this.raftClient.unWatch(eventWatcher);
+            this.stateChangeListeners.clear();
+            this.leaderChangeListeners.clear();
+        }
+
+    }
+
+    private static class Event {
+        private final Object eventData;
+
+        public Event(Object eventData) {
+            this.eventData = eventData;
+        }
+
+        public <T> T get() {
+            //noinspection unchecked
+            return (T) eventData;
+
+        }
+    }
+
+    private static class EventListener implements Consumer<JkClient.Event> {
+    private final Consumer<?> listener;
+
+        private EventListener(Consumer<?> listener) {
+            this.listener = listener;
+        }
+
+        @Override
+        public void accept(JkClient.Event event) {
+            listener.accept(event.get());
+        }
+
+        @Override
+        public boolean equals(Object object) {
+            if (this == object) return true;
+            if (object == null || getClass() != object.getClass()) return false;
+            EventListener that = (EventListener) object;
+            return Objects.equals(listener, that.listener);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(listener);
+        }
+    }
+
+
+
 }

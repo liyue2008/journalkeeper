@@ -14,20 +14,17 @@
 package io.journalkeeper.coordinating.state;
 
 import io.journalkeeper.coordinating.state.config.CoordinatingConfigs;
-import io.journalkeeper.coordinating.state.domain.ReadRequest;
-import io.journalkeeper.coordinating.state.domain.ReadResponse;
-import io.journalkeeper.coordinating.state.domain.StateCodes;
+import io.journalkeeper.coordinating.state.domain.CoordinatingEvent;
+import io.journalkeeper.coordinating.state.domain.StateTypes;
 import io.journalkeeper.coordinating.state.domain.WriteRequest;
-import io.journalkeeper.coordinating.state.domain.WriteResponse;
 import io.journalkeeper.coordinating.state.store.KVStore;
 import io.journalkeeper.coordinating.state.store.KVStoreManager;
-import io.journalkeeper.core.serialize.WrappedState;
-import io.journalkeeper.core.serialize.WrappedStateResult;
+import io.journalkeeper.core.easy.JkFireable;
+import io.journalkeeper.core.easy.JkState;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.List;
 import java.util.Properties;
 
 /**
@@ -36,46 +33,69 @@ import java.util.Properties;
  *
  * date: 2019/5/30
  */
-public class CoordinatingState implements WrappedState<WriteRequest, WriteResponse, ReadRequest, ReadResponse> {
+public class CoordinatingState extends JkState {
 
-    private Properties properties;
     private KVStore kvStore;
-    private CoordinatingStateHandler handler;
+
+    public CoordinatingState() {
+        registerQueryCommandHandler(StateTypes.GET.getType(), this::doGet);
+        registerQueryCommandHandler(StateTypes.EXIST.getType(), this::doExist);
+        registerQueryCommandHandler(StateTypes.LIST.getType(), this::doList);
+        registerExecuteCommandHandler(StateTypes.SET.getType(), this::doSet);
+        registerExecuteCommandHandler(StateTypes.REMOVE.getType(), this::doRemove);
+        registerExecuteCommandHandler(StateTypes.COMPARE_AND_SET.getType(), this::doCompareAndSet);
+    }
 
     @Override
     public void recover(Path path, Properties properties) {
-        this.properties = properties;
         this.kvStore = KVStoreManager.getFactory(properties.getProperty(CoordinatingConfigs.STATE_STORE)).create(path, properties);
-        this.handler = new CoordinatingStateHandler(properties, kvStore);
     }
 
-    @Override
-    public WrappedStateResult<WriteResponse> executeAndNotify(WriteRequest request) {
-        WriteResponse response = execute(request);
-        if (response.getCode() != StateCodes.SUCCESS.getCode()) {
-            return new WrappedStateResult<>(response, null);
-        }
-        Map<String, String> events = new HashMap<>(3);
-        events.put("type", String.valueOf(request.getType()));
-        events.put("key", new String(request.getKey(), StandardCharsets.UTF_8));
-        if (request.getValue() != null) {
-            events.put("value", new String(request.getValue(), StandardCharsets.UTF_8));
-        }
-        return new WrappedStateResult<>(response, events);
-    }
 
-    @Override
-    public WriteResponse execute(WriteRequest request) {
-        return handler.handle(request);
-    }
 
-    @Override
-    public ReadResponse query(ReadRequest request) {
-        return handler.handle(request);
+    private void fireEvent(String type, byte [] key, byte [] value, JkFireable fireable) {
+        fireable.fireEvent(new CoordinatingEvent(type, new String(key, StandardCharsets.UTF_8), new String(value, StandardCharsets.UTF_8)));
     }
 
     @Override
     public void close() {
         kvStore.close();
+    }
+
+    protected byte [] doGet(byte[] key) {
+         return kvStore.get(key);
+    }
+
+    protected boolean doExist(byte[] key) {
+        return kvStore.exist(key);
+    }
+
+    protected List<byte[]> doList(List<byte[]> keys) {
+        return kvStore.multiGet(keys);
+    }
+
+    protected boolean doSet(WriteRequest writeRequest, JkFireable fireable) {
+        byte[] key = writeRequest.getKey();
+        byte[] value = writeRequest.getValue();
+        boolean result = kvStore.set(key, value);
+        fireEvent(StateTypes.SET.getType(), key, value, fireable);
+        return result;
+    }
+
+    protected boolean doRemove(byte[] key, JkFireable fireable) {
+        boolean result =  kvStore.remove(key);
+        fireEvent(StateTypes.SET.getType(), key, null, fireable);
+        return result;
+
+    }
+
+    protected boolean doCompareAndSet(WriteRequest writeRequest, JkFireable fireable) {
+        byte[] key = writeRequest.getKey();
+        byte[] expect = writeRequest.getExpect();
+        byte[] value = writeRequest.getValue();
+        boolean result =  kvStore.compareAndSet(key, expect, value);
+        fireEvent(StateTypes.SET.getType(), key, value, fireable);
+        return result;
+
     }
 }

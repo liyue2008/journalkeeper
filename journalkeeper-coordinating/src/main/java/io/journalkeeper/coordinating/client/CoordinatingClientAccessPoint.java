@@ -13,12 +13,9 @@
  */
 package io.journalkeeper.coordinating.client;
 
-import io.journalkeeper.coordinating.state.domain.ReadRequest;
-import io.journalkeeper.coordinating.state.domain.ReadResponse;
-import io.journalkeeper.coordinating.state.domain.WriteRequest;
-import io.journalkeeper.coordinating.state.domain.WriteResponse;
-import io.journalkeeper.core.serialize.WrappedBootStrap;
-import io.journalkeeper.core.serialize.WrappedRaftClient;
+import io.journalkeeper.core.BootStrap;
+import io.journalkeeper.core.api.RaftClient;
+import io.journalkeeper.core.easy.JkClient;
 
 import java.net.URI;
 import java.util.List;
@@ -32,17 +29,16 @@ import java.util.Properties;
  */
 public class CoordinatingClientAccessPoint {
 
-    private Properties config;
+    private final Properties config;
 
     public CoordinatingClientAccessPoint(Properties config) {
         this.config = config;
     }
 
     public CoordinatingClient createClient(List<URI> servers) {
-        WrappedBootStrap<WriteRequest, WriteResponse, ReadRequest, ReadResponse> bootStrap =
-                new WrappedBootStrap<>(servers, config);
-        WrappedRaftClient<WriteRequest, WriteResponse, ReadRequest, ReadResponse> client =
+        BootStrap bootStrap = BootStrap.builder().servers(servers).properties(config).build();
+        RaftClient client =
                 bootStrap.getClient();
-        return new CoordinatingClient(servers, config, client);
+        return new CoordinatingClient(new JkClient(client));
     }
 }

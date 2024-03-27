@@ -16,7 +16,7 @@ package io.journalkeeper.core.state;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
-import io.journalkeeper.core.serialize.WrappedState;
+import io.journalkeeper.core.easy.JkState;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,9 +37,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * @author LiYue
  * Date: 2019-04-03
  */
-public class KvState implements WrappedState<String, String, String, String>, Flushable {
+public class KvState extends JkState implements Flushable {
     private static final Logger logger = LoggerFactory.getLogger(KvState.class);
-    private final static String FILENAME = "map";
+    private static final String FILENAME = "map";
     private static final String CMD_GET = "GET";
     private static final String CMD_SET = "SET";
     private static final String CMD_DEL = "DEL";
@@ -47,7 +47,16 @@ public class KvState implements WrappedState<String, String, String, String>, Fl
     private final Gson gson = new Gson();
     private Map<String, String> stateMap = new HashMap<>();
     private Path statePath;
+
     private final AtomicBoolean isDirty = new AtomicBoolean(false);
+
+
+    public KvState() {
+        registerExecuteCommandHandler(CMD_SET, this::set);
+        registerExecuteCommandHandler(CMD_DEL, this::del);
+        registerQueryCommandHandler(CMD_GET, this::get);
+        registerQueryCommandHandler(CMD_LIST, this::list);
+    }
 
     @Override
     public void recover(Path statePath, Properties properties) {
@@ -72,49 +81,26 @@ public class KvState implements WrappedState<String, String, String, String>, Fl
         }
     }
 
-    @Override
-    public String execute(String cmd) {
-        String[] splt = cmd.split("\\s");
-        try {
-            checkInput(splt, 1);
+    private void set(String param) {
+        String[] splt = param.split("\\s");
+        checkInput(splt, 2);
+        stateMap.put(splt[0], splt[1]);
+        isDirty.compareAndSet(false, true);
 
-            if (CMD_SET.equals(splt[0])) {
-                checkInput(splt, 3);
-                stateMap.put(splt[1], splt[2]);
-                isDirty.compareAndSet(false, true);
-                return null;
-            }
-
-            if (CMD_DEL.equals(splt[0])) {
-                checkInput(splt, 2);
-                stateMap.remove(splt[1]);
-                isDirty.compareAndSet(false, true);
-                return null;
-            }
-            throw new IllegalArgumentException("Unknown command: " + cmd + "!");
-        } catch (Exception e) {
-            return e.getMessage();
-        }
     }
 
-    @Override
-    public String query(String query) {
+    private void del(String key) {
+        stateMap.remove(key);
+        isDirty.compareAndSet(false, true);
 
-        String[] splt = query.split("\\s");
-        try {
-            checkInput(splt, 1);
+    }
 
-            if (CMD_GET.equals(splt[0])) {
-                checkInput(splt, 2);
-                return stateMap.get(splt[1]);
-            }
-            if (CMD_LIST.equals(splt[0])) {
-                return String.join(", ", stateMap.keySet());
-            }
-            throw new IllegalArgumentException("Unknown command: " + query + "!");
-        } catch (Exception e) {
-            return e.getMessage();
-        }
+    private String get(String key) {
+        return stateMap.get(key);
+    }
+
+    private String list() {
+        return String.join(", ", stateMap.keySet());
     }
 
     @Override

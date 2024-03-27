@@ -18,9 +18,8 @@ import io.journalkeeper.core.api.AdminClient;
 import io.journalkeeper.core.api.RaftServer;
 import io.journalkeeper.core.api.ServerStatus;
 import io.journalkeeper.core.api.VoterState;
+import io.journalkeeper.core.easy.JkClient;
 import io.journalkeeper.core.monitor.SimpleMonitorCollector;
-import io.journalkeeper.core.serialize.WrappedBootStrap;
-import io.journalkeeper.core.serialize.WrappedRaftClient;
 import io.journalkeeper.core.state.KvStateFactory;
 import io.journalkeeper.monitor.MonitorCollector;
 import io.journalkeeper.monitor.MonitoredServer;
@@ -35,12 +34,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Properties;
+import java.util.*;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
@@ -75,16 +69,16 @@ public class KvTest {
     @Test
     public void singleNodeRecoverTest() throws Exception {
         Path path = TestPathUtils.prepareBaseDir("singleNodeTest");
-        WrappedBootStrap<String, String, String, String> kvServer = createServers(1, path).get(0);
-        WrappedRaftClient<String, String, String, String> kvClient = kvServer.getClient();
-        Assert.assertNull(kvClient.update("SET key value").get());
+        BootStrap kvServer = createServers(1, path).get(0);
+        JkClient kvClient = new JkClient(kvServer.getClient());
+        Assert.assertNull(kvClient.update("SET","key value").get());
         kvServer.shutdown();
 
         kvServer = recoverServer("server0", path);
         kvServer.getAdminClient().waitForClusterReady(0L);
-        kvClient = kvServer.getClient();
+        kvClient = new JkClient(kvServer.getClient());
 
-        Assert.assertEquals("value", kvClient.query("GET key").get());
+        Assert.assertEquals("value", kvClient.query("GET", "key").get());
         kvServer.shutdown();
         TestPathUtils.destroyBaseDir(path.toFile());
 
@@ -119,16 +113,16 @@ public class KvTest {
             properties.setProperty("disable_logo", "true");
             propertiesList.add(properties);
         }
-        List<WrappedBootStrap<String, String, String, String>> kvServers = createServers(serverURIs, propertiesList, RaftServer.Roll.VOTER, true);
+        List<BootStrap> kvServers = createServers(serverURIs, propertiesList, RaftServer.Roll.VOTER, true);
         int keyNum = 0;
         while (!kvServers.isEmpty()) {
-            WrappedRaftClient<String, String, String, String> kvClient = kvServers.get(0).getClient();
+            JkClient kvClient = new JkClient(kvServers.get(0).getClient());
             if (kvServers.size() > nodes / 2) {
-                kvClient.update("SET key" + keyNum + " value" + keyNum);
+                kvClient.update("SET", "key" + keyNum + " value" + keyNum);
             }
 
 
-            WrappedBootStrap<String, String, String, String> toBeRemoved = kvServers.get(0);
+            BootStrap toBeRemoved = kvServers.get(0);
 
             logger.info("Shutting down server: {}.", toBeRemoved.getServer().serverUri());
             toBeRemoved.shutdown();
@@ -138,14 +132,14 @@ public class KvTest {
                 logger.info("Wait for new leader...");
                 AdminClient adminClient = kvServers.get(0).getAdminClient();
                 adminClient.waitForClusterReady(0L);
-                Assert.assertEquals("value" + keyNum, kvServers.get(0).getClient().query("GET key" + keyNum).get());
+                Assert.assertEquals("value" + keyNum, new JkClient(kvServers.get(0).getClient()).query("GET", "key" + keyNum).get());
                 keyNum++;
             }
         }
 
         for (int j = 0; j < nodes; j++) {
 
-            WrappedBootStrap<String, String, String, String> kvServer = recoverServer(propertiesList.get(j));
+            BootStrap kvServer = recoverServer(propertiesList.get(j));
             kvServers.add(kvServer);
             if (kvServers.size() > nodes / 2) {
                 // 等待新的Leader选出来
@@ -153,7 +147,7 @@ public class KvTest {
                 AdminClient adminClient = kvServers.get(0).getAdminClient();
                 adminClient.waitForClusterReady(0L);
                 for (int i = 0; i < keyNum; i++) {
-                    Assert.assertEquals("value" + i, kvServers.get(0).getClient().query("GET key" + i).get());
+                    Assert.assertEquals("value" + i, new JkClient(kvServers.get(0).getClient()).query("GET", "key" + i).get());
                 }
             }
         }
@@ -184,16 +178,16 @@ public class KvTest {
             properties.setProperty("enable_pre_vote", "false");
             propertiesList.add(properties);
         }
-        List<WrappedBootStrap<String, String, String, String>> kvServers = createServers(serverURIs, propertiesList, RaftServer.Roll.VOTER, true);
+        List<BootStrap> kvServers = createServers(serverURIs, propertiesList, RaftServer.Roll.VOTER, true);
         int keyNum = 0;
         while (!kvServers.isEmpty()) {
-            WrappedRaftClient<String, String, String, String> kvClient = kvServers.get(0).getClient();
+            JkClient kvClient = new JkClient(kvServers.get(0).getClient());
             if (kvServers.size() > nodes / 2) {
-                kvClient.update("SET key" + keyNum + " value" + keyNum);
+                kvClient.update("SET", "key" + keyNum + " value" + keyNum);
             }
 
 
-            WrappedBootStrap<String, String, String, String> toBeRemoved = kvServers.get(0);
+            BootStrap toBeRemoved = kvServers.get(0);
 
             logger.info("Shutting down server: {}.", toBeRemoved.getServer().serverUri());
             toBeRemoved.shutdown();
@@ -203,14 +197,14 @@ public class KvTest {
                 logger.info("Wait for new leader...");
                 AdminClient adminClient = kvServers.get(0).getAdminClient();
                 adminClient.waitForClusterReady(0L);
-                Assert.assertEquals("value" + keyNum, kvServers.get(0).getClient().query("GET key" + keyNum).get());
+                Assert.assertEquals("value" + keyNum, new JkClient(kvServers.get(0).getClient()).query("GET", "key" + keyNum).get());
                 keyNum++;
             }
         }
 
         for (int j = 0; j < nodes; j++) {
 
-            WrappedBootStrap<String, String, String, String> kvServer = recoverServer(propertiesList.get(j));
+            BootStrap kvServer = recoverServer(propertiesList.get(j));
             kvServers.add(kvServer);
             if (kvServers.size() > nodes / 2) {
                 // 等待新的Leader选出来
@@ -218,7 +212,7 @@ public class KvTest {
                 AdminClient adminClient = kvServers.get(0).getAdminClient();
                 adminClient.waitForClusterReady(0L);
                 for (int i = 0; i < keyNum; i++) {
-                    Assert.assertEquals("value" + i, kvServers.get(0).getClient().query("GET key" + i).get());
+                    Assert.assertEquals("value" + i, new JkClient(kvServers.get(0).getClient()).query("GET", "key" + i).get());
                 }
             }
         }
@@ -228,7 +222,7 @@ public class KvTest {
     }
 
 
-    private WrappedBootStrap<String, String, String, String> recoverServer(String serverPath, Path path) throws IOException {
+    private BootStrap recoverServer(String serverPath, Path path) throws IOException {
         Path workingDir = path.resolve(serverPath);
         Properties properties = new Properties();
         properties.setProperty("working_dir", workingDir.toString());
@@ -239,8 +233,8 @@ public class KvTest {
         return recoverServer(properties);
     }
 
-    private WrappedBootStrap<String, String, String, String> recoverServer(Properties properties) throws IOException {
-        WrappedBootStrap<String, String, String, String> serverBootStrap = new WrappedBootStrap<>(new KvStateFactory(), properties);
+    private BootStrap recoverServer(Properties properties) throws IOException {
+        BootStrap serverBootStrap =BootStrap.builder().roll(RaftServer.Roll.VOTER).stateFactory(new KvStateFactory()).properties(properties).build();
         serverBootStrap.getServer().recover();
         serverBootStrap.getServer().start();
         return serverBootStrap;
@@ -249,23 +243,22 @@ public class KvTest {
     private void setGetTest(int nodes) throws IOException, ExecutionException, InterruptedException, TimeoutException {
 
         Path path = TestPathUtils.prepareBaseDir("SetGetTest-" + nodes);
-        List<WrappedBootStrap<String, String, String, String>> kvServers = createServers(nodes, path);
+        List<BootStrap> kvServers = createServers(nodes, path);
         try {
-            List<WrappedRaftClient<String, String, String, String>> kvClients = kvServers.stream()
-                    .map(WrappedBootStrap::getClient)
-                    .collect(Collectors.toList());
+            List<URI> servers = kvServers.stream().map(BootStrap::getServer).map(RaftServer::serverUri).collect(Collectors.toList());
+            BootStrap clientBootStrap = BootStrap.builder().servers(servers).build();
+            JkClient client = new JkClient(clientBootStrap.getClient());
 
 
-            int i = 0;
-            Assert.assertNull(kvClients.get(i++ % kvServers.size()).update("SET key1 hello!").get());
-            Assert.assertNull(kvClients.get(i++ % kvServers.size()).update("SET key2 world!").get());
-            Assert.assertEquals("hello!", kvClients.get(i++ % kvServers.size()).query("GET key1").get());
+            Assert.assertNull(client.update("SET", "key1 hello!").get());
+            Assert.assertNull(client.update("SET", "key2 world!").get());
+            Assert.assertEquals("hello!", client.query("GET", "key1").get());
             Assert.assertEquals(new HashSet<>(Arrays.asList("key1", "key2")),
-                    new HashSet<>(Arrays.stream(kvClients.get(i++ % kvServers.size()).query("KEYS").get().split(",")).map(String::trim).collect(Collectors.toList())));
+                    new HashSet<>(Arrays.stream(client.<String>query("KEYS").get().split(",")).map(String::trim).collect(Collectors.toList())));
 
-            Assert.assertNull(kvClients.get(i++ % kvServers.size()).update("DEL key2").get());
-            Assert.assertNull(kvClients.get(i++ % kvServers.size()).query("GET key2").get());
-            Assert.assertEquals("key1", kvClients.get(i++ % kvServers.size()).query("KEYS").get());
+            Assert.assertNull(client.update("DEL", "key2").get());
+            Assert.assertNull(client.query("GET", "key2").get());
+            Assert.assertEquals("key1", client.query("KEYS").get());
         } finally {
             stopServers(kvServers);
             TestPathUtils.destroyBaseDir(path.toFile());
@@ -276,19 +269,19 @@ public class KvTest {
     public void localClientTest() throws IOException, ExecutionException, InterruptedException, TimeoutException {
 
         Path path = TestPathUtils.prepareBaseDir("LocalClientTest");
-        List<WrappedBootStrap<String, String, String, String>> kvServers = createServers(1, path);
+        List<BootStrap> kvServers = createServers(1, path);
         try {
-            WrappedRaftClient<String, String, String, String> kvClient = kvServers.stream().findFirst().orElseThrow(RuntimeException::new).getLocalClient();
+            JkClient kvClient = new JkClient(kvServers.stream().findFirst().orElseThrow(RuntimeException::new).getLocalClient());
 
 
-            Assert.assertNull(kvClient.update("SET key1 hello!").get());
-            Assert.assertNull(kvClient.update("SET key2 world!").get());
-            Assert.assertEquals("hello!", kvClient.query("GET key1").get());
+            Assert.assertNull(kvClient.update("SET", "key1 hello!").get());
+            Assert.assertNull(kvClient.update("SET", "key2 world!").get());
+            Assert.assertEquals("hello!", kvClient.query("GET", "key1").get());
             Assert.assertEquals(new HashSet<>(Arrays.asList("key1", "key2")),
-                    new HashSet<>(Arrays.stream(kvClient.query("KEYS").get().split(",")).map(String::trim).collect(Collectors.toList())));
+                    new HashSet<>(Arrays.stream(kvClient.<String>query("KEYS").get().split(",")).map(String::trim).collect(Collectors.toList())));
 
-            Assert.assertNull(kvClient.update("DEL key2").get());
-            Assert.assertNull(kvClient.query("GET key2").get());
+            Assert.assertNull(kvClient.update("DEL", "key2").get());
+            Assert.assertNull(kvClient.query("GET", "key2").get());
             Assert.assertEquals("key1", kvClient.query("KEYS").get());
         } finally {
             stopServers(kvServers);
@@ -306,19 +299,19 @@ public class KvTest {
 
         // 初始化并启动一个3个节点的集群
         Path path = TestPathUtils.prepareBaseDir("AddVotersTest-");
-        List<WrappedBootStrap<String, String, String, String>> oldServers = createServers(oldServerCount, path);
+        List<BootStrap> oldServers = createServers(oldServerCount, path);
 
-        WrappedRaftClient<String, String, String, String> kvClient = oldServers.get(0).getClient();
+        JkClient kvClient = new JkClient(oldServers.get(0).getClient());
 
         // 写入一些数据
         for (int i = 0; i < 10; i++) {
-            Assert.assertNull(kvClient.update("SET key" + i + " " + i).get());
+            Assert.assertNull(kvClient.update("SET", "key" + i + " " + i).get());
         }
 
         // 初始化另外2个新节点，先以OBSERVER方式启动
-        List<WrappedBootStrap<String, String, String, String>> newServers = new ArrayList<>(newServerCount);
+        List<BootStrap> newServers = new ArrayList<>(newServerCount);
         List<URI> oldConfig = oldServers.stream()
-                .map(WrappedBootStrap::getServer)
+                .map(BootStrap::getServer)
                 .map(RaftServer::serverUri)
                 .collect(Collectors.toList());
         List<URI> newConfig = new ArrayList<>(oldServerCount + newServerCount);
@@ -338,22 +331,24 @@ public class KvTest {
 //            properties.setProperty("enable_metric", "true");
 //            properties.setProperty("print_metric_interval_sec", "3");
             properties.setProperty("observer.parents", String.join(",", oldConfig.stream().map(URI::toString).toArray(String[]::new)));
-            WrappedBootStrap<String, String, String, String> kvServer = new WrappedBootStrap<>(RaftServer.Roll.OBSERVER, new KvStateFactory(), properties);
+            BootStrap kvServer = BootStrap.builder().roll(RaftServer.Roll.OBSERVER)
+                    .stateFactory(new KvStateFactory())
+                    .properties(properties).build();
             newServers.add(kvServer);
             newServerUris.add(uri);
         }
 
 
         for (int i = 0; i < newServerCount; i++) {
-            WrappedBootStrap<String, String, String, String> newServer = newServers.get(i);
+            BootStrap newServer = newServers.get(i);
             URI uri = newServerUris.get(i);
             newServer.getServer().init(uri, newConfig);
             newServer.getServer().recover();
             newServer.getServer().start();
         }
 
-        AdminClient oldAdminClient = new BootStrap(oldConfig, new Properties()).getAdminClient();
-        AdminClient newAdminClient = new BootStrap(newConfig, new Properties()).getAdminClient();
+        AdminClient oldAdminClient = BootStrap.builder().servers(oldConfig).build().getAdminClient();
+        AdminClient newAdminClient = BootStrap.builder().servers(newConfig).build().getAdminClient();
 
         URI leaderUri = oldAdminClient.getClusterConfiguration().get().getLeader();
         while (null == leaderUri) {
@@ -419,7 +414,7 @@ public class KvTest {
 
         // 读取数据，验证是否正确
         for (int i = 0; i < 10; i++) {
-            Assert.assertEquals(String.valueOf(i), kvClient.query("GET key" + i).get());
+            Assert.assertEquals(String.valueOf(i), kvClient.query("GET", "key" + i).get());
         }
 
         oldAdminClient.stop();
@@ -438,19 +433,19 @@ public class KvTest {
 
         // 初始化并启动一个3个节点的集群
         Path path = TestPathUtils.prepareBaseDir("ReplaceVotersTest-");
-        List<WrappedBootStrap<String, String, String, String>> oldServers = createServers(serverCount, path);
+        List<BootStrap> oldServers = createServers(serverCount, path);
 
-        WrappedRaftClient<String, String, String, String> kvClient = oldServers.get(0).getClient();
+        JkClient kvClient = new JkClient(oldServers.get(0).getClient());
 
         // 写入一些数据
         for (int i = 0; i < 10; i++) {
-            Assert.assertNull(kvClient.update("SET key" + i + " " + i).get());
+            Assert.assertNull(kvClient.update("SET", "key" + i + " " + i).get());
         }
 
 
-        List<WrappedBootStrap<String, String, String, String>> newServers = new ArrayList<>(replaceServerCount);
+        List<BootStrap> newServers = new ArrayList<>(replaceServerCount);
         List<URI> oldConfig = oldServers.stream()
-                .map(WrappedBootStrap::getServer)
+                .map(BootStrap::getServer)
                 .map(RaftServer::serverUri)
                 .collect(Collectors.toList());
         List<URI> newConfig = new ArrayList<>(serverCount);
@@ -475,14 +470,14 @@ public class KvTest {
 
 //            properties.setProperty("enable_metric", "true");
 //            properties.setProperty("print_metric_interval_sec", "3");
-            WrappedBootStrap<String, String, String, String> kvServer = new WrappedBootStrap<>(RaftServer.Roll.OBSERVER, new KvStateFactory(), properties);
+            BootStrap kvServer = BootStrap.builder().roll(RaftServer.Roll.OBSERVER).stateFactory(new KvStateFactory()).properties(properties).build();
             newServers.add(kvServer);
             newServerUris.add(uri);
         }
         newConfig.addAll(newServerUris);
 
         for (int i = 0; i < replaceServerCount; i++) {
-            WrappedBootStrap<String, String, String, String> newServer = newServers.get(i);
+            BootStrap newServer = newServers.get(i);
             URI uri = newServerUris.get(i);
             newServer.getServer().init(uri, newConfig);
             newServer.getServer().recover();
@@ -490,8 +485,8 @@ public class KvTest {
         }
 
 
-        AdminClient oldAdminClient = new BootStrap(oldConfig, new Properties()).getAdminClient();
-        AdminClient newAdminClient = new BootStrap(newConfig, new Properties()).getAdminClient();
+        AdminClient oldAdminClient = BootStrap.builder().servers(oldConfig).build().getAdminClient();
+        AdminClient newAdminClient = BootStrap.builder().servers(newConfig).build().getAdminClient();
 
 
         URI leaderUri = oldAdminClient.getClusterConfiguration().get().getLeader();
@@ -560,7 +555,7 @@ public class KvTest {
         // 可能发生选举，需要等待选举完成。
         newAdminClient.waitForClusterReady();
 
-        WrappedRaftClient<String, String, String, String> newClient = newServers.get(0).getClient();
+        JkClient newClient = new JkClient(newServers.get(0).getClient());
 //        leaderUri = newAdminClient.getClusterConfiguration().get().getLeader();
 
 
@@ -581,7 +576,7 @@ public class KvTest {
         // 读取数据，验证是否正确
         for (int i = 0; i < 10; i++) {
             logger.info("Query {}...", "key" + i);
-            Assert.assertEquals(String.valueOf(i), newClient.query("GET key" + i).get());
+            Assert.assertEquals(String.valueOf(i), newClient.query("GET", "key" + i).get());
         }
 
         oldAdminClient.stop();
@@ -601,24 +596,24 @@ public class KvTest {
 
         // 初始化并启动一个5节点的集群
         Path path = TestPathUtils.prepareBaseDir("RemoveVotersTest");
-        List<WrappedBootStrap<String, String, String, String>> servers = createServers(oldServerCount, path);
+        List<BootStrap> servers = createServers(oldServerCount, path);
 
-        WrappedRaftClient<String, String, String, String> kvClient = servers.get(0).getClient();
+        JkClient kvClient = new JkClient(servers.get(0).getClient());
 
         // 写入一些数据
         for (int i = 0; i < 10; i++) {
-            Assert.assertNull(kvClient.update("SET key" + i + " " + i).get());
+            Assert.assertNull(kvClient.update("SET", "key" + i + " " + i).get());
         }
 
         List<URI> oldConfig = servers.stream()
-                .map(WrappedBootStrap::getServer)
+                .map(BootStrap::getServer)
                 .map(RaftServer::serverUri)
                 .collect(Collectors.toList());
         List<URI> newConfig = new ArrayList<>(newServerCount);
         newConfig.addAll(oldConfig.subList(0, newServerCount));
 
-        AdminClient oldAdminClient = new BootStrap(oldConfig, new Properties()).getAdminClient();
-        AdminClient newAdminClient = new BootStrap(newConfig, new Properties()).getAdminClient();
+        AdminClient oldAdminClient = BootStrap.builder().servers(oldConfig).build().getAdminClient();
+        AdminClient newAdminClient = BootStrap.builder().servers(newConfig).build().getAdminClient();
         URI leaderUri = oldAdminClient.getClusterConfiguration().get().getLeader();
         long leaderApplied = oldAdminClient.getServerStatus(leaderUri).get().getLastApplied();
         // 更新集群配置
@@ -662,12 +657,12 @@ public class KvTest {
         for (URI uri : newConfig) {
             Assert.assertEquals(newConfig, newAdminClient.getClusterConfiguration(uri).get().getVoters());
         }
-        WrappedBootStrap<String, String, String, String> clientBootStrap = new WrappedBootStrap<>(newConfig, new Properties());
-        kvClient = clientBootStrap.getClient();
+        BootStrap clientBootStrap = BootStrap.builder().servers(newConfig).build();
+        kvClient = new JkClient(clientBootStrap.getClient());
 
         // 读取数据，验证是否正确
         for (int i = 0; i < 10; i++) {
-            Assert.assertEquals(String.valueOf(i), kvClient.query("GET key" + i).get());
+            Assert.assertEquals(String.valueOf(i), kvClient.query("GET", "key" + i).get());
         }
         oldAdminClient.stop();
         newAdminClient.stop();
@@ -684,13 +679,13 @@ public class KvTest {
         logger.info("Creating {} nodes cluster...", serverCount);
 
         Path path = TestPathUtils.prepareBaseDir("PreferredLeaderTest");
-        List<WrappedBootStrap<String, String, String, String>> servers = createServers(serverCount, path);
-        WrappedRaftClient<String, String, String, String> kvClient = servers.get(0).getClient();
+        List<BootStrap> servers = createServers(serverCount, path);
+        JkClient kvClient = new JkClient(servers.get(0).getClient());
 
         logger.info("Write some data...");
         // 写入一些数据
         for (int i = 0; i < 10; i++) {
-            Assert.assertNull(kvClient.update("SET key" + i + " " + i).get());
+            Assert.assertNull(kvClient.update("SET", "key" + i + " " + i).get());
         }
         AdminClient adminClient = servers.get(0).getAdminClient();
 
@@ -701,10 +696,10 @@ public class KvTest {
         Assert.assertNotNull(leaderUri);
         logger.info("Current leader is {}.", leaderUri);
         URI finalLeaderUri = leaderUri;
-        Assert.assertTrue(servers.stream().map(WrappedBootStrap::getServer).anyMatch(server -> finalLeaderUri.equals(server.serverUri())));
+        Assert.assertTrue(servers.stream().map(BootStrap::getServer).anyMatch(server -> finalLeaderUri.equals(server.serverUri())));
 
         Properties properties = null;
-        for (WrappedBootStrap<String, String, String, String> server : servers) {
+        for (BootStrap server : servers) {
             if (leaderUri.equals(server.getServer().serverUri())) {
                 logger.info("Stop server: {}.", server.getServer().serverUri());
                 server.shutdown();
@@ -725,18 +720,18 @@ public class KvTest {
 
         // 写入一些数据
         logger.info("Write some data...");
-        kvClient = servers.get(0).getClient();
+        kvClient = new JkClient(servers.get(0).getClient());
         for (int i = 10; i < 20; i++) {
-            Assert.assertNull(kvClient.update("SET key" + i + " " + i).get());
+            Assert.assertNull(kvClient.update("SET", "key" + i + " " + i).get());
         }
 
         // 启动推荐Leader
-        logger.info("Set preferred leader to {}.", preferredLeader);
+        logger.info("Set", "preferred leader to {}.", preferredLeader);
         adminClient.setPreferredLeader(preferredLeader).get();
 
         // 重新启动Server
         logger.info("Restart server {}...", preferredLeader);
-        WrappedBootStrap<String, String, String, String> recoveredServer = recoverServer(properties);
+        BootStrap recoveredServer = recoverServer(properties);
         servers.add(recoveredServer);
         // 反复检查集群的Leader是否变更为推荐Leader
         logger.info("Checking preferred leader...");
@@ -748,13 +743,13 @@ public class KvTest {
 
         // 设置推荐Leader为另一个节点
         URI newPreferredLeader = servers.stream()
-                .map(WrappedBootStrap::getServer)
+                .map(BootStrap::getServer)
                 .map(RaftServer::serverUri)
                 .filter(uri -> !preferredLeader.equals(uri))
                 .findAny().orElse(null);
         Assert.assertNotNull(newPreferredLeader);
 
-        logger.info("Set preferred leader to {}.", newPreferredLeader);
+        logger.info("Set", "preferred leader to {}.", newPreferredLeader);
         adminClient.setPreferredLeader(newPreferredLeader).get();
 
         // 反复检查集群的Leader是否变更为推荐Leader
@@ -779,19 +774,21 @@ public class KvTest {
         logger.info("Creating {} nodes cluster...", serverCount);
 
         Path path = TestPathUtils.prepareBaseDir("preVoteTest");
-        List<WrappedBootStrap<String, String, String, String>> servers = createServers(serverCount, path);
+        List<BootStrap> servers = createServers(serverCount, path);
 
-        WrappedBootStrap<String, String, String, String> clientBootStrap = new WrappedBootStrap<>(
-                servers.stream().map(s -> s.getServer().serverUri()).collect(Collectors.toList()), new Properties()
-        );
-        WrappedRaftClient<String, String, String, String> kvClient = clientBootStrap.getClient();
+        BootStrap clientBootStrap =
+                BootStrap.builder().servers(
+                        servers.stream().map(s -> s.getServer().serverUri()).collect(Collectors.toList())
+                ).build();
+
+        JkClient kvClient = new JkClient(clientBootStrap.getClient());
         AdminClient adminClient = clientBootStrap.getAdminClient();
         kvClient.waitForClusterReady();
 
         logger.info("Write some data...");
         // 写入一些数据
         for (int i = 0; i < 10; i++) {
-            Assert.assertNull(kvClient.update("SET key" + i + " " + i).get());
+            Assert.assertNull(kvClient.update("SET", "key" + i + " " + i).get());
         }
 
         // 获取当前leader节点
@@ -801,7 +798,7 @@ public class KvTest {
         logger.info("Current leader is {}.", leaderUri);
 
         // 从2个follower中挑选任意一个，停掉
-        WrappedBootStrap<String, String, String, String> toBeShutdown = servers.stream().filter(s -> !s.getServer().serverUri().equals(leaderUri)).findAny().orElse(null);
+        BootStrap toBeShutdown = servers.stream().filter(s -> !s.getServer().serverUri().equals(leaderUri)).findAny().orElse(null);
         Assert.assertNotNull(toBeShutdown);
         logger.info("Shutdown server: {}...", toBeShutdown.getServer().serverUri());
         toBeShutdown.shutdown();
@@ -809,7 +806,7 @@ public class KvTest {
         Properties propertiesOfShutdown = toBeShutdown.getProperties();
 
         // 记录leader的term，然后停掉leader
-        WrappedBootStrap<String, String, String, String> leader = servers.stream().filter(s -> s.getServer().serverUri().equals(leaderUri)).findAny().orElse(null);
+        BootStrap leader = servers.stream().filter(s -> s.getServer().serverUri().equals(leaderUri)).findAny().orElse(null);
         Assert.assertNotNull(leader);
         int term = ((Voter )((Server)leader.getServer()).getServer()).getTerm();
         logger.info("Shutdown leader: {}, term: {}...", leader.getServer().serverUri(), term);
@@ -853,7 +850,7 @@ public class KvTest {
             simpleMonitorCollector.removeServer(monitoredServer);
         }
 
-        List<WrappedBootStrap<String, String, String, String>> servers = createServers(nodes, path);
+        List<BootStrap> servers = createServers(nodes, path);
         Collection<MonitoredServer> monitoredServers = simpleMonitorCollector.getMonitoredServers();
         Assert.assertEquals(nodes, monitoredServers.size());
         Collection<ServerMonitorInfo> monitorInfos = simpleMonitorCollector.collectAll();
@@ -867,8 +864,8 @@ public class KvTest {
 
     }
 
-    private void stopServers(List<WrappedBootStrap<String, String, String, String>> kvServers) {
-        for (WrappedBootStrap<String, String, String, String> serverBootStraps : kvServers) {
+    private void stopServers(List<BootStrap> kvServers) {
+        for (BootStrap serverBootStraps : kvServers) {
             try {
                 serverBootStraps.shutdown();
             } catch (Throwable t) {
@@ -877,11 +874,11 @@ public class KvTest {
         }
     }
 
-    private List<WrappedBootStrap<String, String, String, String>> createServers(int nodes, Path path) throws IOException, ExecutionException, InterruptedException, TimeoutException {
+    private List<BootStrap> createServers(int nodes, Path path) throws IOException, ExecutionException, InterruptedException, TimeoutException {
         return createServers(nodes, path, RaftServer.Roll.VOTER, true);
     }
 
-    private List<WrappedBootStrap<String, String, String, String>> createServers(int nodes, Path path, RaftServer.Roll roll, boolean waitForLeader) throws IOException, ExecutionException, InterruptedException, TimeoutException {
+    private List<BootStrap> createServers(int nodes, Path path, RaftServer.Roll roll, boolean waitForLeader) throws IOException, ExecutionException, InterruptedException, TimeoutException {
         logger.info("Create {} nodes servers", nodes);
         List<URI> serverURIs = new ArrayList<>(nodes);
         List<Properties> propertiesList = new ArrayList<>(nodes);
@@ -894,11 +891,6 @@ public class KvTest {
             properties.setProperty("persistence.journal.file_data_size", String.valueOf(128 * 1024));
             properties.setProperty("persistence.index.file_data_size", String.valueOf(16 * 1024));
             properties.setProperty("disable_logo", "true");
-
-//            properties.setProperty("enable_metric", "true");
-//            properties.setProperty("print_metric_interval_sec", "3");
-//            properties.setProperty("print_state_interval_sec", String.valueOf(5));
-
             propertiesList.add(properties);
         }
         return createServers(serverURIs, propertiesList, roll, waitForLeader);
@@ -906,12 +898,11 @@ public class KvTest {
     }
 
 
-    private List<WrappedBootStrap<String, String, String, String>> createServers(List<URI> serverURIs, List<Properties> propertiesList, RaftServer.Roll roll, boolean waitForLeader) throws IOException, ExecutionException, InterruptedException, TimeoutException {
+    private List<BootStrap> createServers(List<URI> serverURIs, List<Properties> propertiesList, RaftServer.Roll roll, boolean waitForLeader) throws IOException, ExecutionException, InterruptedException, TimeoutException {
 
-        List<WrappedBootStrap<String, String, String, String>> serverBootStraps = new ArrayList<>(serverURIs.size());
+        List<BootStrap> serverBootStraps = new ArrayList<>(serverURIs.size());
         for (int i = 0; i < serverURIs.size(); i++) {
-            WrappedBootStrap<String, String, String, String> serverBootStrap = new WrappedBootStrap<>(roll, new KvStateFactory(), propertiesList.get(i));
-            serverBootStraps.add(serverBootStrap);
+            BootStrap serverBootStrap = BootStrap.builder().roll(roll).stateFactory(new KvStateFactory()).properties(propertiesList.get(i)).build();            serverBootStraps.add(serverBootStrap);
 
             serverBootStrap.getServer().init(serverURIs.get(i), serverURIs);
             serverBootStrap.getServer().recover();

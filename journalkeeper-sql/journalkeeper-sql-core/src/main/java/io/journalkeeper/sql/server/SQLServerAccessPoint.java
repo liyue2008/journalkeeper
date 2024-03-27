@@ -14,10 +14,8 @@
 package io.journalkeeper.sql.server;
 
 import io.journalkeeper.core.api.RaftServer;
-import io.journalkeeper.sql.client.domain.ReadRequest;
-import io.journalkeeper.sql.client.domain.ReadResponse;
-import io.journalkeeper.sql.client.domain.WriteRequest;
-import io.journalkeeper.sql.client.domain.WriteResponse;
+import io.journalkeeper.sql.client.SQLEvent;
+import io.journalkeeper.sql.client.domain.*;
 import io.journalkeeper.sql.serializer.KryoSerializer;
 import io.journalkeeper.sql.state.SQLStateFactory;
 
@@ -42,7 +40,8 @@ public class SQLServerAccessPoint {
                         new KryoSerializer<>(WriteRequest.class),
                         new KryoSerializer<>(WriteResponse.class),
                         new KryoSerializer<>(ReadRequest.class),
-                        new KryoSerializer<>(ReadResponse.class)));
+                        new KryoSerializer<>(ReadResponse.class),
+                        new KryoSerializer<>(SQLEvent.class)));
     }
 
     public SQLServerAccessPoint(Properties config,

@@ -21,14 +21,7 @@ import io.journalkeeper.core.api.JournalEntryParser;
 import io.journalkeeper.core.api.RaftServer;
 import io.journalkeeper.core.api.StateFactory;
 import io.journalkeeper.core.api.StateResult;
-import io.journalkeeper.core.entry.internal.InternalEntriesSerializeSupport;
-import io.journalkeeper.core.entry.internal.InternalEntryType;
-import io.journalkeeper.core.entry.internal.LeaderAnnouncementEntry;
-import io.journalkeeper.core.entry.internal.RecoverSnapshotEntry;
-import io.journalkeeper.core.entry.internal.ReservedPartition;
-import io.journalkeeper.core.entry.internal.ScalePartitionsEntry;
-import io.journalkeeper.core.entry.internal.UpdateVotersS1Entry;
-import io.journalkeeper.core.entry.internal.UpdateVotersS2Entry;
+import io.journalkeeper.core.entry.internal.*;
 import io.journalkeeper.core.state.EntryFutureImpl;
 import io.journalkeeper.core.state.Snapshot;
 import io.journalkeeper.exceptions.JournalException;
@@ -432,20 +425,18 @@ public abstract class AbstractServer
             StateResult stateResult = state.applyEntry(entryHeader, new EntryFutureImpl(journal, offset), journal);
             afterStateChanged(stateResult.getUserResult());
 
-            if(config.isEnableEvents()) {
-                stateResult.putEventData("lastApplied", String.valueOf(state.lastApplied()));
-                fireEvent(EventType.ON_STATE_CHANGE, stateResult.getEventData());
-            }
+            OnStateChangeEvent event = new OnStateChangeEvent(state.lastApplied());
+            byte [] serializedEvent =  InternalEntriesSerializeSupport.serialize(event);
+            fireEvent(EventType.ON_STATE_CHANGE, serializedEvent);
+
             applyEntriesMetric.end(() -> (long) entryHeader.getLength());
         }
     }
 
     private void fireOnLeaderChangeEvent(int term, URI leaderUri) {
         if(config.isEnableEvents()) {
-            Map<String, String> eventData = new HashMap<>();
-            eventData.put("leader", String.valueOf(leaderUri));
-            eventData.put("term", String.valueOf(term));
-            fireEvent(EventType.ON_LEADER_CHANGE, eventData);
+            fireEvent(EventType.ON_LEADER_CHANGE,
+                    InternalEntriesSerializeSupport.serialize(new OnLeaderChangeEvent(leaderUri, term)));
         }
     }
 
@@ -484,7 +475,7 @@ public abstract class AbstractServer
         }
     }
 
-    protected void fireEvent(int eventType, Map<String, String> eventData) {
+    protected void fireEvent(int eventType, byte [] eventData) {
         if(config.isEnableEvents()) {
             eventBus.fireEvent(new Event(eventType, eventData));
         }
