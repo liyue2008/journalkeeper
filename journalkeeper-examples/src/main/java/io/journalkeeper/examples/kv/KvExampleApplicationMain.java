@@ -60,7 +60,7 @@ public class KvExampleApplicationMain {
 
         BootStrap clientBootStrap = BootStrap.builder().servers(serverURIs).build();
 
-        JkClient kvClient = new JkClient(clientBootStrap.getClient());
+        JkClient kvClient = new JkClient(clientBootStrap.getRaftClient());
         kvClient.waitForClusterReady();
         logger.info("SET key1 hello!");
         String result = kvClient.<String,String>update("SET", "key1 hello!").get();

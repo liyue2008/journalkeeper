@@ -44,7 +44,7 @@ public class ConsistencyTest {
         List<BootStrap> serverBootStraps = createServers(3, path);
         try {
             for (int j = 0; j < 3; j++) {
-                JkClient client = new JkClient(serverBootStraps.get(j).getClient());
+                JkClient client = new JkClient(serverBootStraps.get(j).getRaftClient());
                 for (int i = 0; i < 100; i++) {
                     Integer value = client.<Integer, Integer>update(1).get();
                     Assert.assertEquals(value, client.<Integer>query(QueryConsistency.SEQUENTIAL).get());
@@ -61,7 +61,7 @@ public class ConsistencyTest {
         List<BootStrap> serverBootStraps = createServers(3, path);
         List<URI> serverUris = serverBootStraps.stream().map(b -> b.getServer().serverUri()).collect(Collectors.toList());
         BootStrap clientBootStrap = BootStrap.builder().servers(serverUris).build();
-        JkClient client = new JkClient(clientBootStrap.getClient());
+        JkClient client = new JkClient(clientBootStrap.getRaftClient());
         try {
             for (int i = 0; i < 100; i++) {
                 client.<Integer, Integer>update(1).get();

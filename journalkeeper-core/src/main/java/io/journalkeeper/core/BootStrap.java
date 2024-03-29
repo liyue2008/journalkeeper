@@ -123,7 +123,7 @@ public class BootStrap implements ClusterAccessPoint {
     }
 
     @Override
-    public RaftClient getClient() {
+    public RaftClient getRaftClient() {
         if (null == client) {
             RemoteClientRpc clientRpc = createRemoteClientRpc();
             client = new DefaultRaftClient(clientRpc, properties);
@@ -132,7 +132,7 @@ public class BootStrap implements ClusterAccessPoint {
     }
 
     @Override
-    public RaftClient getLocalClient() {
+    public RaftClient getLocalRaftClient() {
 
         if (null == localClient) {
             LocalClientRpc clientRpc = createLocalClientRpc();
@@ -184,19 +184,17 @@ public class BootStrap implements ClusterAccessPoint {
         if (null != adminClient) {
             adminClient.stop();
         }
-        if (null != server) {
-            StateServer.ServerState state;
-            if ((state = server.serverState()) == StateServer.ServerState.RUNNING) {
-                server.stop();
-            } else {
-                logger.warn("Server {} state is {}, will not stop!", server.serverUri(), state);
-            }
-        }
+
         if (!isExecutorProvided) {
             shutdownExecutorService(serverScheduledExecutor);
             shutdownExecutorService(serverAsyncExecutor);
             shutdownExecutorService(clientScheduledExecutor);
             shutdownExecutorService(clientAsyncExecutor);
+        }
+
+        if (null != server) {
+            server.stop();
+
         }
     }
 

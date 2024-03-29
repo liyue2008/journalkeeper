@@ -17,6 +17,7 @@ import io.journalkeeper.coordinating.client.exception.CoordinatingClientExceptio
 import io.journalkeeper.coordinating.state.domain.StateTypes;
 import io.journalkeeper.coordinating.state.domain.WriteRequest;
 import io.journalkeeper.core.easy.JkClient;
+import io.journalkeeper.core.easy.JkEventBus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,9 +39,12 @@ public class CoordinatingClient {
 
     private final JkClient client;
 
-    public CoordinatingClient(JkClient client) {
+    private final JkEventBus eventBus;
+
+    public CoordinatingClient(JkClient client, JkEventBus eventBus) {
         this.client = client;
 
+        this.eventBus = eventBus;
     }
 
     public CompletableFuture<Boolean> set(byte[] key, byte[] value) {
@@ -86,11 +90,11 @@ public class CoordinatingClient {
     }
 
     public void watch(CoordinatingEventListener listener) {
-        client.watch(listener);
+        eventBus.watch(listener);
     }
 
     public void unwatch(CoordinatingEventListener listener) {
-        client.unwatch(listener);
+        eventBus.unwatch(listener);
     }
 
     public void waitClusterReady(Long maxWaitMs) throws TimeoutException {

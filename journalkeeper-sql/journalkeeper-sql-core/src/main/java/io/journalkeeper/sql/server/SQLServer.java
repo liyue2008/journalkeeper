@@ -100,7 +100,7 @@ public class SQLServer implements StateServer {
         long t0 = System.currentTimeMillis();
         while (System.currentTimeMillis() - t0 < timeout || timeout <= 0) {
             try {
-                bootStrap.getClient().waitForClusterReady(1000);
+                bootStrap.getRaftClient().waitForClusterReady(1000);
                 return true;
             } catch (TimeoutException e) {
             }

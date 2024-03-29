@@ -69,7 +69,7 @@ public class SQLClient {
         this.servers = servers;
         this.config = config;
         this.bootStrap = bootStrap;
-        this.client = bootStrap.getClient();
+        this.client = bootStrap.getRaftClient();
         this.eventSerializer = eventSerializer;
     }
 

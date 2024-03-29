@@ -22,6 +22,7 @@ import org.slf4j.LoggerFactory;
 import sun.misc.Cleaner;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.lang.reflect.Method;
@@ -143,7 +144,7 @@ public class LocalStoreFile implements StoreFile, BufferHolder {
             writeTimestamp();
         }
         if (needLoadFileContent) {
-            logger.warn("Reload file for write! size: {}, file: {}.", file.length(), file);
+            logger.info("Reload file for write! size: {}, file: {}.", file.length(), file);
             fileChannel.position(headerSize);
             int length;
             do {
@@ -389,13 +390,11 @@ public class LocalStoreFile implements StoreFile, BufferHolder {
             bufferLock.unlockRead(stamp);
         }
     }
-    private void ensureOpen() {
+    private void ensureOpen() throws FileNotFoundException {
         if (fileChannel == null || !fileChannel.isOpen()) {
-            throw new IllegalStateException(
-                    String.format(
-                            "File %s is not open!", file.getAbsolutePath()
-                    )
-            );
+            // 打开文件描述符
+            raf = new RandomAccessFile(file, "rw");
+            fileChannel = raf.getChannel();
         }
     }
     private int flushPageBuffer() throws IOException {

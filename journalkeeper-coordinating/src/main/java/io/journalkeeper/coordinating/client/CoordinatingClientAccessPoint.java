@@ -16,6 +16,7 @@ package io.journalkeeper.coordinating.client;
 import io.journalkeeper.core.BootStrap;
 import io.journalkeeper.core.api.RaftClient;
 import io.journalkeeper.core.easy.JkClient;
+import io.journalkeeper.core.easy.JkEventBus;
 
 import java.net.URI;
 import java.util.List;
@@ -38,7 +39,7 @@ public class CoordinatingClientAccessPoint {
     public CoordinatingClient createClient(List<URI> servers) {
         BootStrap bootStrap = BootStrap.builder().servers(servers).properties(config).build();
         RaftClient client =
-                bootStrap.getClient();
-        return new CoordinatingClient(new JkClient(client));
+                bootStrap.getRaftClient();
+        return new CoordinatingClient(new JkClient(client), new JkEventBus(client));
     }
 }

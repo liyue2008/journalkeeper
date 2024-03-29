@@ -856,7 +856,7 @@ class Leader extends ServerStateMachine implements StateServer {
                     lastHeartbeatResponseTime = System.currentTimeMillis();
 
                     if (response.isSuccess()) { // 复制成功
-                        if (entries.size() > 0) {
+                        if (!entries.isEmpty()) {
                             nextIndex += entries.size();
                             matchIndex = nextIndex;
                             isAnyFollowerNextIndexUpdated.compareAndSet(false, true);

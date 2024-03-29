@@ -25,7 +25,6 @@ import io.journalkeeper.core.api.transaction.TransactionContext;
 import io.journalkeeper.core.api.transaction.TransactionId;
 import io.journalkeeper.core.api.transaction.TransactionalJournalStore;
 import io.journalkeeper.core.entry.DefaultJournalEntryParser;
-import io.journalkeeper.core.entry.internal.OnStateChangeEvent;
 import io.journalkeeper.core.entry.internal.ReservedPartition;
 import io.journalkeeper.exceptions.IndexOverflowException;
 import io.journalkeeper.exceptions.IndexUnderflowException;
@@ -80,7 +79,7 @@ public class JournalStoreClient implements PartitionedJournalStore, Transactiona
         this.queryResultSerializer = new JournalStoreQueryResultSerializer(journalEntryParser);
         BootStrap bootStrap = BootStrap.builder().servers(servers).properties(properties).build();
 
-        raftClient = bootStrap.getClient();
+        raftClient = bootStrap.getRaftClient();
     }
 
     public JournalStoreClient(List<URI> servers, JournalEntryParser journalEntryParser, ExecutorService asyncExecutor, ScheduledExecutorService scheduledExecutor, Properties properties) {
@@ -95,7 +94,7 @@ public class JournalStoreClient implements PartitionedJournalStore, Transactiona
                 .clientScheduledExecutor(scheduledExecutor)
                 .build();
 
-        raftClient = bootStrap.getClient();
+        raftClient = bootStrap.getRaftClient();
     }
 
     @Override

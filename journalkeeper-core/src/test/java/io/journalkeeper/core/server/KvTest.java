@@ -48,35 +48,35 @@ public class KvTest {
 
     @Test
     public void singleNodeTest() throws Exception {
-        setGetTest(1);
+        setGetTest("singleNodeTest", 1);
     }
 
     @Test
     public void tripleNodesTest() throws Exception {
-        setGetTest(3);
+        setGetTest("tripleNodesTest",3);
     }
 
     @Test
     public void fiveNodesTest() throws Exception {
-        setGetTest(5);
+        setGetTest("fiveNodesTest",5);
     }
 
     @Test
     public void sevenNodesTest() throws Exception {
-        setGetTest(7);
+        setGetTest("sevenNodesTest", 7);
     }
 
     @Test
     public void singleNodeRecoverTest() throws Exception {
         Path path = TestPathUtils.prepareBaseDir("singleNodeTest");
         BootStrap kvServer = createServers(1, path).get(0);
-        JkClient kvClient = new JkClient(kvServer.getClient());
+        JkClient kvClient = new JkClient(kvServer.getRaftClient());
         Assert.assertNull(kvClient.update("SET","key value").get());
         kvServer.shutdown();
 
         kvServer = recoverServer("server0", path);
         kvServer.getAdminClient().waitForClusterReady(0L);
-        kvClient = new JkClient(kvServer.getClient());
+        kvClient = new JkClient(kvServer.getRaftClient());
 
         Assert.assertEquals("value", kvClient.query("GET", "key").get());
         kvServer.shutdown();
@@ -116,7 +116,7 @@ public class KvTest {
         List<BootStrap> kvServers = createServers(serverURIs, propertiesList, RaftServer.Roll.VOTER, true);
         int keyNum = 0;
         while (!kvServers.isEmpty()) {
-            JkClient kvClient = new JkClient(kvServers.get(0).getClient());
+            JkClient kvClient = new JkClient(kvServers.get(0).getRaftClient());
             if (kvServers.size() > nodes / 2) {
                 kvClient.update("SET", "key" + keyNum + " value" + keyNum);
             }
@@ -132,7 +132,7 @@ public class KvTest {
                 logger.info("Wait for new leader...");
                 AdminClient adminClient = kvServers.get(0).getAdminClient();
                 adminClient.waitForClusterReady(0L);
-                Assert.assertEquals("value" + keyNum, new JkClient(kvServers.get(0).getClient()).query("GET", "key" + keyNum).get());
+                Assert.assertEquals("value" + keyNum, new JkClient(kvServers.get(0).getRaftClient()).query("GET", "key" + keyNum).get());
                 keyNum++;
             }
         }
@@ -147,7 +147,7 @@ public class KvTest {
                 AdminClient adminClient = kvServers.get(0).getAdminClient();
                 adminClient.waitForClusterReady(0L);
                 for (int i = 0; i < keyNum; i++) {
-                    Assert.assertEquals("value" + i, new JkClient(kvServers.get(0).getClient()).query("GET", "key" + i).get());
+                    Assert.assertEquals("value" + i, new JkClient(kvServers.get(0).getRaftClient()).query("GET", "key" + i).get());
                 }
             }
         }
@@ -181,7 +181,7 @@ public class KvTest {
         List<BootStrap> kvServers = createServers(serverURIs, propertiesList, RaftServer.Roll.VOTER, true);
         int keyNum = 0;
         while (!kvServers.isEmpty()) {
-            JkClient kvClient = new JkClient(kvServers.get(0).getClient());
+            JkClient kvClient = new JkClient(kvServers.get(0).getRaftClient());
             if (kvServers.size() > nodes / 2) {
                 kvClient.update("SET", "key" + keyNum + " value" + keyNum);
             }
@@ -197,7 +197,7 @@ public class KvTest {
                 logger.info("Wait for new leader...");
                 AdminClient adminClient = kvServers.get(0).getAdminClient();
                 adminClient.waitForClusterReady(0L);
-                Assert.assertEquals("value" + keyNum, new JkClient(kvServers.get(0).getClient()).query("GET", "key" + keyNum).get());
+                Assert.assertEquals("value" + keyNum, new JkClient(kvServers.get(0).getRaftClient()).query("GET", "key" + keyNum).get());
                 keyNum++;
             }
         }
@@ -212,7 +212,7 @@ public class KvTest {
                 AdminClient adminClient = kvServers.get(0).getAdminClient();
                 adminClient.waitForClusterReady(0L);
                 for (int i = 0; i < keyNum; i++) {
-                    Assert.assertEquals("value" + i, new JkClient(kvServers.get(0).getClient()).query("GET", "key" + i).get());
+                    Assert.assertEquals("value" + i, new JkClient(kvServers.get(0).getRaftClient()).query("GET", "key" + i).get());
                 }
             }
         }
@@ -240,14 +240,14 @@ public class KvTest {
         return serverBootStrap;
     }
 
-    private void setGetTest(int nodes) throws IOException, ExecutionException, InterruptedException, TimeoutException {
+    private void setGetTest(String testname, int nodes) throws IOException, ExecutionException, InterruptedException, TimeoutException {
 
-        Path path = TestPathUtils.prepareBaseDir("SetGetTest-" + nodes);
+        Path path = TestPathUtils.prepareBaseDir("SetGetTest-" + testname + "-" + nodes);
         List<BootStrap> kvServers = createServers(nodes, path);
         try {
             List<URI> servers = kvServers.stream().map(BootStrap::getServer).map(RaftServer::serverUri).collect(Collectors.toList());
             BootStrap clientBootStrap = BootStrap.builder().servers(servers).build();
-            JkClient client = new JkClient(clientBootStrap.getClient());
+            JkClient client = new JkClient(clientBootStrap.getRaftClient());
 
 
             Assert.assertNull(client.update("SET", "key1 hello!").get());
@@ -271,7 +271,7 @@ public class KvTest {
         Path path = TestPathUtils.prepareBaseDir("LocalClientTest");
         List<BootStrap> kvServers = createServers(1, path);
         try {
-            JkClient kvClient = new JkClient(kvServers.stream().findFirst().orElseThrow(RuntimeException::new).getLocalClient());
+            JkClient kvClient = new JkClient(kvServers.stream().findFirst().orElseThrow(RuntimeException::new).getLocalRaftClient());
 
 
             Assert.assertNull(kvClient.update("SET", "key1 hello!").get());
@@ -301,7 +301,7 @@ public class KvTest {
         Path path = TestPathUtils.prepareBaseDir("AddVotersTest-");
         List<BootStrap> oldServers = createServers(oldServerCount, path);
 
-        JkClient kvClient = new JkClient(oldServers.get(0).getClient());
+        JkClient kvClient = new JkClient(oldServers.get(0).getRaftClient());
 
         // 写入一些数据
         for (int i = 0; i < 10; i++) {
@@ -426,6 +426,7 @@ public class KvTest {
 
     // 替换节点
 
+    // FIXME： 偶尔会失败，暂未找到原因。
     @Test
     public void replaceVotersTest() throws IOException, InterruptedException, ExecutionException, TimeoutException {
         final int serverCount = 3;
@@ -435,7 +436,7 @@ public class KvTest {
         Path path = TestPathUtils.prepareBaseDir("ReplaceVotersTest-");
         List<BootStrap> oldServers = createServers(serverCount, path);
 
-        JkClient kvClient = new JkClient(oldServers.get(0).getClient());
+        JkClient kvClient = new JkClient(oldServers.get(0).getRaftClient());
 
         // 写入一些数据
         for (int i = 0; i < 10; i++) {
@@ -464,7 +465,7 @@ public class KvTest {
             properties.setProperty("working_dir", workingDir.toString());
             properties.setProperty("persistence.journal.file_data_size", String.valueOf(128 * 1024));
             properties.setProperty("persistence.index.file_data_size", String.valueOf(16 * 1024));
-            properties.setProperty("observer.parents", String.join(",", newConfig.stream().map(URI::toString).toArray(String[]::new)));
+            properties.setProperty("observer.parents", String.join(",", oldConfig.stream().map(URI::toString).toArray(String[]::new)));
             properties.setProperty("disable_logo", "true");
 //            properties.setProperty("print_state_interval_sec", String.valueOf(5));
 
@@ -555,7 +556,7 @@ public class KvTest {
         // 可能发生选举，需要等待选举完成。
         newAdminClient.waitForClusterReady();
 
-        JkClient newClient = new JkClient(newServers.get(0).getClient());
+        JkClient newClient = new JkClient(newServers.get(0).getRaftClient());
 //        leaderUri = newAdminClient.getClusterConfiguration().get().getLeader();
 
 
@@ -564,12 +565,6 @@ public class KvTest {
             Assert.assertEquals(newConfig, newAdminClient.getClusterConfiguration(uri).get().getVoters());
             ServerStatus serverStatus = newAdminClient.getServerStatus(uri).get();
             Assert.assertEquals(RaftServer.Roll.VOTER, serverStatus.getRoll());
-//            if (leaderUri.equals(uri)) {
-//                Assert.assertEquals(VoterState.LEADER, serverStatus.getVoterState());
-//            } else {
-//                Assert.assertNotEquals(VoterState.LEADER, serverStatus.getVoterState());
-//            }
-
         }
 
 
@@ -598,7 +593,7 @@ public class KvTest {
         Path path = TestPathUtils.prepareBaseDir("RemoveVotersTest");
         List<BootStrap> servers = createServers(oldServerCount, path);
 
-        JkClient kvClient = new JkClient(servers.get(0).getClient());
+        JkClient kvClient = new JkClient(servers.get(0).getRaftClient());
 
         // 写入一些数据
         for (int i = 0; i < 10; i++) {
@@ -658,7 +653,7 @@ public class KvTest {
             Assert.assertEquals(newConfig, newAdminClient.getClusterConfiguration(uri).get().getVoters());
         }
         BootStrap clientBootStrap = BootStrap.builder().servers(newConfig).build();
-        kvClient = new JkClient(clientBootStrap.getClient());
+        kvClient = new JkClient(clientBootStrap.getRaftClient());
 
         // 读取数据，验证是否正确
         for (int i = 0; i < 10; i++) {
@@ -680,7 +675,7 @@ public class KvTest {
 
         Path path = TestPathUtils.prepareBaseDir("PreferredLeaderTest");
         List<BootStrap> servers = createServers(serverCount, path);
-        JkClient kvClient = new JkClient(servers.get(0).getClient());
+        JkClient kvClient = new JkClient(servers.get(0).getRaftClient());
 
         logger.info("Write some data...");
         // 写入一些数据
@@ -720,7 +715,7 @@ public class KvTest {
 
         // 写入一些数据
         logger.info("Write some data...");
-        kvClient = new JkClient(servers.get(0).getClient());
+        kvClient = new JkClient(servers.get(0).getRaftClient());
         for (int i = 10; i < 20; i++) {
             Assert.assertNull(kvClient.update("SET", "key" + i + " " + i).get());
         }
@@ -781,7 +776,7 @@ public class KvTest {
                         servers.stream().map(s -> s.getServer().serverUri()).collect(Collectors.toList())
                 ).build();
 
-        JkClient kvClient = new JkClient(clientBootStrap.getClient());
+        JkClient kvClient = new JkClient(clientBootStrap.getRaftClient());
         AdminClient adminClient = clientBootStrap.getAdminClient();
         kvClient.waitForClusterReady();
 

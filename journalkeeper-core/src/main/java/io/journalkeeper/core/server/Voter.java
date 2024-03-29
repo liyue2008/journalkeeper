@@ -909,7 +909,6 @@ class Voter extends AbstractServer implements CheckTermInterceptor {
                 follower.stop();
             }
         } catch (Throwable t) {
-            t.printStackTrace();
             logger.warn("Exception, {}: ", voterInfo(), t);
         }
 

@@ -19,6 +19,7 @@ import io.journalkeeper.coordinating.state.CoordinatorStateFactory;
 import io.journalkeeper.core.BootStrap;
 import io.journalkeeper.core.api.RaftServer;
 import io.journalkeeper.core.easy.JkClient;
+import io.journalkeeper.core.easy.JkEventBus;
 import io.journalkeeper.utils.state.StateServer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -72,7 +73,7 @@ public class CoordinatingServer implements StateServer {
         if (client == null) {
             synchronized (this) {
                 if (client == null) {
-                    client = new CoordinatingClient(new JkClient(bootStrap.getClient()));
+                    client = new CoordinatingClient(new JkClient(bootStrap.getRaftClient()), new JkEventBus(bootStrap.getRaftClient()));
                 }
             }
         }

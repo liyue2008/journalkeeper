@@ -62,7 +62,7 @@ public class RecoverSnapshotTest {
         kvServer.getServer().start();
         kvServer.getAdminClient().waitForClusterReady(1000 * 5);
 
-        JkClient client = new JkClient(kvServer.getClient());
+        JkClient client = new JkClient(kvServer.getRaftClient());
         Assert.assertNull(client.update("SET", "key_1 value_1").get());
         Assert.assertEquals("value_1", client.query("GET", "key_1").get());
 
@@ -110,7 +110,7 @@ public class RecoverSnapshotTest {
             kvServer.getServer().recover();
             kvServer.getServer().start();
             servers.add(kvServer);
-            clients.add(new JkClient(kvServer.getClient()));
+            clients.add(new JkClient(kvServer.getRaftClient()));
         }
         servers.get(0).getAdminClient().waitForClusterReady(1000 * 5);
 
