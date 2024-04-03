@@ -57,13 +57,13 @@ import java.util.Arrays;
  * @author LiYue
  * Date: 2019/11/22
  */
-class PartialSnapshot {
+public class PartialSnapshot {
     private static final Logger logger = LoggerFactory.getLogger(PartialSnapshot.class);
     private final Path partialSnapshotPath;
     private Path snapshotPath = null;
     private long offset = 0;
 
-    PartialSnapshot(Path partialSnapshotPath) {
+    public PartialSnapshot(Path partialSnapshotPath) {
         this.partialSnapshotPath = partialSnapshotPath;
     }
 
