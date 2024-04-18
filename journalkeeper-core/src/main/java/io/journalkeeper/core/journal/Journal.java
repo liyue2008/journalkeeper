@@ -494,14 +494,8 @@ public class Journal implements RaftJournal, Flushable, Closeable {
     }
 
 
-    /**
-     * 批量读取StorageEntry
-     * @param index 起始索引位置
-     * @param size 期望读取的条数
-     * @return 未反序列化的StorageEntry列表。
-     * @throws IndexUnderflowException 如果 index 小于 minIndex()
-     * @throws IndexOverflowException 如果index 不小于 maxIndex()
-     */
+
+    @Override
     public List<byte[]> readRaw(long index, int size) {
         checkIndex(index);
         List<byte[]> list = new ArrayList<>(size);
@@ -512,13 +506,8 @@ public class Journal implements RaftJournal, Flushable, Closeable {
         return list;
     }
 
-    /**
-     * 读取指定索引位置上Entry的Term。
-     * @param index 索引位置。
-     * @return Term 任期
-     * @throws IndexUnderflowException 如果 index 小于 minIndex()
-     * @throws IndexOverflowException 如果index 不小于 maxIndex()
-     */
+
+    @Override
     public int getTerm(long index) {
         if (index == -1) return -1;
         checkIndex(index);

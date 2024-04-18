@@ -1,19 +1,23 @@
 package io.journalkeeper.core.state;
 
-import io.journalkeeper.core.api.StateFactory;
-import io.journalkeeper.core.entry.internal.ReservedPartition;
-import io.journalkeeper.core.config.ServerConfigDeclaration;
+import io.journalkeeper.core.api.*;
+import io.journalkeeper.core.entry.internal.*;
 import io.journalkeeper.core.journal.JournalActor;
+import io.journalkeeper.core.raft.RaftState;
 import io.journalkeeper.core.server.PartialSnapshot;
 import io.journalkeeper.exceptions.RecoverException;
 import io.journalkeeper.persistence.LockablePersistence;
 import io.journalkeeper.persistence.MetadataPersistence;
 import io.journalkeeper.persistence.PersistenceFactory;
 import io.journalkeeper.persistence.ServerMetadata;
-import io.journalkeeper.utils.actor.ActorBase;
-import io.journalkeeper.utils.actor.PostOffice;
+import io.journalkeeper.rpc.client.*;
+import io.journalkeeper.rpc.server.AsyncAppendEntriesRequest;
+import io.journalkeeper.rpc.server.AsyncAppendEntriesResponse;
+import io.journalkeeper.rpc.server.GetServerStateRequest;
+import io.journalkeeper.rpc.server.GetServerStateResponse;
+import io.journalkeeper.utils.actor.*;
 import io.journalkeeper.utils.config.Config;
-import io.journalkeeper.utils.files.FileUtils;
+import io.journalkeeper.utils.event.EventType;
 import io.journalkeeper.utils.spi.ServiceSupport;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,13 +34,15 @@ import java.util.stream.StreamSupport;
 
 import static io.journalkeeper.core.api.RaftJournal.DEFAULT_PARTITION;
 import static io.journalkeeper.core.api.RaftJournal.INTERNAL_PARTITION;
+import static io.journalkeeper.core.entry.internal.InternalEntryType.TYPE_UPDATE_VOTERS_S1;
+import static io.journalkeeper.core.entry.internal.InternalEntryType.TYPE_UPDATE_VOTERS_S2;
 import static io.journalkeeper.core.transaction.JournalTransactionManager.TRANSACTION_PARTITION_COUNT;
 import static io.journalkeeper.core.transaction.JournalTransactionManager.TRANSACTION_PARTITION_START;
 
 /**
  * 管理State、Metadata和Snapshots的Actor
  */
-public class StateActor extends ActorBase {
+public class StateActor implements RaftState{
     private static final Logger logger = LoggerFactory.getLogger( StateActor.class );
 
     private static final String STATE_PATH = "state";
@@ -63,20 +69,30 @@ public class StateActor extends ActorBase {
     protected MetadataPersistence metadataPersistence;
 
     private LockablePersistence lockablePersistence;
-    private URI uri;
+    private URI localUri;
+    private RaftServer.Roll roll;
 
+    private int term;
+
+    private URI leaderUri = null;
+
+    private final JournalEntryParser journalEntryParser;
     /**
      * 节点上的最新状态 和 被状态机执行的最大日志条目的索引值（从 0 开始递增）
      */
-    protected final JournalKeeperState state;
+    private final JournalKeeperState state;
+
+    private final RaftJournal journal;
 
     private final Config config;
 
     private final Properties properties;
 
-    public StateActor(StateFactory stateFactory, Config config, Properties properties, PostOffice postOffice) {
-        super(DEFAULT_CAPACITY, postOffice);
+    public StateActor(RaftServer.Roll roll, StateFactory stateFactory, JournalEntryParser journalEntryParser, RaftJournal journal, Config config, Properties properties) {
+        this.roll = roll;
         this.stateFactory = stateFactory;
+        this.journalEntryParser = journalEntryParser;
+        this.journal = journal;
         this.config = config;
         this.properties = properties;
         persistenceFactory = ServiceSupport.load(PersistenceFactory.class);
@@ -86,6 +102,7 @@ public class StateActor extends ActorBase {
         this.state = new JournalKeeperState(stateFactory, metadataPersistence);
 
         this.partialSnapshot = new PartialSnapshot(partialSnapshotPath());
+        this.actor.setHandlerInstance(this);
 
 //        TODO: 设计这部分拦截器的实现
 //        state.addInterceptor(InternalEntryType.TYPE_SCALE_PARTITIONS, this::scalePartitions);
@@ -158,9 +175,22 @@ public class StateActor extends ActorBase {
     protected ServerMetadata createServerMetadata() {
         ServerMetadata serverMetadata = new ServerMetadata();
         serverMetadata.setInitialized(true);
-        serverMetadata.setThisServer(uri);
+        serverMetadata.setThisServer(localUri);
         serverMetadata.setCommitIndex(0L);
         return serverMetadata;
+    }
+
+    private final Actor actor = new Actor("State");
+
+    public Actor getActor() {
+        return actor;
+    }
+    public URI getServerUri() {
+        return localUri;
+    }
+
+    public RaftState getState() {
+        return this;
     }
 
     public  static  class  InitRequest {
@@ -192,6 +222,7 @@ public class StateActor extends ActorBase {
             return preferredLeader;
         }
     }
+    @ActorListener
     private void init (InitRequest request) {
         try {
             doInit(request.getUri(), request.getVoters(), request.getUserPartitions(), request.getPreferredLeader());
@@ -211,7 +242,7 @@ public class StateActor extends ActorBase {
             }
 
             ReservedPartition.validatePartitions(userPartitions);
-            this.uri = uri;
+            this.localUri = uri;
             Set<Integer> partitions = new HashSet<>(userPartitions);
             partitions.add(INTERNAL_PARTITION);
             partitions.addAll(IntStream.range(TRANSACTION_PARTITION_START, TRANSACTION_PARTITION_START + TRANSACTION_PARTITION_COUNT).boxed().collect(Collectors.toSet()));
@@ -221,6 +252,12 @@ public class StateActor extends ActorBase {
             metadataPersistence.save(metadataFile(), lastSavedServerMetadata);
     }
 
+    @Override
+    public NavigableMap<Long, Snapshot> getSnapshots() {
+        return Collections.unmodifiableNavigableMap(snapshots);
+    }
+
+    @Override
     public boolean isInitialized() {
         try {
             ServerMetadata metadata = metadataPersistence.load(metadataFile(), ServerMetadata.class);
@@ -230,11 +267,37 @@ public class StateActor extends ActorBase {
         }
     }
 
-    private void recover() {
+    @Override
+    public URI getLocalUri() {
+        return localUri;
+    }
+
+    @Override
+    public URI getLeaderUri() {
+        return leaderUri;
+    }
+
+    @Override
+    public int getTerm() {
+        return term;
+    }
+
+    @Override
+    public RaftServer.Roll getRole() {
+        return roll;
+    }
+
+    @Override
+    public long commitIndex() {
+        return 0;
+    }
+
+    @ActorListener
+    private void recover(ActorMsg msg) {
 
         try {
             doRecover();
-            send("Journal", "recover",
+            actor.send("Journal", "recover",
                     new JournalActor.RecoverJournalRequest(
                             state.getPartitions(),
                             snapshots.firstEntry().getValue().getJournalSnapshot(),
@@ -288,9 +351,117 @@ public class StateActor extends ActorBase {
     }
 
     protected void onMetadataRecovered(ServerMetadata metadata) {
-        this.uri = metadata.getThisServer();
+        this.localUri = metadata.getThisServer();
     }
 
+    @ActorListener
+    private void setConfigState(ActorMsg msg) {
+        ConfigState configState = msg.getPayload();
+        this.state.setConfigState(configState);
+        actor.reply(msg, null);
+    }
+    @ActorListener(payload = true, response = true)
+    public QueryStateResponse queryServerState(QueryStateRequest request) {
+        // TODO
+        return null;
+    }
+
+    @ActorListener(payload = true, response = true)
+    public QueryStateResponse queryClusterState(QueryStateRequest request) {
+        // TODO
+        return null;
+    }
+    @ActorListener(payload = true, response = true, topic = "lastApplied")
+    private LastAppliedResponse lastAppliedListener() {
+        return new LastAppliedResponse(state.lastApplied());
+    }
+    @Override
+    public Long lastApplied() {
+        return state.lastApplied();
+    }
+    @ActorListener(payload = true, response = true)
+    private QueryStateResponse querySnapshot(QueryStateRequest request) {
+        // TODO
+        return null;
+    }
+
+    @ActorListener(topic = "getSnapshots", payload = true, response = true)
+    private GetSnapshotsResponse doGetSnapshots() {
+        // TODO
+        return  null;
+    }
+    @ActorListener(payload = true, response = true)
+    private GetServerStateResponse getServerState(GetServerStateRequest request) {
+        // TODO
+        return null;
+    }
+
+    @ActorListener(payload = true, response = true)
+    private ConvertRollResponse convertRoll(ConvertRollRequest request) {
+        this.roll = request.getRoll();
+        return new ConvertRollResponse();
+    }
+    @ActorListener(payload = true)
+    private void maybeRollbackConfig(ActorMsg msg) {
+        ConfigState voterStateMachine = state.getConfigState();
+        AsyncAppendEntriesRequest request = msg.getPayload();
+        long startIndex = request.getPrevLogIndex() + 1;
+        if (startIndex < journal.maxIndex()) {
+
+            long index = journal.maxIndex(INTERNAL_PARTITION);
+            long startOffset = journal.readOffset(startIndex);
+            while (--index >= journal.minIndex(INTERNAL_PARTITION)) {
+                JournalEntry entry = journal.readByPartition(INTERNAL_PARTITION, index);
+                if (entry.getOffset() < startOffset) {
+                    break;
+                }
+                InternalEntryType reservedEntryType = InternalEntriesSerializeSupport.parseEntryType(entry.getPayload().getBytes());
+                if (reservedEntryType == TYPE_UPDATE_VOTERS_S2) {
+                    UpdateVotersS2Entry updateVotersS2Entry = InternalEntriesSerializeSupport.parse(entry.getPayload().getBytes());
+                    voterStateMachine.rollbackToJointConsensus(updateVotersS2Entry.getConfigOld());
+                } else if (reservedEntryType == TYPE_UPDATE_VOTERS_S1) {
+                    voterStateMachine.rollbackToOldConfig();
+                }
+            }
+        }
+        actor.send("Journal","compareOrAppendRaw", msg);
+
+    }
+    @ActorListener(payload = true)
+    private void maybeUpdateNonLeaderConfig(ActorMsg msg) {
+        ConfigState voterStateMachine = state.getConfigState();
+        AsyncAppendEntriesRequest request = msg.getPayload();
+        List<byte[]> entries = request.getEntries();
+        try {
+            for (byte[] rawEntry : entries) {
+                JournalEntry entryHeader = journalEntryParser.parseHeader(rawEntry);
+                if (entryHeader.getPartition() == INTERNAL_PARTITION) {
+                    int headerLength = journalEntryParser.headerLength();
+                    InternalEntryType entryType = InternalEntriesSerializeSupport.parseEntryType(rawEntry, headerLength);
+                    if (entryType == TYPE_UPDATE_VOTERS_S1) {
+                        UpdateVotersS1Entry updateVotersS1Entry = InternalEntriesSerializeSupport.parse(rawEntry, headerLength, rawEntry.length - headerLength);
+
+                        voterStateMachine.toJointConsensus(updateVotersS1Entry.getConfigOld(), updateVotersS1Entry.getConfigNew(),
+                                () -> null);
+                    } else if (entryType == TYPE_UPDATE_VOTERS_S2) {
+                        voterStateMachine.toNewConfig(() -> null);
+                    }
+                }
+            }
+            actor.send("Journal","commit", msg);
+        } catch (Exception e) {
+            logger.warn("Update non leader config failed!", e);
+            actor.reply(msg, new AsyncAppendEntriesResponse(e));
+        }
+    }
+    @ActorListener(payload = true, consumer = true)
+    private void onJournalCommit(RaftJournal journal) {
+        long offset = journal.readOffset(state.lastApplied());
+        JournalEntry entryHeader = journal.readEntryHeaderByOffset(offset);
+        StateResult stateResult = state.applyEntry(entryHeader, new EntryFutureImpl(journal, offset), journal);
+        // afterStateChanged(stateResult.getUserResult());
+        actor.pubMsg("onStateChange", stateResult);
 
 
+    }
 }

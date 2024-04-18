@@ -13,6 +13,9 @@
  */
 package io.journalkeeper.core.api;
 
+import io.journalkeeper.exceptions.IndexOverflowException;
+import io.journalkeeper.exceptions.IndexUnderflowException;
+
 import java.util.List;
 import java.util.Set;
 
@@ -37,18 +40,21 @@ public interface RaftJournal {
 
     /**
      * 最小全局索引
+     *
      * @return 最小全局索引
      */
     long minIndex();
 
     /**
      * 最大全局索引
+     *
      * @return 最大全局索引
      */
     long maxIndex();
 
     /**
      * 分区最小索引
+     *
      * @param partition 分区
      * @return 分区最小索引
      */
@@ -56,6 +62,7 @@ public interface RaftJournal {
 
     /**
      * 分区最大索引
+     *
      * @param partition 分区
      * @return 分区最大索引
      */
@@ -63,23 +70,26 @@ public interface RaftJournal {
 
     /**
      * 根据分区索引读取Journal
+     *
      * @param partition 分区
-     * @param index 分区索引
+     * @param index     分区索引
      * @return See {@link JournalEntry}
      */
     JournalEntry readByPartition(int partition, long index);
 
     /**
      * 根据分区索引批量读取Journal
+     *
      * @param partition 分区
-     * @param index 分区索引
-     * @param maxSize 建议返回的最大数量
+     * @param index     分区索引
+     * @param maxSize   建议返回的最大数量
      * @return See {@link JournalEntry}
      */
     List<JournalEntry> batchReadByPartition(int partition, long index, int maxSize);
 
     /**
      * 使用全局索引读取Journal
+     *
      * @param index 全局索引
      * @return See {@link JournalEntry}
      */
@@ -87,7 +97,8 @@ public interface RaftJournal {
 
     /**
      * 使用全局索引读取Journal
-     * @param index 全局索引
+     *
+     * @param index   全局索引
      * @param maxSize 建议返回的最大数量
      * @return See {@link JournalEntry}
      */
@@ -95,6 +106,7 @@ public interface RaftJournal {
 
     /**
      * 根据JournalEntry存储时间获取索引。
+     *
      * @param partition 分区
      * @param timestamp 查询时间，单位MS
      * @return 如果找到，返回最后一条 “存储时间 不大于 timestamp” JournalEntry的索引。
@@ -106,7 +118,34 @@ public interface RaftJournal {
 
     /**
      * 获取当前所有分区，含保留分区。
+     *
      * @return 当前所有分区
      */
     Set<Integer> getPartitions();
+
+    /**
+     * 批量读取StorageEntry
+     *
+     * @param index 起始索引位置
+     * @param size  期望读取的条数
+     * @return 未反序列化的StorageEntry列表。
+     * @throws IndexUnderflowException 如果 index 小于 minIndex()
+     * @throws IndexOverflowException  如果index 不小于 maxIndex()
+     */
+    List<byte[]> readRaw(long index, int size);
+
+    /**
+     * 读取指定索引位置上Entry的Term。
+     * @param index 索引位置。
+     * @return Term 任期
+     * @throws IndexUnderflowException 如果 index 小于 minIndex()
+     * @throws IndexOverflowException 如果index 不小于 maxIndex()
+     */
+    int getTerm(long index);
+
+    long readOffset(long startIndex);
+
+    JournalEntry readEntryHeaderByOffset(long offset);
+
+    JournalEntry readByOffset(long offset);
 }
