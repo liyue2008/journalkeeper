@@ -9,6 +9,8 @@ import io.journalkeeper.utils.actor.ActorMsg;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.List;
+
 
 public class FollowerActor {
     private static final Logger logger = LoggerFactory.getLogger( FollowerActor.class );
@@ -51,19 +53,31 @@ public class FollowerActor {
         boolean notHeartBeat = null != request.getEntries() && !request.getEntries().isEmpty();
         // Reply false if log does not contain an entry at prevLogIndex
         // whose term matches prevLogTerm
+        final long startIndex = request.getPrevLogIndex() + 1;
+        final List<byte[]> entries = request.getEntries();
         if (notHeartBeat &&
                 (request.getPrevLogIndex() < journal.minIndex() - 1 ||
                         request.getPrevLogIndex() >= journal.maxIndex() ||
                         journal.getTerm(request.getPrevLogIndex()) != request.getPrevLogTerm())
         ) {
-            actor.reply(msg, new AsyncAppendEntriesResponse(false, request.getPrevLogIndex() + 1,
+            actor.reply(msg, new AsyncAppendEntriesResponse(false, startIndex,
                     request.getTerm(), request.getEntries().size()));
         } else {
             // 如果要删除部分未提交的日志，并且待删除的这部分存在配置变更日志，则需要回滚配置
-            actor.send("State", "maybeRollbackConfig", msg);
+            actor.sendThen("State", "maybeRollbackConfig", startIndex)
+                    .thenCompose(ignored -> actor.sendThen("Journal","compareOrAppendRaw", entries, request.getPrevLogIndex() + 1))
+                    .thenCompose(ignored -> actor.sendThen("State", "maybeUpdateNonLeaderConfig", msg))
+                    .thenCompose(ignored -> actor.sendThen("Journal", "commit", request.getLeaderCommit()))
+                    .thenRun(() -> this.onCommit(msg))
+                    .exceptionally(t -> {
+                        actor.reply(msg, new AsyncAppendEntriesResponse(t));
+                        return null;
+                    });
         }
     }
-    @ActorListener(payload = true)
+
+
+
     private void onCommit(ActorMsg msg) {
         AsyncAppendEntriesRequest request = msg.getPayload();
         if (leaderMaxIndex < request.getMaxIndex()) {

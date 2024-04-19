@@ -35,10 +35,12 @@ class ActorResponseSupport {
         inbox.addTopicHandlerFunction(RESPONSE, this::processResponse);
     }
 
-    <T> CompletableFuture<T> send(String addr, String topic, Object payload){
+    <T> CompletableFuture<T> send(String addr, String topic){
+        return send(addr, topic, new Object[]{});
+    }
+    <T> CompletableFuture<T> send(String addr, String topic, Object... payloads){
         CompletableFuture<T> future = new CompletableFuture<>();
-
-        ActorMsg request = this.outbox.send(addr, topic, payload);
+        ActorMsg request = this.outbox.send(addr, topic, payloads);
         responseFutures.put(request, future);
         return future;
     }
@@ -49,6 +51,10 @@ class ActorResponseSupport {
 
     void setHandlerInstance(Object handlerInstance) {
         this.handlerInstance = handlerInstance;
+    }
+
+    void replyException(ActorMsg request, Throwable throwable) {
+        this.outbox.send(request.getSender(), RESPONSE, new ActorResponse(request.getTopic(), request.getSequentialId(), throwable));
     }
 
     void reply(ActorMsg request, Object result) {

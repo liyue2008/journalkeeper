@@ -10,6 +10,7 @@ import io.journalkeeper.rpc.server.AsyncAppendEntriesResponse;
 import io.journalkeeper.utils.actor.Actor;
 import io.journalkeeper.utils.actor.ActorListener;
 import io.journalkeeper.utils.actor.ActorMsg;
+import io.journalkeeper.utils.actor.ActorScheduler;
 import io.journalkeeper.utils.config.Config;
 import io.journalkeeper.utils.spi.ServiceSupport;
 import org.slf4j.Logger;
@@ -90,39 +91,36 @@ private static final Logger logger = LoggerFactory.getLogger( JournalActor.class
 
     @ActorListener(response = true, payload = true)
     private long append(List<JournalEntry> journalEntries) {
+        long position;
         if (journalEntries.size() == 1) {
-            return journal.append(journalEntries.get(0));
+            position = journal.append(journalEntries.get(0));
         } else {
             List<Long> positions = journal.append(journalEntries);
-            return positions.get(positions.size() - 1);
+            position = positions.get(positions.size() - 1);
         }
+        actor.pubMsg("onJournalAppend", this.getRaftJournal());
+        return position;
     }
-    @ActorListener(payload = true)
-    private void compareOrAppendRaw(ActorMsg msg) {
-        AsyncAppendEntriesRequest request = msg.getPayload();
-        long startIndex = request.getPrevLogIndex() + 1;
-        List<byte[]> entries = request.getEntries();
-        if (!entries.isEmpty()) {
-            journal.compareOrAppendRaw(request.getEntries(), startIndex);
-        }
-        actor.send("State", "maybeUpdateNonLeaderConfig", msg);
+    @ActorListener(payload = true , response = true)
+    private void compareOrAppendRaw(List<byte[]> entries, long startIndex) {
+        journal.compareOrAppendRaw(entries, startIndex);
     }
 
-    @ActorListener(payload = true)
-    private void commit(ActorMsg msg) {
-        AsyncAppendEntriesRequest request = msg.getPayload();
-        try {
-            if (request.getLeaderCommit() > journal.commitIndex()) {
-                journal.commit(Math.min(request.getLeaderCommit(), journal.maxIndex()));
-//            threads.wakeupThread(threadName(STATE_MACHINE_THREAD));
-            }
-        } catch (Exception e) {
-           logger.warn("Commit failed!");
-           actor.reply(msg, new AsyncAppendEntriesResponse(e));
-           return;
+    @ActorListener(payload = true, response = true)
+    private void commit(long commitIndex) throws IOException {
+
+        if (commitIndex > journal.commitIndex()) {
+            journal.commit(Math.min(commitIndex, journal.maxIndex()));
+            actor.pubMsg("onJournalCommit", this.getRaftJournal());
         }
-        actor.send("Follower", "onCommit", msg);
-        actor.pubMsg("onJournalCommit", this.getRaftJournal());
+
+    }
+    @ActorScheduler(interval = 100L)
+    private void flush() {
+        long flushCount = journal.flushOnce();
+        if (flushCount > 0) {
+            actor.pubMsg("onJournalFlush", this.journal.maxIndex());
+        }
     }
 
     public Actor getActor() {

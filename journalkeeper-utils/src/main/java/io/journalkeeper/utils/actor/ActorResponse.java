@@ -6,11 +6,20 @@ public class ActorResponse {
     private final long sequentialId;
 
     private final Object result;
+    private final Throwable throwable;
 
     public ActorResponse(String topic, long sequentialId, Object result) {
         this.topic = topic;
         this.sequentialId = sequentialId;
         this.result = result;
+        this.throwable = null;
+    }
+
+    public ActorResponse(String topic, long sequentialId, Throwable throwable) {
+        this.topic = topic;
+        this.sequentialId = sequentialId;
+        this.result = null;
+        this.throwable = throwable;
     }
 
 
@@ -28,12 +37,17 @@ public class ActorResponse {
         return (T) result;
     }
 
+    public Throwable getThrowable() {
+        return throwable;
+    }
+
     @Override
     public String toString() {
         return "ActorResponse{" +
                 "topic='" + topic + '\'' +
                 ", sequentialId=" + sequentialId +
                 ", result=" + result +
+                ", throwable=" + throwable +
                 '}';
     }
 }

@@ -53,7 +53,7 @@ public class RaftServerActor implements  RaftServer {
 
         StateActor stateActor = new StateActor(roll, stateFactory, journalEntryParser, journalActor.getRaftJournal(),config, properties);
         VoterActor voterActor = new VoterActor(journalActor.getRaftJournal());
-        LeaderActor leaderActor = new LeaderActor(journalEntryParser, stateActor.getState(), voterActor.getRaftVoter(), config);
+        LeaderActor leaderActor = new LeaderActor(journalEntryParser, journalActor.getRaftJournal(), stateActor.getState(), voterActor.getRaftVoter(), config);
 
         this.context = new ServerContext(properties, config, stateActor.getState(), journalActor.getRaftJournal(), voterActor.getRaftVoter());
         PostOffice postOffice = context.getPostOffice();

@@ -43,6 +43,7 @@ class ReplicationDestination {
     private long lastHeartbeatResponseTime;
     private long lastHeartbeatRequestTime = 0L;
 
+    private boolean committed = true;
 
 
     ReplicationDestination(URI uri, long nextIndex, Actor actor, RaftState state, RaftJournal journal) {
@@ -63,12 +64,9 @@ class ReplicationDestination {
         Map.Entry<Long, Snapshot> fistSnapShotEntry = state.getSnapshots().firstEntry();
         maybeInstallSnapshotFirst(fistSnapShotEntry);
 
-        if (installSnapshotInProgress) {
-            return;
-        }
         // 读取需要复制的Entry
         List<byte[]> entries;
-        if (nextIndex < maxIndex) { // 复制
+        if (!installSnapshotInProgress && nextIndex < maxIndex) { // 复制
             entries = journal.readRaw(nextIndex, this.replicationBatchSize);
         } else { // 心跳
             entries = Collections.emptyList();
@@ -88,18 +86,29 @@ class ReplicationDestination {
         lastHeartbeatRequestTime = System.currentTimeMillis();
     }
 
+
     private void handleAppendEntriesResponse(Object resp, int entrySize, long startIndex) {
-        if (resp instanceof Exception) {
+        if (null == resp) {
+            // 没收到响应或者请求失败
+            // 等下一个心跳超时之后，再进入这个方法会自动重试
+        } else if (resp instanceof Exception) {
             Exception e = (Exception) resp;
             logger.warn("Replication execution exception, from {} to {}, cause: {}.", state.getLocalUri(), uri, null == e.getCause()? e.getMessage() : e.getCause().getMessage());
         } else {
+
+
             AsyncAppendEntriesResponse response = (AsyncAppendEntriesResponse) resp;
+            if(!response.success()) {
+                return;
+            }
+            // 成功收到响应响应
             lastHeartbeatResponseTime = System.currentTimeMillis();
             if (response.isSuccess()) { // 复制成功
                 if (entrySize > 0) {
                     nextIndex += entrySize;
                     matchIndex = nextIndex;
-//                 Leader.this.threads.wakeupThread(Leader.this.threadName(LEADER_COMMIT_THREAD));
+                    committed = false;
+                    actor.send("Leader","commit",null);
                 }
             } else {
                 // 不匹配，回退
@@ -193,6 +202,14 @@ class ReplicationDestination {
 
     long getLastHeartbeatRequestTime() {
         return lastHeartbeatRequestTime;
+    }
+
+    public boolean isCommitted() {
+        return committed;
+    }
+
+    public void setCommitted(boolean committed) {
+        this.committed = committed;
     }
 
     @Override

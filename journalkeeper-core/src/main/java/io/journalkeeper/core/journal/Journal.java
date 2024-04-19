@@ -831,16 +831,7 @@ public class Journal implements RaftJournal, Flushable, Closeable {
         do {
             if(readWriteLock.readLock().tryLock()) {
                 try {
-                    flushed = Stream.concat(Stream.of(journalPersistence, indexPersistence), partitionMap.values().stream())
-                            .filter(p -> p.flushed() < p.max())
-                            .peek(p -> {
-                                try {
-                                    p.flush();
-                                } catch (IOException e) {
-                                    logger.warn("Flush {} exception: ", p.getBasePath(), e);
-                                    throw new JournalException(e);
-                                }
-                            }).count();
+                    flushed = flushOnce();
                 } finally {
                     readWriteLock.readLock().unlock();
                 }
@@ -848,6 +839,19 @@ public class Journal implements RaftJournal, Flushable, Closeable {
                 flushed = 0;
             }
         } while (flushed > 0);
+    }
+
+    long flushOnce() {
+        return Stream.concat(Stream.of(journalPersistence, indexPersistence), partitionMap.values().stream())
+                .filter(p -> p.flushed() < p.max())
+                .peek(p -> {
+                    try {
+                        p.flush();
+                    } catch (IOException e) {
+                        logger.warn("Flush {} exception: ", p.getBasePath(), e);
+                        throw new JournalException(e);
+                    }
+                }).count();
     }
 
     boolean isDirty() {

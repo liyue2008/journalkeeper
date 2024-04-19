@@ -22,9 +22,11 @@ class ActorOutbox {
         this.msgQueue = new ArrayBlockingQueue<>(capacity);
         this.myAddr = myAddr;
     }
-
-    ActorMsg send(String addr, String topic, Object payload){
-        ActorMsg actorMsg = new ActorMsg(msgId.getAndIncrement(), myAddr, addr, topic, payload);
+    ActorMsg send(String addr, String topic){
+        return send(addr, topic, new Object[] {});
+    }
+    ActorMsg send(String addr, String topic, Object... payloads){
+        ActorMsg actorMsg = new ActorMsg(msgId.getAndIncrement(), myAddr, addr, topic, payloads);
         msgQueue.add(actorMsg);
         ring();
         return actorMsg;

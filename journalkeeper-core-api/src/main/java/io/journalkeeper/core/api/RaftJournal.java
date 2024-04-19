@@ -148,4 +148,6 @@ public interface RaftJournal {
     JournalEntry readEntryHeaderByOffset(long offset);
 
     JournalEntry readByOffset(long offset);
+
+    long commitIndex();
 }

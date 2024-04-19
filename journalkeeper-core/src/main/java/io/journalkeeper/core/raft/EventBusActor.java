@@ -37,21 +37,21 @@ public class EventBusActor {
 
     }
 
-    @ActorListener(payload = true, response = true)
+    @ActorListener(response = true)
     private RemovePullWatchResponse removePullWatch(RemovePullWatchRequest request) {
         // TODO
 
         return null;
     }
 
-    @ActorListener(payload = true, response = true)
+    @ActorListener(response = true)
     private PullEventsResponse pullEvents(PullEventsRequest request) {
         // TODO
 
         return null;
     }
 
-    @ActorListener(payload = true, consumer = true)
+    @ActorListener(consumer = true)
     private void onStateChange(StateResult stateResult) {
         OnStateChangeEvent event = new OnStateChangeEvent(stateResult.getLastApplied());
         byte [] serializedEvent =  InternalEntriesSerializeSupport.serialize(event);

@@ -1,5 +1,7 @@
 package io.journalkeeper.utils.actor;
 
+import java.util.Arrays;
+
 /**
  * Actor之间传递的消息消息
  */
@@ -12,14 +14,14 @@ public class ActorMsg {
     private final String receiver;
 
     private final String topic;
-    private final Object payload;
+    private final Object[] payloads;
 
-    public ActorMsg(long sequentialId, String sender, String receiver, String topic, Object payload) {
+    public ActorMsg(long sequentialId, String sender, String receiver, String topic, Object... payloads) {
         this.sequentialId = sequentialId;
         this.sender = sender;
         this.receiver = receiver;
         this.topic = topic;
-        this.payload = payload;
+        this.payloads = payloads;
     }
 
     public long getSequentialId() {
@@ -35,8 +37,16 @@ public class ActorMsg {
     }
 
     public <T> T getPayload() {
+        return getPayload(0);
+    }
+
+    public Object[] getPayloads() {
+        return payloads;
+    }
+
+    public <T> T getPayload(int index) {
         //noinspection unchecked
-        return (T) payload;
+        return (T) payloads[index];
     }
 
     public String getTopic() {
@@ -50,7 +60,7 @@ public class ActorMsg {
                 ", sender='" + sender + '\'' +
                 ", receiver='" + receiver + '\'' +
                 ", topic='" + topic + '\'' +
-                ", payload=" + payload +
+                ", payloads=" + Arrays.toString(payloads) +
                 '}';
     }
 }

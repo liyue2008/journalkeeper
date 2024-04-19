@@ -3,20 +3,22 @@ package io.journalkeeper.core.raft;
 import io.journalkeeper.core.api.*;
 import io.journalkeeper.core.entry.internal.InternalEntriesSerializeSupport;
 import io.journalkeeper.core.entry.internal.InternalEntryType;
+import io.journalkeeper.core.state.ConfigState;
+import io.journalkeeper.core.state.Snapshot;
 import io.journalkeeper.core.transaction.JournalTransactionManager;
+import io.journalkeeper.exceptions.IndexUnderflowException;
 import io.journalkeeper.exceptions.NotLeaderException;
-import io.journalkeeper.metric.JMetric;
 import io.journalkeeper.rpc.client.*;
 import io.journalkeeper.rpc.server.DisableLeaderWriteRequest;
 import io.journalkeeper.rpc.server.DisableLeaderWriteResponse;
 import io.journalkeeper.utils.actor.*;
 import io.journalkeeper.utils.config.Config;
+import io.journalkeeper.utils.state.StateServer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeoutException;
 
 import static io.journalkeeper.core.api.RaftJournal.INTERNAL_PARTITION;
@@ -32,7 +34,7 @@ public class LeaderActor {
     private final JournalTransactionManager journalTransactionManager = null;
 
     private final Actor actor = new Actor("Leader");
-
+    private final RaftJournal journal;
     private final RaftState state;
 
     private final RaftVoter voter;
@@ -40,26 +42,36 @@ public class LeaderActor {
     private final Config config;
 
     private boolean isWritable = true;
+    private long disableWriteTimeout = 0L;
 
     private final List<WaitingResponse> waitingResponses = new LinkedList<>();
 
     private final List<ReplicationDestination> replicationDestinations = new ArrayList<>();
 
 
-    public LeaderActor(JournalEntryParser journalEntryParser, RaftState state, RaftVoter voter, Config config) {
+    public LeaderActor(JournalEntryParser journalEntryParser, RaftJournal journal, RaftState state, RaftVoter voter, Config config) {
         this.journalEntryParser = journalEntryParser;
+        this.journal = journal;
         this.state = state;
         this.voter = voter;
         this.config = config;
         actor.setHandlerInstance(this);
     }
+
     @ActorListener
     private void updateClusterState(ActorMsg msg) {
+        // 1. Leader.updateClusterState
+        //      1.1. Journal.append
+        // 2.
+        //      2.1 Journal.flush
+        //      2.2 Leader.replication
+        // 3. (RPC) Follower.asyncAppendEntries
+        // 4. Leader.commit
         UpdateClusterStateRequest request = msg.getPayload();
         if (voter.getVoterState() != VoterState.LEADER) {
             actor.reply(msg, new UpdateClusterStateResponse(new NotLeaderException(getClusterLeader())));
         }
-        if (!isWritable) {
+        if (!checkWriteable()) {
             actor.reply(msg, new UpdateClusterStateResponse(new IllegalStateException("Server disabled temporarily.")));
         }
         if (request.getResponseConfig() == ResponseConfig.RECEIVE) {
@@ -74,11 +86,119 @@ public class LeaderActor {
         List<JournalEntry> journalEntries = requestToJournalEntries(request);
 
         actor.<Long>sendThen("Journal", "append", journalEntries)
-                .thenAccept(position ->
-                        this.waitingResponses.add(
-                                new WaitingResponse(msg, position - journalEntries.size() + 1, position + 1, config.get("rpc_timeout_ms"), actor)
-                        )
+                .thenAccept(position -> {
+                            this.waitingResponses.add(
+                                    new WaitingResponse(msg, position - journalEntries.size() + 1, position + 1, config.get("rpc_timeout_ms"), actor)
+                            );
+                            switch (request.getResponseConfig()) {
+                                case PERSISTENCE:
+                                    actor.send("Journal", "flush", null);
+                                    break;
+                                case REPLICATION:
+                                    actor.send("Leader", "replication", null);
+                                    break;
+                                case ALL:
+                                    actor.send("Journal", "flush", null);
+                                    actor.send("Leader", "replication", null);
+                                    break;
+                                default:
+                                    // nothing to do.
+                            }
+                        }
                 );
+
+    }
+    /**
+     * 对于每一个AsyncAppendRequest RPC请求，当收到成功响应的时需要更新repStartIndex、matchIndex和commitIndex。
+     * 由于接收者按照日志的索引位置串行处理请求，一般情况下，收到的响应也是按照顺序返回的，但是考虑到网络延时和数据重传，
+     * 依然不可避免乱序响应的情况。LEADER在处理响应时需要遵循：
+     * <p>
+     * 1. 对于所有响应，先比较返回值中的term是否与当前term一致，如果不一致说明任期已经变更，丢弃响应，
+     * 2. LEADER 反复重试所有term一致的超时和失败请求（考虑到性能问题，可以在每次重试前加一个时延）；
+     * 3. 对于返回失败的请求，如果这个请求是所有在途请求中日志位置最小的（repStartIndex == logIndex），
+     * 说明接收者的日志落后于repStartIndex，这时LEADER需要回退，再次发送AsyncAppendRequest RPC请求，
+     * 直到找到FOLLOWER与LEADER相同的位置。
+     * 4. 对于成功的响应，需要按照日志索引位置顺序处理。规定只有返回值中的logIndex与repStartIndex相等时，
+     * 才更新repStartIndex和matchIndex，否则反复重试直到满足条件；
+     * 5. 如果存在一个索引位置N，这个N是所有满足如下所有条件位置中的最大值，则将commitIndex更新为N。
+     * 5.1 超过半数的matchIndex都大于等于N
+     * 5.2 N > commitIndex
+     * 5.3 log[N].term == currentTerm
+     */
+    @ActorScheduler(interval = 100L)
+    private void commit() {
+        boolean isAnyFollowerNextIndexUpdated = false;
+        if (
+                journal.commitIndex() < journal.maxIndex() && (
+                        replicationDestinations.isEmpty() ||  (isAnyFollowerNextIndexUpdated = this.replicationDestinations.stream()
+                .noneMatch(ReplicationDestination::isCommitted))
+                )) {
+            long N = calcuateN(isAnyFollowerNextIndexUpdated);
+            if (N > journal.commitIndex() && getTerm(N - 1) == getCurrentTerm()) {
+                if (logger.isDebugEnabled()) {
+                    logger.debug("Set commitIndex {} to {}, {}.", journal.commitIndex(), N, voterInfo());
+                }
+                actor.send("Journal", "commit", N);
+//                onCommitted();
+            }
+        }
+    }
+
+    private String voterInfo() {
+        return String.format("voterState: %s, currentTerm: %d, minIndex: %d, " +
+                        "maxIndex: %d, commitIndex: %d, lastApplied: %d, uri: %s",
+                VoterState.LEADER, getCurrentTerm(), journal.minIndex(),
+                journal.maxIndex(), journal.commitIndex(), state.lastApplied(), state.getLocalUri().toString());
+    }
+    private int getTerm(long index) {
+        try {
+            return journal.getTerm(index);
+        } catch (IndexUnderflowException e) {
+            NavigableMap<Long, Snapshot> snapshots = state.getSnapshots();
+            if (index + 1 == snapshots.firstKey()) {
+                return snapshots.firstEntry().getValue().lastIncludedTerm();
+            } else {
+                throw e;
+            }
+        }
+    }
+
+    private long calcuateN(boolean isAnyFollowerNextIndexUpdated) {
+        long N = 0L;
+        if (this.replicationDestinations.isEmpty()) {
+            N = journal.maxIndex();
+        } else {
+            if (isAnyFollowerNextIndexUpdated) {
+                if (state.isJointConsensus()) {
+                    long[] sortedMatchIndexInOldConfig = replicationDestinations.stream()
+                            .filter(follower -> state.getConfigOld().contains(follower.getUri()))
+                            .mapToLong(ReplicationDestination::getMatchIndex)
+                            .sorted().toArray();
+                    long nInOldConfig = sortedMatchIndexInOldConfig.length > 0 ?
+                            sortedMatchIndexInOldConfig[sortedMatchIndexInOldConfig.length / 2] : journal.maxIndex();
+
+                    long[] sortedMatchIndexInNewConfig = replicationDestinations.stream()
+                            .filter(follower -> state.getConfigNew().contains(follower.getUri()))
+                            .mapToLong(ReplicationDestination::getMatchIndex)
+                            .sorted().toArray();
+                    long nInNewConfig = sortedMatchIndexInNewConfig.length > 0 ?
+                            sortedMatchIndexInNewConfig[sortedMatchIndexInNewConfig.length / 2] : journal.maxIndex();
+
+                    N = Math.min(nInNewConfig, nInOldConfig);
+
+                } else {
+                    long[] sortedMatchIndex = replicationDestinations.stream()
+                            .mapToLong(ReplicationDestination::getMatchIndex)
+                            .sorted().toArray();
+                    if (sortedMatchIndex.length > 0) {
+                        N = sortedMatchIndex[sortedMatchIndex.length / 2];
+                    }
+                }
+
+            }
+        }
+
+        return N;
     }
     @ActorListener(consumer = true, payload = true)
     private void onStateChange(StateResult stateResult) {
@@ -86,12 +206,12 @@ public class LeaderActor {
     }
 
     @ActorListener(consumer = true, payload = true)
-    private void onJournalFlush(long position) {
-        this.waitingResponses.removeIf(waitingResponse -> waitingResponse.getToPosition() <= position && waitingResponse.countdownFlush());
+    private void onJournalFlush(long journalFlushIndex) {
+        this.waitingResponses.removeIf(waitingResponse -> waitingResponse.getToPosition() <= journalFlushIndex && waitingResponse.countdownFlush());
     }
 
-    @ActorListener(payload = true, consumer = true)
-    private void onJournalAppend(long position) {
+    @ActorScheduler(interval = 100)
+    private void replication() {
         this.replicationDestinations.forEach(ReplicationDestination::replication);
     }
     @ActorListener
@@ -150,107 +270,33 @@ public class LeaderActor {
         return null;
     }
 
+    private boolean checkWriteable() {
+        if (isWritable) {
+            return true;
+        } else {
+            if (System.currentTimeMillis() > disableWriteTimeout) {
+                isWritable = true;
+                return true;
+            } else {
+                return false;
+            }
+        }
+    }
+
+    @ActorListener(payload = true, response = true)
     private DisableLeaderWriteResponse disableLeaderWrite(DisableLeaderWriteRequest request) {
-        // TODO
-        return null;
-    }
-
-    private static class UpdateStateRequestResponse {
-        private final UpdateClusterStateRequest request;
-        private final ResponseFuture responseFuture;
-        private final long start = System.nanoTime();
-
-        UpdateStateRequestResponse(UpdateClusterStateRequest request, JMetric metric) {
-            this.request = request;
-            this.responseFuture = new ResponseFuture(request.getResponseConfig(), request.getRequests().size());
-            if (null != metric) {
-                responseFuture.getResponseFuture()
-                        .thenRun(() -> metric.mark(() -> System.nanoTime() - start, () -> request.getRequests().stream().mapToLong(r -> r.getEntry().length).sum()));
-            }
-
+        if (voter.getVoterState() != VoterState.LEADER) {
+            return new DisableLeaderWriteResponse(new NotLeaderException(getClusterLeader()));
         }
-
-        UpdateClusterStateRequest getRequest() {
-            return request;
+        long timeoutMs = request.getTimeoutMs();
+        int term = request.getTerm();
+        if (getCurrentTerm() != term) {
+            return  new DisableLeaderWriteResponse(new IllegalStateException(
+                    String.format("Term not matched! Term in leader: %d, term in request: %d", getCurrentTerm(), term)));
         }
-
-        ResponseFuture getResponseFuture() {
-            return this.responseFuture;
-        }
-    }
-
-    private static class ResponseFuture {
-        private final CompletableFuture<UpdateClusterStateResponse> responseFuture;
-        private final CompletableFuture<UpdateClusterStateResponse> flushFuture;
-        private final CompletableFuture<UpdateClusterStateResponse> replicationFuture;
-        private int flushCountDown, replicationCountDown;
-        private List<byte[]> results;
-
-        ResponseFuture(ResponseConfig responseConfig, int count) {
-            this.flushFuture = new CompletableFuture<>();
-            this.replicationFuture = new CompletableFuture<>();
-
-            switch (responseConfig) {
-                case PERSISTENCE:
-                    responseFuture = flushFuture;
-                    break;
-                case ALL:
-                    responseFuture = new CompletableFuture<>();
-                    this.replicationFuture.whenComplete((replicationResponse, e) -> {
-                        if (null == e) {
-                            if (replicationResponse.success()) {
-                                this.flushFuture.whenComplete((flushResponse, t) -> {
-                                    if (null == t) {
-                                        if (flushResponse.success()) {
-                                            // 如果都成功，优先使用replication response，因为里面有执行状态机的返回值。
-                                            responseFuture.complete(replicationResponse);
-                                        } else {
-                                            // replication 成功，flush 失败，返回失败的flush response。
-                                            responseFuture.complete(flushResponse);
-                                        }
-                                    } else {
-                                        responseFuture.complete(new UpdateClusterStateResponse(t));
-                                    }
-                                });
-                            } else {
-                                responseFuture.complete(replicationResponse);
-                            }
-                        } else {
-                            responseFuture.complete(new UpdateClusterStateResponse(e));
-                        }
-                    });
-                    break;
-                default:
-                    responseFuture = replicationFuture;
-                    break;
-
-            }
-
-            flushCountDown = count;
-            replicationCountDown = count;
-            results = new ArrayList<>(count);
-        }
-
-        CompletableFuture<UpdateClusterStateResponse> getResponseFuture() {
-            return responseFuture;
-        }
-
-        void countDownFlush() {
-            if (--flushCountDown == 0) {
-                flushFuture.complete(new UpdateClusterStateResponse(Collections.emptyList(), -1L));
-            }
-        }
-
-        void putResult(byte[] result, long lastApplied) {
-            results.add(result);
-            if (--replicationCountDown == 0) {
-                replicationFuture.complete(new UpdateClusterStateResponse(results, lastApplied));
-            }
-        }
-
-        void completedExceptionally(Throwable throwable) {
-            responseFuture.completeExceptionally(throwable);
-        }
+        this.isWritable = false;
+        this.disableWriteTimeout = System.currentTimeMillis() + timeoutMs;
+        return new DisableLeaderWriteResponse(getCurrentTerm());
     }
 
     private static class WaitingResponse implements Comparable<WaitingResponse>{

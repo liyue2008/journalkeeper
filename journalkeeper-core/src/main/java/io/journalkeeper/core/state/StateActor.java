@@ -24,6 +24,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.URI;
+import java.nio.channels.ClosedByInterruptException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
@@ -379,6 +380,32 @@ public class StateActor implements RaftState{
     public Long lastApplied() {
         return state.lastApplied();
     }
+
+    @Override
+    public List<URI> getConfigNew() {
+        return state.getConfigState().getConfigNew();
+    }
+
+    @Override
+    public List<URI> getConfigOld() {
+        return state.getConfigState().getConfigOld();
+    }
+
+    @Override
+    public List<URI> getConfigAll() {
+        return state.getConfigState().voters();
+    }
+
+    @Override
+    public boolean isJointConsensus() {
+        return state.getConfigState().isJointConsensus();
+    }
+
+    @Override
+    public long getConfigEpoch() {
+        return state.getConfigState().getEpoch();
+    }
+
     @ActorListener(payload = true, response = true)
     private QueryStateResponse querySnapshot(QueryStateRequest request) {
         // TODO
@@ -401,11 +428,9 @@ public class StateActor implements RaftState{
         this.roll = request.getRoll();
         return new ConvertRollResponse();
     }
-    @ActorListener(payload = true)
-    private void maybeRollbackConfig(ActorMsg msg) {
+    @ActorListener(payload = true, response = true)
+    private void maybeRollbackConfig(long startIndex) {
         ConfigState voterStateMachine = state.getConfigState();
-        AsyncAppendEntriesRequest request = msg.getPayload();
-        long startIndex = request.getPrevLogIndex() + 1;
         if (startIndex < journal.maxIndex()) {
 
             long index = journal.maxIndex(INTERNAL_PARTITION);
@@ -424,35 +449,27 @@ public class StateActor implements RaftState{
                 }
             }
         }
-        actor.send("Journal","compareOrAppendRaw", msg);
-
     }
-    @ActorListener(payload = true)
-    private void maybeUpdateNonLeaderConfig(ActorMsg msg) {
+    @ActorListener(payload = true, response = true)
+    private void maybeUpdateNonLeaderConfig(List<byte[]> entries) throws Exception {
         ConfigState voterStateMachine = state.getConfigState();
-        AsyncAppendEntriesRequest request = msg.getPayload();
-        List<byte[]> entries = request.getEntries();
-        try {
-            for (byte[] rawEntry : entries) {
-                JournalEntry entryHeader = journalEntryParser.parseHeader(rawEntry);
-                if (entryHeader.getPartition() == INTERNAL_PARTITION) {
-                    int headerLength = journalEntryParser.headerLength();
-                    InternalEntryType entryType = InternalEntriesSerializeSupport.parseEntryType(rawEntry, headerLength);
-                    if (entryType == TYPE_UPDATE_VOTERS_S1) {
-                        UpdateVotersS1Entry updateVotersS1Entry = InternalEntriesSerializeSupport.parse(rawEntry, headerLength, rawEntry.length - headerLength);
 
-                        voterStateMachine.toJointConsensus(updateVotersS1Entry.getConfigOld(), updateVotersS1Entry.getConfigNew(),
-                                () -> null);
-                    } else if (entryType == TYPE_UPDATE_VOTERS_S2) {
-                        voterStateMachine.toNewConfig(() -> null);
-                    }
+        for (byte[] rawEntry : entries) {
+            JournalEntry entryHeader = journalEntryParser.parseHeader(rawEntry);
+            if (entryHeader.getPartition() == INTERNAL_PARTITION) {
+                int headerLength = journalEntryParser.headerLength();
+                InternalEntryType entryType = InternalEntriesSerializeSupport.parseEntryType(rawEntry, headerLength);
+                if (entryType == TYPE_UPDATE_VOTERS_S1) {
+                    UpdateVotersS1Entry updateVotersS1Entry = InternalEntriesSerializeSupport.parse(rawEntry, headerLength, rawEntry.length - headerLength);
+
+                    voterStateMachine.toJointConsensus(updateVotersS1Entry.getConfigOld(), updateVotersS1Entry.getConfigNew(),
+                            () -> null);
+                } else if (entryType == TYPE_UPDATE_VOTERS_S2) {
+                    voterStateMachine.toNewConfig(() -> null);
                 }
             }
-            actor.send("Journal","commit", msg);
-        } catch (Exception e) {
-            logger.warn("Update non leader config failed!", e);
-            actor.reply(msg, new AsyncAppendEntriesResponse(e));
         }
+
     }
     @ActorListener(payload = true, consumer = true)
     private void onJournalCommit(RaftJournal journal) {
@@ -463,5 +480,21 @@ public class StateActor implements RaftState{
         actor.pubMsg("onStateChange", stateResult);
 
 
+    }
+    @ActorScheduler(interval = 100L) // TODO: flush interval 需要从配置中读取
+    private void flush() {
+        try {
+            state.flush();
+            ServerMetadata metadata = createServerMetadata();
+            if (!metadata.equals(lastSavedServerMetadata)) {
+                metadataPersistence.save(metadataFile(), metadata);
+                lastSavedServerMetadata = metadata;
+            }
+            actor.pubMsg("onStateFlush", null);
+        } catch (ClosedByInterruptException ignored) {
+        } catch (Throwable e) {
+            logger.warn("Flush exception, commitIndex: {}, lastApplied: {}, server: {}: ",
+                    journal.commitIndex(), state.lastApplied(), localUri, e);
+        }
     }
 }
