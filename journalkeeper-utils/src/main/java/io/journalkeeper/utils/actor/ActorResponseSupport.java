@@ -1,27 +1,32 @@
 package io.journalkeeper.utils.actor;
 
+import io.journalkeeper.utils.actor.annotation.ActorListener;
+import io.journalkeeper.utils.actor.annotation.ActorResponseListener;
+import io.journalkeeper.utils.actor.annotation.ActorScheduler;
+import io.journalkeeper.utils.actor.annotation.ActorSubscriber;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 class ActorResponseSupport {
 
-    static final String RESPONSE = "response";
+    static final String RESPONSE = "actor_response";
 
     private static final Logger logger = LoggerFactory.getLogger( ActorResponseSupport.class );
 
-    private BiConsumer<ActorMsg, ActorResponse> defaultResponseHandler;
+    private Consumer<ActorResponse> defaultResponseHandler;
 
-    private final Map<String /* topic */, BiConsumer<ActorMsg, ActorResponse>> responseHandlers;
-
-    private final Map<Long, ActorMsg> ongoingRequests = new HashMap<>();
+    private final Map<String /* topic */, Consumer<ActorResponse>> responseHandlers;
 
     private Object handlerInstance;
 
@@ -45,56 +50,76 @@ class ActorResponseSupport {
         return future;
     }
 
-    void addTopicHandlerFunction(String topic, BiConsumer<ActorMsg, ActorResponse> handler) {
+    void addTopicHandlerFunction(String topic, Consumer<ActorResponse> handler) {
         responseHandlers.put(topic, handler);
     }
 
     void setHandlerInstance(Object handlerInstance) {
         this.handlerInstance = handlerInstance;
+        this.annotationListeners = ActorUtils.scanActionListeners(handlerInstance, ActorResponseListener.class);
     }
 
     void replyException(ActorMsg request, Throwable throwable) {
-        this.outbox.send(request.getSender(), RESPONSE, new ActorResponse(request.getTopic(), request.getSequentialId(), throwable));
+        this.outbox.send(request.getSender(), RESPONSE, new ActorResponse(request, throwable));
     }
 
     void reply(ActorMsg request, Object result) {
-        this.outbox.send(request.getSender(), RESPONSE, new ActorResponse(request.getTopic(), request.getSequentialId(), result));
+        this.outbox.send(request.getSender(), RESPONSE, new ActorResponse(request, result));
     }
 
-    void setDefaultHandlerFunction(BiConsumer<ActorMsg, ActorResponse> handler) {
+    void setDefaultHandlerFunction(Consumer<ActorResponse> handler) {
         this.defaultResponseHandler = handler;
     }
 
-    private void processResponse(ActorMsg actorMsg) {
-        ActorResponse response = actorMsg.getPayload();
-        ActorMsg request = ongoingRequests.remove(response.getSequentialId());
+    private Map<String, Method> annotationListeners = new HashMap<>();
+
+
+    private void processResponse(ActorResponse response) {
+        ActorMsg request = response.getRequest();
         if (request != null) {
             // 调用future
             if (responseFutures.containsKey(request)) {
-                //noinspection unchecked
-                responseFutures.remove(request).complete(response.getResult());
+
+                //noinspection rawtypes
+                CompletableFuture future = responseFutures.remove(request);
+                if (response.getThrowable() != null) {
+                    future.completeExceptionally(response.getThrowable());
+                } else {
+                    //noinspection unchecked
+                    future.complete(response.getResult());
+                }
                 return;
             }
             // 显式注册的
-            BiConsumer<ActorMsg, ActorResponse> handler = responseHandlers.get(response.getTopic());
+            Consumer<ActorResponse> handler = responseHandlers.get(request.getTopic());
             if (handler != null) {
-                handler.accept(request, response);
+                handler.accept(response);
                 return;
             }
             if (handlerInstance != null) {
                 try {
-                    Method method = handlerInstance.getClass().getMethod(actorMsg.getTopic() + "Response", ActorMsg.class, ActorResponse.class);
-                    method.invoke(handlerInstance, request, response);
+                    // 注解注册的
+                    if (null != annotationListeners && annotationListeners.containsKey(request.getTopic())){
+                        // 通过注解注册的方法
+                        Method method = annotationListeners.get(request.getTopic());
+                        method.setAccessible(true);
+                        method.invoke(handlerInstance, response);
+                        return;
+                    }
+                    // 默认的响应方法
+                    Method method = handlerInstance.getClass().getDeclaredMethod(request.getTopic() + "Response", ActorResponse.class);
+                    method.setAccessible(true);
+                    method.invoke(handlerInstance, response);
                     return;
                 } catch (NoSuchMethodException ignored) {
                     // nothing to do
                 } catch (IllegalAccessException | InvocationTargetException e) {
-                    logger.warn("Invoke response handler failed, method: {}!", actorMsg.getTopic() + "Response", e);
+                    logger.warn("Invoke response handler failed, method: {}!", request.getTopic() + "Response", e);
                     return;
                 }
             }
             if (this.defaultResponseHandler != null) {
-                this.defaultResponseHandler.accept(request, response);
+                this.defaultResponseHandler.accept(response);
 
             } else {
                 logger.warn("No ongoing request for response: {}", response);

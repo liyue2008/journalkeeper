@@ -3,7 +3,6 @@ package io.journalkeeper.core.raft;
 import io.journalkeeper.core.api.*;
 import io.journalkeeper.core.entry.internal.InternalEntriesSerializeSupport;
 import io.journalkeeper.core.entry.internal.InternalEntryType;
-import io.journalkeeper.core.state.ConfigState;
 import io.journalkeeper.core.state.Snapshot;
 import io.journalkeeper.core.transaction.JournalTransactionManager;
 import io.journalkeeper.exceptions.IndexUnderflowException;
@@ -12,8 +11,9 @@ import io.journalkeeper.rpc.client.*;
 import io.journalkeeper.rpc.server.DisableLeaderWriteRequest;
 import io.journalkeeper.rpc.server.DisableLeaderWriteResponse;
 import io.journalkeeper.utils.actor.*;
+import io.journalkeeper.utils.actor.annotation.ActorListener;
+import io.journalkeeper.utils.actor.annotation.ActorScheduler;
 import io.journalkeeper.utils.config.Config;
-import io.journalkeeper.utils.state.StateServer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -33,7 +33,7 @@ public class LeaderActor {
     private final JournalEntryParser journalEntryParser;
     private final JournalTransactionManager journalTransactionManager = null;
 
-    private final Actor actor = new Actor("Leader");
+    private final Actor actor = Actor.builder("Leader").setHandlerInstance(this).build();
     private final RaftJournal journal;
     private final RaftState state;
 
@@ -55,7 +55,6 @@ public class LeaderActor {
         this.state = state;
         this.voter = voter;
         this.config = config;
-        actor.setHandlerInstance(this);
     }
 
     @ActorListener
@@ -200,12 +199,12 @@ public class LeaderActor {
 
         return N;
     }
-    @ActorListener(consumer = true, payload = true)
+    @ActorListener
     private void onStateChange(StateResult stateResult) {
         this.waitingResponses.removeIf(waitingResponse -> waitingResponse.positionMatch(stateResult.getLastApplied()) && waitingResponse.countdownReplication());
     }
 
-    @ActorListener(consumer = true, payload = true)
+    @ActorListener
     private void onJournalFlush(long journalFlushIndex) {
         this.waitingResponses.removeIf(waitingResponse -> waitingResponse.getToPosition() <= journalFlushIndex && waitingResponse.countdownFlush());
     }
@@ -252,19 +251,19 @@ public class LeaderActor {
         return false;
     }
 
-    @ActorListener(payload = true, response = true)
+    @ActorListener
     private CreateTransactionResponse createTransaction(CreateTransactionRequest request) {
         // TODO
         return null;
     }
 
-    @ActorListener(payload = true, response = true)
+    @ActorListener
     private CompleteTransactionResponse completeTransaction(CompleteTransactionRequest request) {
         // TODO
         return null;
     }
 
-    @ActorListener(payload = true, response = true)
+    @ActorListener
     private GetOpeningTransactionsResponse getOpeningTransactions() {
         // TODO
         return null;
@@ -283,7 +282,7 @@ public class LeaderActor {
         }
     }
 
-    @ActorListener(payload = true, response = true)
+    @ActorListener
     private DisableLeaderWriteResponse disableLeaderWrite(DisableLeaderWriteRequest request) {
         if (voter.getVoterState() != VoterState.LEADER) {
             return new DisableLeaderWriteResponse(new NotLeaderException(getClusterLeader()));

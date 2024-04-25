@@ -4,6 +4,7 @@ import io.journalkeeper.rpc.RpcAccessPointFactory;
 import io.journalkeeper.rpc.client.*;
 import io.journalkeeper.rpc.server.*;
 import io.journalkeeper.utils.actor.*;
+import io.journalkeeper.utils.actor.annotation.ActorListener;
 import io.journalkeeper.utils.event.EventWatcher;
 import io.journalkeeper.utils.spi.ServiceSupport;
 import io.journalkeeper.utils.state.StateServer;
@@ -17,20 +18,18 @@ import java.util.concurrent.CompletableFuture;
 
 public class ServerRpcActor implements ServerRpc {
     private static final Logger logger = LoggerFactory.getLogger( ServerRpcActor.class );
-    private final URI uri;
+    private URI uri;
 
     private final Properties properties;
     private RpcAccessPointFactory rpcAccessPointFactory;
     private ServerRpcAccessPoint serverRpcAccessPoint;
     private StateServer rpcServer = null;
-    private final Actor actor = new Actor("ServerRpc");
+    private final Actor actor = Actor.builder("ServerRpc").setHandlerInstance(this).build();
 
     private StateServer.ServerState serverState = StateServer.ServerState.CREATED;
 
-    protected ServerRpcActor(URI uri, Properties properties) {
-        this.uri = uri;
+    protected ServerRpcActor( Properties properties) {
         this.properties  = properties;
-        this.actor.setHandlerInstance(this);
 
     }
 
@@ -229,11 +228,12 @@ public class ServerRpcActor implements ServerRpc {
     }
 
     @ActorListener
-    private void start(ActorMsg msg) {
+    private void start(URI uri) {
         if (this.serverState != StateServer.ServerState.CREATED) {
             return;
         }
         try {
+            this.uri = uri;
             this.serverState = StateServer.ServerState.STARTING;
 
             this.rpcAccessPointFactory = ServiceSupport.load(RpcAccessPointFactory.class);

@@ -4,7 +4,7 @@ import io.journalkeeper.core.api.RaftJournal;
 import io.journalkeeper.rpc.server.AsyncAppendEntriesRequest;
 import io.journalkeeper.rpc.server.AsyncAppendEntriesResponse;
 import io.journalkeeper.utils.actor.Actor;
-import io.journalkeeper.utils.actor.ActorListener;
+import io.journalkeeper.utils.actor.annotation.ActorListener;
 import io.journalkeeper.utils.actor.ActorMsg;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,7 +14,7 @@ import java.util.List;
 
 public class FollowerActor {
     private static final Logger logger = LoggerFactory.getLogger( FollowerActor.class );
-    private final Actor actor = new Actor("Follower");
+    private final Actor actor = Actor.builder("Follower").setHandlerInstance(this).build();
 
     private final RaftState state;
 
@@ -28,7 +28,6 @@ public class FollowerActor {
     FollowerActor(RaftState state, RaftJournal journal) {
         this.state = state;
         this.journal = journal;
-        actor.setHandlerInstance(this);
     }
 
     /**

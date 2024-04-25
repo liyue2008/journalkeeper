@@ -11,13 +11,12 @@ import io.journalkeeper.persistence.MetadataPersistence;
 import io.journalkeeper.persistence.PersistenceFactory;
 import io.journalkeeper.persistence.ServerMetadata;
 import io.journalkeeper.rpc.client.*;
-import io.journalkeeper.rpc.server.AsyncAppendEntriesRequest;
-import io.journalkeeper.rpc.server.AsyncAppendEntriesResponse;
 import io.journalkeeper.rpc.server.GetServerStateRequest;
 import io.journalkeeper.rpc.server.GetServerStateResponse;
 import io.journalkeeper.utils.actor.*;
+import io.journalkeeper.utils.actor.annotation.ActorListener;
+import io.journalkeeper.utils.actor.annotation.ActorScheduler;
 import io.journalkeeper.utils.config.Config;
-import io.journalkeeper.utils.event.EventType;
 import io.journalkeeper.utils.spi.ServiceSupport;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -103,7 +102,6 @@ public class StateActor implements RaftState{
         this.state = new JournalKeeperState(stateFactory, metadataPersistence);
 
         this.partialSnapshot = new PartialSnapshot(partialSnapshotPath());
-        this.actor.setHandlerInstance(this);
 
 //        TODO: 设计这部分拦截器的实现
 //        state.addInterceptor(InternalEntryType.TYPE_SCALE_PARTITIONS, this::scalePartitions);
@@ -181,7 +179,7 @@ public class StateActor implements RaftState{
         return serverMetadata;
     }
 
-    private final Actor actor = new Actor("State");
+    private final Actor actor = Actor.builder("State").setHandlerInstance(this).build();
 
     public Actor getActor() {
         return actor;
@@ -361,18 +359,18 @@ public class StateActor implements RaftState{
         this.state.setConfigState(configState);
         actor.reply(msg, null);
     }
-    @ActorListener(payload = true, response = true)
+    @ActorListener
     public QueryStateResponse queryServerState(QueryStateRequest request) {
         // TODO
         return null;
     }
 
-    @ActorListener(payload = true, response = true)
+    @ActorListener
     public QueryStateResponse queryClusterState(QueryStateRequest request) {
         // TODO
         return null;
     }
-    @ActorListener(payload = true, response = true, topic = "lastApplied")
+    @ActorListener(topic = "lastApplied")
     private LastAppliedResponse lastAppliedListener() {
         return new LastAppliedResponse(state.lastApplied());
     }
@@ -406,29 +404,29 @@ public class StateActor implements RaftState{
         return state.getConfigState().getEpoch();
     }
 
-    @ActorListener(payload = true, response = true)
+    @ActorListener
     private QueryStateResponse querySnapshot(QueryStateRequest request) {
         // TODO
         return null;
     }
 
-    @ActorListener(topic = "getSnapshots", payload = true, response = true)
+    @ActorListener(topic = "getSnapshots")
     private GetSnapshotsResponse doGetSnapshots() {
         // TODO
         return  null;
     }
-    @ActorListener(payload = true, response = true)
+    @ActorListener
     private GetServerStateResponse getServerState(GetServerStateRequest request) {
         // TODO
         return null;
     }
 
-    @ActorListener(payload = true, response = true)
+    @ActorListener
     private ConvertRollResponse convertRoll(ConvertRollRequest request) {
         this.roll = request.getRoll();
         return new ConvertRollResponse();
     }
-    @ActorListener(payload = true, response = true)
+    @ActorListener
     private void maybeRollbackConfig(long startIndex) {
         ConfigState voterStateMachine = state.getConfigState();
         if (startIndex < journal.maxIndex()) {
@@ -450,7 +448,7 @@ public class StateActor implements RaftState{
             }
         }
     }
-    @ActorListener(payload = true, response = true)
+    @ActorListener
     private void maybeUpdateNonLeaderConfig(List<byte[]> entries) throws Exception {
         ConfigState voterStateMachine = state.getConfigState();
 
@@ -471,13 +469,13 @@ public class StateActor implements RaftState{
         }
 
     }
-    @ActorListener(payload = true, consumer = true)
+    @ActorListener
     private void onJournalCommit(RaftJournal journal) {
         long offset = journal.readOffset(state.lastApplied());
         JournalEntry entryHeader = journal.readEntryHeaderByOffset(offset);
         StateResult stateResult = state.applyEntry(entryHeader, new EntryFutureImpl(journal, offset), journal);
         // afterStateChanged(stateResult.getUserResult());
-        actor.pubMsg("onStateChange", stateResult);
+        actor.pub("onStateChange", stateResult);
 
 
     }
@@ -490,7 +488,7 @@ public class StateActor implements RaftState{
                 metadataPersistence.save(metadataFile(), metadata);
                 lastSavedServerMetadata = metadata;
             }
-            actor.pubMsg("onStateFlush", null);
+            actor.pub("onStateFlush", null);
         } catch (ClosedByInterruptException ignored) {
         } catch (Throwable e) {
             logger.warn("Flush exception, commitIndex: {}, lastApplied: {}, server: {}: ",

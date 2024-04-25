@@ -6,7 +6,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
 class ScheduleActor {
-    private final Actor actor= new Actor("Scheduler");
+    private final Actor actor= Actor.builder("Scheduler").build();
     private Timer timer;
 
     void addTask(TimeUnit timeUnit, long interval, String addr, String topic) {
@@ -17,7 +17,7 @@ class ScheduleActor {
         timer.schedule(new TimerTask() {
             @Override
             public void run() {
-                actor.send(addr, topic, null);
+                actor.send(addr, topic);
             }
         },ThreadLocalRandom.current().nextLong(delay), delay);
     }

@@ -1,6 +1,7 @@
 package io.journalkeeper.utils.actor;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class Postman implements Runnable {
@@ -8,30 +9,16 @@ public class Postman implements Runnable {
 
     private final Object ring = new Object();
 
-    private final List<ActorInbox> inboxList = new ArrayList<>();
+    private final List<ActorInbox> inboxList;
 
-    private final List<ActorOutbox> outboxList = new ArrayList<>();
+    private final List<ActorOutbox> outboxList;
 
-    private boolean isRunning = false;
-
-    Postman(PostOffice postOffice) {
+    private Postman(PostOffice postOffice, List<ActorInbox> inboxList, List<ActorOutbox> outboxList) {
         this.postOffice = postOffice;
-    }
-
-    void addInbox(ActorInbox inbox) {
-        if (isRunning) {
-            throw new IllegalStateException("Thread already started");
-        }
-        inboxList.add(inbox);
-        inbox.setRing(ring);
-    }
-
-    void addOutbox(ActorOutbox outbox) {
-        if (isRunning) {
-            throw new IllegalStateException("Thread already started");
-        }
-        outboxList.add(outbox);
-        outbox.setRing(ring);
+        this.inboxList = Collections.unmodifiableList(inboxList);
+        this.outboxList = Collections.unmodifiableList(outboxList);
+        inboxList.forEach(inbox -> inbox.setRing(ring));
+        outboxList.forEach(outbox -> outbox.setRing(ring));
     }
 
     private boolean stopFlag = false;
@@ -44,7 +31,6 @@ public class Postman implements Runnable {
     }
     @Override
     public void run() {
-        isRunning = true;
         while (!stopFlag) {
             boolean hasMessage = false;
 
@@ -67,6 +53,35 @@ public class Postman implements Runnable {
                     }
                 }
             }
+        }
+    }
+
+
+
+    static Builder builder() {
+        return new Builder();
+    }
+    static class Builder {
+
+        private final List<ActorInbox> inboxList = new ArrayList<>();
+
+        private final List<ActorOutbox> outboxList = new ArrayList<>();
+        private PostOffice postOffice;
+
+        Builder postOffice(PostOffice postOffice) {
+            this.postOffice = postOffice;
+            return this;
+        }
+
+        void addInbox(ActorInbox inbox) {
+            inboxList.add(inbox);
+        }
+
+        void addOutbox(ActorOutbox outbox) {
+            outboxList.add(outbox);
+        }
+        Postman build() {
+            return new Postman(postOffice, inboxList, outboxList);
         }
     }
 }

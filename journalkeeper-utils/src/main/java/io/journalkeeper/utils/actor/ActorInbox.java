@@ -1,6 +1,10 @@
 package io.journalkeeper.utils.actor;
 
 import io.journalkeeper.utils.Tuple;
+import io.journalkeeper.utils.actor.annotation.ActorListener;
+import io.journalkeeper.utils.actor.annotation.ActorMessage;
+import io.journalkeeper.utils.actor.annotation.ActorScheduler;
+import io.journalkeeper.utils.actor.annotation.ActorSubscriber;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -8,8 +12,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.*;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.function.BiConsumer;
-import java.util.function.Consumer;
+import java.util.function.*;
 import java.util.stream.Collectors;
 
 import static io.journalkeeper.utils.actor.ActorResponseSupport.RESPONSE;
@@ -50,37 +53,53 @@ class ActorInbox {
         return myAddr;
     }
 
-    private Map<String, Method> annotationListeners;
-    private Map<String, Method> scanActionListeners(Object handlerInstance) {
-        return Arrays.stream(handlerInstance.getClass().getMethods())
-                .filter(method -> method.isAnnotationPresent(ActorListener.class) || method.isAnnotationPresent(ActorScheduler.class))
-                .collect(Collectors.toMap(this::methodToTopic, method -> method));
-    }
+    private Map<String, Method> annotationListeners = new HashMap<>();
 
-    private String methodToTopic(Method method) {
-        String topic = method.isAnnotationPresent(ActorListener.class) ?
-                method.getAnnotation(ActorListener.class).topic() :
-                method.getAnnotation(ActorScheduler.class).topic();
-        if (topic.isEmpty()) {
-            topic = method.getName();
-        }
-        return topic;
-    }
-    private List<ActorScheduler> schedulers;
-    private List<ActorScheduler> scanSchedulers(Object handlerInstance) {
-        return Arrays.stream(handlerInstance.getClass().getMethods())
+    private List<Tuple<String, ActorScheduler>> schedulers = new LinkedList<>();
+    private List<Tuple<String, ActorScheduler>> scanSchedulers(Object handlerInstance) {
+        return Arrays.stream(handlerInstance.getClass().getDeclaredMethods())
                 .filter(method -> method.isAnnotationPresent(ActorScheduler.class))
-                .map(method -> method.getAnnotation(ActorScheduler.class))
+                .map(method -> new Tuple<>(ActorUtils.methodToTopic(method, ActorScheduler.class), method.getAnnotation(ActorScheduler.class)))
                 .collect(Collectors.toList());
     }
 
-    List<ActorScheduler> getSchedulers() {
+    List<Tuple<String, ActorScheduler>> getSchedulers() {
         return schedulers;
     }
 
+    <R> void addTopicHandlerFunction(String topic, Supplier<R> handler) {
+        try {
+            addTopicHandlerFunction(topic, handler, handler.getClass().getDeclaredMethod("get"));
+        } catch (NoSuchMethodException e) {
+            throw new RuntimeException(e);
+        }
+    }
+    <T, R> void addTopicHandlerFunction(String topic, Function<T, R> handler) {
+        try {
+            addTopicHandlerFunction(topic, handler, handler.getClass().getDeclaredMethod("apply", Object.class));
+        } catch (NoSuchMethodException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    <T, U, R> void addTopicHandlerFunction(String topic, BiFunction<T, U, R> handler) {
+        try {
+            addTopicHandlerFunction(topic, handler, handler.getClass().getDeclaredMethod("apply", Object.class, Object.class));
+        } catch (NoSuchMethodException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    void addTopicHandlerFunction(String topic, Runnable runnable) {
+        try {
+            addTopicHandlerFunction(topic, runnable, runnable.getClass().getDeclaredMethod("run"));
+        } catch (NoSuchMethodException e) {
+            throw new RuntimeException(e);
+        }
+    }
     <T> void addTopicHandlerFunction(String topic, Consumer<T> consumer) {
         try {
-            addTopicHandlerFunction(topic, consumer, consumer.getClass().getMethod("accept", Object.class));
+            addTopicHandlerFunction(topic, consumer, consumer.getClass().getDeclaredMethod("accept", Object.class));
         } catch (NoSuchMethodException e) {
             throw new RuntimeException(e);
         }
@@ -88,7 +107,7 @@ class ActorInbox {
 
     <T, U> void addTopicHandlerFunction(String topic, BiConsumer<T, U> consumer) {
         try {
-            addTopicHandlerFunction(topic, consumer, consumer.getClass().getMethod("accept", Object.class, Object.class));
+            addTopicHandlerFunction(topic, consumer, consumer.getClass().getDeclaredMethod("accept", Object.class, Object.class));
         } catch (NoSuchMethodException e) {
             throw new RuntimeException(e);
         }
@@ -104,14 +123,13 @@ class ActorInbox {
 
     void setHandlerInstance(Object handlerInstance) {
         this.handlerInstance = handlerInstance;
-        this.annotationListeners = scanActionListeners(handlerInstance);
+        this.annotationListeners = ActorUtils.scanActionListeners(handlerInstance, Arrays.asList(ActorSubscriber.class, ActorListener.class, ActorScheduler.class));
         this.schedulers = scanSchedulers(handlerInstance);
     }
 
     Set<String> getSubscribedTopics() {
         return annotationListeners.entrySet().stream()
-                .filter(entry -> entry.getValue().getAnnotation(ActorListener.class).consumer())
-                .filter(entry -> entry.getValue().getParameterCount() <= 1)
+                .filter(entry -> entry.getValue().isAnnotationPresent(ActorSubscriber.class))
                 .map(Map.Entry::getKey)
                 .collect(Collectors.toSet());
     }
@@ -120,60 +138,44 @@ class ActorInbox {
         if (function != null) {
             Object instance = function.first();
             Method method = function.second();
-            if (method.getParameterCount() == 1 && ActorMsg.class.equals(method.getParameters()[0].getType()) && !method.getParameters()[0].isAnnotationPresent(Payload.class)) {
-                // 优先看参数个数是否是1，且参数类型是ActorMsg，且没有@Payload注解
-                method.invoke(instance, msg);
-                return true;
-            } else {
-                if (method.getParameterCount() == msg.getPayloads().length) {
-                    method.invoke(instance, msg.getPayloads());
-                    return true;
-                } else if (method.getParameterCount() < msg.getPayloads().length) {
-                    // 允许接受消息的方法参数个数比消息的参数个数少，忽略后面的参数
-                    method.invoke(instance, Arrays.copyOf(msg.getPayloads(), method.getParameterCount()));
-                    return true;
+            Object ret = null;
+            Throwable throwable = null;
+            try {
+                if (method.getParameterCount() == 1 && method.getParameters()[0].isAnnotationPresent(ActorMessage.class)) {
+                    // 优先看参数个数是否是1，且带有@ActorMessage注解
+                    method.setAccessible(true);
+                    ret = method.invoke(instance, msg);
+                } else {
+                    method.setAccessible(true);
+                    ret = method.invoke(instance, msg.getPayloads());
                 }
+                if (!void.class.equals(method.getReturnType())) {
+                    this.outbox.send(msg.getSender(), RESPONSE, new ActorResponse(msg, ret));
+                }
+            } catch (InvocationTargetException ite) {
+                if (!void.class.equals(method.getReturnType())) {
+                    this.outbox.send(msg.getSender(), RESPONSE, new ActorResponse(msg, ite.getCause()));
+                }
+                logger.info("Invoke message handler exception, handler: {}, msg: {}, exception: {}.", instance.getClass().getName() + "." + method.getName() + "(...)", msg, ite.getCause().toString());
             }
+            return true;
         }
         return false;
     }
 
     private void invokeAnnotationListener(ActorMsg msg, Method method) throws InvocationTargetException, IllegalAccessException {
         if (method.isAnnotationPresent(ActorScheduler.class)) {
-            method.invoke(handlerInstance);
-        } else {
-            Object ret = null;
-            Throwable throwable = null;
             try {
-                if (method.getParameterCount() == 0) {
-                    ret = method.invoke(handlerInstance);
-                } else {
-                    if (method.getParameterCount() == 1 && ActorMsg.class.equals(method.getParameters()[0].getType()) && !method.getParameters()[0].isAnnotationPresent(Payload.class)) {
-                        // 优先看参数个数是否是1，且参数类型是ActorMsg，且没有@Payload注解
-                        ret = method.invoke(handlerInstance, msg);
-                    } else {
-                        if (method.getParameterCount() == msg.getPayloads().length) {
-                            ret = method.invoke(handlerInstance, msg.getPayloads());
-                        } else if (method.getParameterCount() < msg.getPayloads().length) {
-                            // 允许接受消息的方法参数个数比消息的参数个数少，忽略后面的参数
-                            ret = method.invoke(handlerInstance, Arrays.copyOf(msg.getPayloads(), method.getParameterCount()));
-                        }
-                    }
+                method.setAccessible(true);
+                method.invoke(handlerInstance);
+            } catch (InvocationTargetException ite) {
+                if (!void.class.equals(method.getReturnType())) {
+                    this.outbox.send(msg.getSender(), RESPONSE, new ActorResponse(msg, ite.getCause()));
                 }
-            } catch (Throwable t) {
-                throwable = t;
-                throw t;
-            } finally {
-                if (method.getAnnotation(ActorListener.class).response()) {
-                    if (throwable != null) {
-                        this.outbox.send(msg.getSender(), RESPONSE, new ActorResponse(msg.getTopic(), msg.getSequentialId(), throwable));
-                    } else {
-                        this.outbox.send(msg.getSender(), RESPONSE, new ActorResponse(msg.getTopic(), msg.getSequentialId(), ret));
-                    }
-                }
+                logger.info("Invoke message handler exception, handler: {}, msg: {}, exception: {}.", handlerInstance.getClass().getName() + "." + method.getName() + "(...)", msg, ite.getCause().toString());
             }
-
-
+        } else {
+            tryInvoke(new Tuple<>(handlerInstance, method), msg);
         }
     }
 
@@ -210,12 +212,18 @@ class ActorInbox {
                     }
 
                     // topic 同名方法
-                    Method method = Arrays.stream(this.handlerInstance.getClass().getMethods())
-                            .filter(m -> m.getName().equals(msg.getTopic()))
-                            .filter(m -> (m.getParameterCount() == 1 && ActorMsg.class.equals(m.getParameters()[0].getType())) || m.getParameterCount() == msg.getPayloads().length)
-                            .max((m1, m2) -> m2.getParameterCount() - m1.getParameterCount())
-                            .orElse(null);
-
+                    Class<?> [] payloadTypes = Arrays.stream(msg.getPayloads()).map(Object::getClass).toArray(Class<?>[]::new);
+                    Method method;
+                    try {
+                        // 尝试精确获取
+                        method = this.handlerInstance.getClass().getDeclaredMethod(msg.getTopic(), payloadTypes);
+                    } catch (NoSuchMethodException ignored) {
+                        // 尝试模糊获取：方法名相同，参数个数相同
+                        method = Arrays.stream(this.handlerInstance.getClass().getDeclaredMethods())
+                                .filter(m -> !m.getDeclaringClass().equals(Object.class))
+                                .filter(m -> m.getName().equals(msg.getTopic()))
+                                .filter(m -> m.getParameterCount() == payloadTypes.length).findFirst().orElse(null);
+                    }
                     if (method != null && tryInvoke(new Tuple<>(handlerInstance, method), msg)) {
                         return true;
                     }
@@ -223,7 +231,11 @@ class ActorInbox {
 
                 // 默认方法
                 if (null != defaultHandlerFunction) {
-                    defaultHandlerFunction.accept(msg);
+                    try {
+                        defaultHandlerFunction.accept(msg);
+                    } catch (Exception e) {
+                        logger.info("Invoke default handler exception, handler: {}, msg: {}, exception: {}.", defaultHandlerFunction.getClass().getName(), msg, e.toString());
+                    }
                     return true;
                 }
                 logger.warn("No handler for msg: {}", msg);

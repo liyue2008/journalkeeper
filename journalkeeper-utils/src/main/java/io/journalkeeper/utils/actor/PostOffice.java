@@ -1,53 +1,65 @@
 package io.journalkeeper.utils.actor;
 
+import io.journalkeeper.utils.actor.annotation.ActorMessage;
+
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class PostOffice{
 
     private final Map<String, ActorInbox> inboxMap = new HashMap<>();
-    private final List<Postman> postmanList = new ArrayList<>();
-    private int postmanIndex = 0;
+    private final List<Postman> postmanList;
     private final static int DEFAULT_POSTMAN_COUNT = 1;
     public final static String PUB_ADDR = "PUB";
 
     private final Map<String, Set<ActorInbox>> pubSubMap = new ConcurrentHashMap<>();
     private final ScheduleActor scheduleActor = new ScheduleActor();
 
-    public PostOffice() {
-        this(DEFAULT_POSTMAN_COUNT);
-        ActorInbox pubSubInbox = new ActorInbox(PUB_ADDR, null);
-        inboxMap.put(pubSubInbox.getMyAddr(), pubSubInbox);
-        nextPostman().addInbox(pubSubInbox);
-        pubSubInbox.setDefaultHandlerFunction(this::pubMsg);
-        nextPostman().addOutbox(scheduleActor.getActor().getOutbox());
-    }
+    private PostOffice(int threadCount, List<Actor> actorList) {
+        Actor pubSubActor = Actor.builder(PUB_ADDR).setDefaultHandlerFunction(this::pubMsg).build();
+        List<Actor> allActors = new ArrayList<>(actorList.size() + 2);
+        allActors.add(pubSubActor);
+        allActors.add(scheduleActor.getActor());
+        allActors.addAll(actorList);
+        allActors.forEach(this::addActor);
 
-    public PostOffice(int postmanCount) {
-        for (int i = 0; i < postmanCount; i++) {
-            postmanList.add(new Postman(this));
+        List<List<ActorInbox>> threadInboxList = new ArrayList<>(threadCount);
+        for (int i = 0; i < threadCount; i++) {
+            threadInboxList.add(new ArrayList<>());
         }
+        List<List<ActorOutbox>> threadOutboxList = new ArrayList<>(threadCount);
+        for (int i = 0; i < threadCount; i++) {
+            threadOutboxList.add(new ArrayList<>());
+        }
+        int threadIndex = 0;
+        for (Actor actor: allActors) {
+            threadInboxList.get(threadIndex++ % threadCount).add(actor.getInbox());
+            threadOutboxList.get(threadIndex++ % threadCount).add(actor.getOutbox());
+        }
+
+        this.postmanList = new ArrayList<>(threadCount);
+        for (int i = 0; i < threadCount; i++) {
+            Postman.Builder builder = Postman.builder().postOffice(this);
+            threadInboxList.get(i).forEach(builder::addInbox);
+            threadOutboxList.get(i).forEach(builder::addOutbox);
+            this.postmanList.add(builder.build());
+        }
+
     }
 
-    public void addActor(Actor actor) {
+
+    private void addActor(Actor actor) {
         inboxMap.put(actor.getInbox().getMyAddr(), actor.getInbox());
         actor.getInbox().getSubscribedTopics().forEach(topic -> this.subTopic(topic, actor));
-        actor.getInbox().getSchedulers().forEach(s -> scheduleActor.addTask(s.timeUnit(), s.interval(), actor.getAddr(), s.topic()));
-        nextPostman().addInbox(actor.getInbox());
-        nextPostman().addOutbox(actor.getOutbox());
+        actor.getInbox().getSchedulers().forEach(t -> scheduleActor.addTask(t.second().timeUnit(), t.second().interval(), actor.getAddr(), t.first()));
+
     }
 
-    public void subTopic(String topic, Actor actor) {
+    private void subTopic(String topic, Actor actor) {
         pubSubMap.computeIfAbsent(topic, k -> new HashSet<>()).add(actor.getInbox());
     }
 
 
-    private Postman nextPostman() {
-        if (postmanIndex >= postmanList.size()) {
-            postmanIndex = 0;
-        }
-        return postmanList.get(postmanIndex++);
-    }
     void send(ActorMsg msg) {
         ActorInbox inbox = inboxMap.get(msg.getReceiver());
         if (inbox == null) {
@@ -56,14 +68,14 @@ public class PostOffice{
         inbox.receive(msg);
     }
 
-    private void pubMsg(ActorMsg msg) {
+    private void pubMsg(@ActorMessage ActorMsg msg) {
         assert PUB_ADDR.equals(msg.getReceiver());
         Set<ActorInbox> subscribers = pubSubMap.get(msg.getTopic());
         if (subscribers == null) {
             return;
         }
         for (ActorInbox inbox : subscribers) {
-            ActorMsg newMsg = new ActorMsg(msg.getSequentialId(), msg.getSender(), inbox.getMyAddr(), msg.getTopic(), msg.getPayload());
+            ActorMsg newMsg = new ActorMsg(msg.getSequentialId(), msg.getSender(), inbox.getMyAddr(), msg.getTopic(), msg.getPayloads());
             inbox.receive(newMsg);
         }
     }
@@ -77,6 +89,29 @@ public class PostOffice{
     public void stop() {
         for (Postman postman: postmanList) {
             postman.stop();
+        }
+    }
+
+    public static Builder builder() {
+        return new Builder();
+    }
+    public static class Builder {
+        private Builder() {}
+        private int threadCount = DEFAULT_POSTMAN_COUNT;
+        private final List<Actor> actorList = new ArrayList<>();
+
+        public Builder threadCount(int threadCount) {
+            this.threadCount = threadCount;
+            return this;
+        }
+
+        public Builder addActor(Actor actor) {
+            this.actorList.add(actor);
+            return this;
+        }
+
+        public PostOffice build() {
+            return new PostOffice(threadCount, actorList);
         }
     }
 }

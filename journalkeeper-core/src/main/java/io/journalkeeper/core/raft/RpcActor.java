@@ -19,14 +19,15 @@ import java.util.concurrent.CompletableFuture;
 
 public class RpcActor {
     private static final Logger logger = LoggerFactory.getLogger( RpcActor.class );
-    private final Actor actor = new Actor("Rpc");
+    private final Actor actor = Actor.builder("Rpc")
+            .setDefaultHandlerFunction(this::send)
+            .build();
     private final Map<URI, ServerRpc> remoteServers = new HashMap<>();
     private final ServerRpcAccessPoint serverRpcAccessPoint;
 
     public RpcActor(Properties properties) {
        RpcAccessPointFactory rpcAccessPointFactory = ServiceSupport.load(RpcAccessPointFactory.class);
        serverRpcAccessPoint = rpcAccessPointFactory.createServerRpcAccessPoint(properties);
-       actor.setDefaultHandlerFunction(this::send);
     }
 
     public Actor getActor() {

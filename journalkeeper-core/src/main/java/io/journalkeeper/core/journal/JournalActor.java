@@ -5,12 +5,9 @@ import io.journalkeeper.core.api.JournalEntryParser;
 import io.journalkeeper.core.api.RaftJournal;
 import io.journalkeeper.persistence.BufferPool;
 import io.journalkeeper.persistence.PersistenceFactory;
-import io.journalkeeper.rpc.server.AsyncAppendEntriesRequest;
-import io.journalkeeper.rpc.server.AsyncAppendEntriesResponse;
 import io.journalkeeper.utils.actor.Actor;
-import io.journalkeeper.utils.actor.ActorListener;
-import io.journalkeeper.utils.actor.ActorMsg;
-import io.journalkeeper.utils.actor.ActorScheduler;
+import io.journalkeeper.utils.actor.annotation.ActorListener;
+import io.journalkeeper.utils.actor.annotation.ActorScheduler;
 import io.journalkeeper.utils.config.Config;
 import io.journalkeeper.utils.spi.ServiceSupport;
 import org.slf4j.Logger;
@@ -33,7 +30,7 @@ private static final Logger logger = LoggerFactory.getLogger( JournalActor.class
 
     private final Config config;
 
-    private final Actor actor = new Actor("Journal");
+    private final Actor actor = Actor.builder("Journal").setHandlerInstance(this).build();
 
     public JournalActor(JournalEntryParser journalEntryParser, Config config, Properties properties) {
         this.config = config;
@@ -41,7 +38,6 @@ private static final Logger logger = LoggerFactory.getLogger( JournalActor.class
         persistenceFactory = ServiceSupport.load(PersistenceFactory.class);
         bufferPool = ServiceSupport.load(BufferPool.class);
         this.journal = new Journal(persistenceFactory, bufferPool, journalEntryParser);
-        this.actor.setHandlerInstance(this);
     }
 
     public RaftJournal getRaftJournal() {
@@ -89,7 +85,7 @@ private static final Logger logger = LoggerFactory.getLogger( JournalActor.class
         }
     }
 
-    @ActorListener(response = true, payload = true)
+    @ActorListener
     private long append(List<JournalEntry> journalEntries) {
         long position;
         if (journalEntries.size() == 1) {
@@ -98,20 +94,20 @@ private static final Logger logger = LoggerFactory.getLogger( JournalActor.class
             List<Long> positions = journal.append(journalEntries);
             position = positions.get(positions.size() - 1);
         }
-        actor.pubMsg("onJournalAppend", this.getRaftJournal());
+        actor.pub("onJournalAppend", this.getRaftJournal());
         return position;
     }
-    @ActorListener(payload = true , response = true)
+    @ActorListener
     private void compareOrAppendRaw(List<byte[]> entries, long startIndex) {
         journal.compareOrAppendRaw(entries, startIndex);
     }
 
-    @ActorListener(payload = true, response = true)
+    @ActorListener
     private void commit(long commitIndex) throws IOException {
 
         if (commitIndex > journal.commitIndex()) {
             journal.commit(Math.min(commitIndex, journal.maxIndex()));
-            actor.pubMsg("onJournalCommit", this.getRaftJournal());
+            actor.pub("onJournalCommit", this.getRaftJournal());
         }
 
     }
@@ -119,7 +115,7 @@ private static final Logger logger = LoggerFactory.getLogger( JournalActor.class
     private void flush() {
         long flushCount = journal.flushOnce();
         if (flushCount > 0) {
-            actor.pubMsg("onJournalFlush", this.journal.maxIndex());
+            actor.pub("onJournalFlush", this.journal.maxIndex());
         }
     }
 

@@ -1,34 +1,23 @@
 package io.journalkeeper.core.raft;
 
-import io.journalkeeper.core.api.JournalEntry;
 import io.journalkeeper.core.api.RaftJournal;
 import io.journalkeeper.core.api.VoterState;
-import io.journalkeeper.core.entry.internal.InternalEntriesSerializeSupport;
-import io.journalkeeper.core.entry.internal.InternalEntryType;
-import io.journalkeeper.core.entry.internal.UpdateVotersS2Entry;
-import io.journalkeeper.rpc.server.AsyncAppendEntriesRequest;
 import io.journalkeeper.rpc.server.RequestVoteRequest;
 import io.journalkeeper.rpc.server.RequestVoteResponse;
 import io.journalkeeper.utils.actor.Actor;
-import io.journalkeeper.utils.actor.ActorListener;
-import io.journalkeeper.utils.actor.ActorMsg;
-
-import static io.journalkeeper.core.api.RaftJournal.INTERNAL_PARTITION;
-import static io.journalkeeper.core.entry.internal.InternalEntryType.TYPE_UPDATE_VOTERS_S1;
-import static io.journalkeeper.core.entry.internal.InternalEntryType.TYPE_UPDATE_VOTERS_S2;
+import io.journalkeeper.utils.actor.annotation.ActorListener;
 
 public class VoterActor implements RaftVoter{
 
-    private final Actor actor = new Actor("Voter");
+    private final Actor actor = Actor.builder("Voter").setHandlerInstance(this).build();
     private final VoterStateMachine voterStateMachine = new VoterStateMachine();
     private final RaftJournal journal;
     VoterActor(RaftJournal journal) {
         this.journal = journal;
-        actor.setHandlerInstance(this);
 
     }
 
-    @ActorListener(response = true, payload = true)
+    @ActorListener
     private RequestVoteResponse requestVote(RequestVoteRequest request) {
         // TODO
         return null;

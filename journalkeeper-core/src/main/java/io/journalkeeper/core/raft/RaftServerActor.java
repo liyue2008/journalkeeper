@@ -16,6 +16,7 @@ import io.journalkeeper.rpc.server.GetServerEntriesResponse;
 import io.journalkeeper.rpc.server.InstallSnapshotRequest;
 import io.journalkeeper.rpc.server.InstallSnapshotResponse;
 import io.journalkeeper.utils.actor.*;
+import io.journalkeeper.utils.actor.annotation.ActorListener;
 import io.journalkeeper.utils.config.Config;
 import io.journalkeeper.utils.config.PropertiesConfigProvider;
 import io.journalkeeper.utils.spi.ServiceSupport;
@@ -41,7 +42,7 @@ public class RaftServerActor implements  RaftServer {
 
 
 
-    private final Actor actor = new Actor("RaftServer");
+    private final Actor actor = Actor.builder("RaftServer").setHandlerInstance(this).build();
 
 
     public RaftServerActor(Roll roll, StateFactory stateFactory, JournalEntryParser journalEntryParser, Properties properties) {
@@ -49,20 +50,31 @@ public class RaftServerActor implements  RaftServer {
 
         Config config = new Config();
         config.load(new PropertiesConfigProvider(properties));
-        JournalActor journalActor= new JournalActor(journalEntryParser, config, properties);
 
+        this.context = buildServerContext(roll, stateFactory, journalEntryParser, properties, config);
+
+    }
+
+    private ServerContext buildServerContext(Roll roll, StateFactory stateFactory, JournalEntryParser journalEntryParser, Properties properties, Config config) {
+        JournalActor journalActor = new JournalActor(journalEntryParser, config, properties);
         StateActor stateActor = new StateActor(roll, stateFactory, journalEntryParser, journalActor.getRaftJournal(),config, properties);
         VoterActor voterActor = new VoterActor(journalActor.getRaftJournal());
         LeaderActor leaderActor = new LeaderActor(journalEntryParser, journalActor.getRaftJournal(), stateActor.getState(), voterActor.getRaftVoter(), config);
+        ServerRpcActor serverRpcActor = new ServerRpcActor(properties);
+        EventBusActor eventBusActor = new EventBusActor();
+        FollowerActor followerActor = new FollowerActor(stateActor.getState(), journalActor.getRaftJournal());
 
-        this.context = new ServerContext(properties, config, stateActor.getState(), journalActor.getRaftJournal(), voterActor.getRaftVoter());
-        PostOffice postOffice = context.getPostOffice();
-        postOffice.addActor(stateActor.getActor());
-        postOffice.addActor(journalActor.getActor());
-        postOffice.addActor(voterActor.getActor());
-        postOffice.addActor(leaderActor.getActor());
-        postOffice.addActor(actor);
-        this.actor.setHandlerInstance(this);
+        PostOffice postOffice = PostOffice.builder()
+                .addActor(actor)
+                .addActor(journalActor.getActor())
+                .addActor(stateActor.getActor())
+                .addActor(voterActor.getActor())
+                .addActor(leaderActor.getActor())
+                .addActor(serverRpcActor.getActor())
+                .addActor(eventBusActor.getActor())
+                .addActor(followerActor.getActor())
+                .build();
+        return new ServerContext(properties, config, stateActor.getState(), journalActor.getRaftJournal(), voterActor.getRaftVoter(),eventBusActor.getEventBus(), postOffice);
 
     }
 
@@ -86,7 +98,7 @@ public class RaftServerActor implements  RaftServer {
         acquireFileLock();
         actor.send("State", "recover", null);
     }
-    @ActorListener(payload = true)
+    @ActorListener
     private void recovered(boolean isRecoveredFromJournal) {
         if (isRecoveredFromJournal) {
 
@@ -142,9 +154,7 @@ public class RaftServerActor implements  RaftServer {
 
     @Override
     public void start() {
-        ServerRpcActor serverRpcActor = new ServerRpcActor(serverUri(), context.getProperties());
-        context.getPostOffice().addActor(serverRpcActor.getActor());
-        actor.send("ServerRpc", "start", null);
+        actor.send("ServerRpc", "start", serverUri());
     }
 
     @Override
@@ -194,35 +204,35 @@ public class RaftServerActor implements  RaftServer {
 
 
 
-    @ActorListener(payload = true, response = true)
+    @ActorListener
     private GetServersResponse getServers() {
         // TODO
         return null;
     }
-    @ActorListener(payload = true, response = true)
+    @ActorListener
     private GetServerStatusResponse getServerStatus() {
         // TODO
         return null;
     }
 
-    @ActorListener(response = true, payload = true)
+    @ActorListener
     private UpdateVotersResponse updateVoters(UpdateVotersRequest request) {
         // TODO
         return null;
     }
 
-    @ActorListener(response = true, payload = true)
+    @ActorListener
     private CheckLeadershipResponse checkLeadership() {
         // TODO
         return null;
     }
-    @ActorListener(response = true, payload = true)
+    @ActorListener
     private GetServerEntriesResponse getServerEntries(GetServerEntriesRequest request) {
         // TODO
         return null;
     }
 
-    @ActorListener(response = true, payload = true)
+    @ActorListener
     private InstallSnapshotResponse installSnapshot(InstallSnapshotRequest request) {
         // TODO
         return null;

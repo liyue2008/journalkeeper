@@ -23,19 +23,17 @@ public class ServerContext {
 
     private final RaftVoter voter;
 
-    public ServerContext(Properties properties, Config config, RaftState state, RaftJournal journal, RaftVoter voter) {
+    public ServerContext(Properties properties, Config config, RaftState state, RaftJournal journal, RaftVoter voter, EventBus eventBus, PostOffice postOffice) {
         this.properties = properties;
         this.config = config;
         this.state = state;
         this.journal = journal;
         this.voter = voter;
 
-        this.postOffice = new PostOffice();
-        this.eventBus = new EventBus();
+        this.eventBus = eventBus;
+        this.postOffice = postOffice;
 
 
-        EventBusActor eventBusActor = new EventBusActor(eventBus);
-        postOffice.addActor(eventBusActor.getActor());
     }
 
     public Config getConfig() {
@@ -44,10 +42,6 @@ public class ServerContext {
 
     public PostOffice getPostOffice() {
         return postOffice;
-    }
-
-    public EventBus getEventBus() {
-        return eventBus;
     }
 
     public Properties getProperties() {
@@ -64,5 +58,9 @@ public class ServerContext {
 
     public RaftVoter getVoter() {
         return voter;
+    }
+
+    public EventBus getEventBus() {
+        return eventBus;
     }
 }
