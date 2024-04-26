@@ -57,6 +57,10 @@ public class EventBusActor {
         byte [] serializedEvent =  InternalEntriesSerializeSupport.serialize(event);
         eventBus.fireEvent(new Event(EventType.ON_STATE_CHANGE, serializedEvent));
     }
+    @ActorListener
+    private void fireEvent(Event event) {
+        eventBus.fireEvent(event);
+    }
     public Actor getActor() {
         return actor;
     }

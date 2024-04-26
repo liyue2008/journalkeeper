@@ -19,17 +19,12 @@ public class ActorTest {
                 .addTopicHandlerFunction("test", latch::countDown)
                 .build();
         Actor sender = Actor.builder("sender").build();
-        PostOffice postOffice = PostOffice.builder()
+        PostOffice.builder()
                 .addActor(sender)
                 .addActor(receiver)
                 .build();
-        postOffice.start();
-        try {
             sender.send("receiver", "test");
             Assert.assertTrue(latch.await(10, TimeUnit.SECONDS));
-        } finally {
-            postOffice.stop();
-        }
     }
 
     @Test
@@ -42,18 +37,13 @@ public class ActorTest {
                 })
                 .build();
         Actor sender = Actor.builder("sender").build();
-        PostOffice postOffice = PostOffice.builder()
+        PostOffice.builder()
                 .addActor(sender)
                 .addActor(receiver)
                 .build();
-        postOffice.start();
-        try {
 
             sender.send("receiver", "test", "Hello, world!");
             Assert.assertTrue(latch.await(10, TimeUnit.SECONDS));
-        } finally {
-            postOffice.stop();
-        }
     }
 
     @Test
@@ -66,17 +56,14 @@ public class ActorTest {
                     latch.countDown();
                 }).build();
         Actor sender = Actor.builder("sender").build();
-        PostOffice postOffice = PostOffice.builder()
+        PostOffice.builder()
                 .addActor(sender)
                 .addActor(receiver)
                 .build();
-        postOffice.start();
-        try {
+        
             sender.send("receiver", "test", "Hello, world!", 12);
             Assert.assertTrue(latch.await(10, TimeUnit.SECONDS));
-        } finally {
-            postOffice.stop();
-        }
+
     }
 
     @Test
@@ -87,20 +74,17 @@ public class ActorTest {
             return "Hello, world!";
         }).build();
         Actor sender = Actor.builder("sender").build();
-        PostOffice postOffice = PostOffice.builder()
+        PostOffice.builder()
                 .addActor(sender)
                 .addActor(receiver)
                 .build();
-        postOffice.start();
-        try {
+        
             sender.sendThen("receiver", "test").thenAccept(str -> {
                 Assert.assertEquals("Hello, world!", str);
                 latch.countDown();
             });
             Assert.assertTrue(latch.await(10, TimeUnit.SECONDS));
-        } finally {
-            postOffice.stop();
-        }
+
     }
 
     @Test
@@ -112,21 +96,18 @@ public class ActorTest {
             return "Hello, world2!";
         }).build();
         Actor sender = Actor.builder("sender").build();
-        PostOffice postOffice = PostOffice.builder()
+        PostOffice.builder()
                 .addActor(sender)
                 .addActor(receiver)
                 .build();
-        postOffice.start();
-        try {
+        
 
             sender.sendThen("receiver", "test", "Hello, world!").thenAccept(str -> {
                 Assert.assertEquals("Hello, world2!", str);
                 latch.countDown();
             });
             Assert.assertTrue(latch.await(10, TimeUnit.SECONDS));
-        } finally {
-            postOffice.stop();
-        }
+
     }
 
     @Test
@@ -139,21 +120,18 @@ public class ActorTest {
             return "Hello, world2!";
         }).build();
         Actor sender = Actor.builder("sender").build();
-        PostOffice postOffice = PostOffice.builder()
+        PostOffice.builder()
                 .addActor(sender)
                 .addActor(receiver)
                 .build();
-        postOffice.start();
-        try {
+        
 
             sender.sendThen("receiver", "test", "Hello, world!", 12).thenAccept(str -> {
                 Assert.assertEquals("Hello, world2!", str);
                 latch.countDown();
             });
             Assert.assertTrue(latch.await(10, TimeUnit.SECONDS));
-        } finally {
-            postOffice.stop();
-        }
+
     }
 
     // TOPIC 同名方法
@@ -221,12 +199,11 @@ public class ActorTest {
         TopicNameHandlerFunctions handlerFunctions = new TopicNameHandlerFunctions(latch);
         Actor receiver = Actor.builder("receiver").setHandlerInstance(handlerFunctions).build();
         Actor sender = Actor.builder("sender").build();
-        PostOffice postOffice = PostOffice.builder()
+        PostOffice.builder()
                 .addActor(sender)
                 .addActor(receiver)
                 .build();
-        postOffice.start();
-        try {
+        
 
             sender.send("receiver", "noArg");
             sender.sendThen("receiver", "noArgWithReturn").thenAccept(str -> {
@@ -253,9 +230,7 @@ public class ActorTest {
             });
             Assert.assertTrue(latch.await(10, TimeUnit.SECONDS));
 
-        } finally {
-            postOffice.stop();
-        }
+
     }
 
     // annotation
@@ -357,20 +332,17 @@ public class ActorTest {
         ActorMsgClass handlerFunctions = new ActorMsgClass(latch);
         Actor receiver = Actor.builder("receiver").setHandlerInstance(handlerFunctions).build();
         Actor sender = Actor.builder("sender").build();
-        PostOffice postOffice = PostOffice.builder()
+        PostOffice.builder()
                 .addActor(sender)
                 .addActor(receiver)
                 .build();
-        postOffice.start();
-        try {
+        
 
             sender.send("receiver", "onMessage", "Hello");
             sender.send("receiver", "onMessageWithAnnotation", "Hello");
 
             Assert.assertTrue(latch.await(10, TimeUnit.SECONDS));
-        } finally {
-            postOffice.stop();
-        }
+
     }
 
     // pub/sub
@@ -395,19 +367,16 @@ public class ActorTest {
         Sub sub = new Sub(latch);
         Actor receiver = Actor.builder("receiver").setHandlerInstance(sub).build();
         Actor sender = Actor.builder("sender").build();
-        PostOffice postOffice = PostOffice.builder()
+        PostOffice.builder()
                 .addActor(sender)
                 .addActor(receiver)
                 .build();
-        postOffice.start();
-        try {
+        
 
             sender.pub("onEvent", "Hello subscriber!");
             Assert.assertTrue(latch.await(10, TimeUnit.SECONDS));
 
-        } finally {
-            postOffice.stop();
-        }
+
     }
 
 
@@ -429,17 +398,14 @@ public class ActorTest {
     public void testScheduler () throws InterruptedException {
         SchedulerClass schedulerClass = new SchedulerClass();
         Actor receiver = Actor.builder("receiver").setHandlerInstance(schedulerClass).build();
-        PostOffice postOffice = PostOffice.builder()
+        PostOffice.builder()
                 .addActor(receiver)
                 .build();
-        postOffice.start();
-        try {
+        
             Thread.sleep(100);
             int count = schedulerClass.getCount();
             Assert.assertTrue(8 < count && count < 12);
-        } finally {
-            postOffice.stop();
-        }
+
     }
 
     @Test
@@ -448,12 +414,11 @@ public class ActorTest {
         AnnotationHandlerFunctions handlerFunctions = new AnnotationHandlerFunctions(latch);
         Actor receiver = Actor.builder("receiver").setHandlerInstance(handlerFunctions).build();
         Actor sender = Actor.builder("sender").build();
-        PostOffice postOffice = PostOffice.builder()
+        PostOffice.builder()
                 .addActor(sender)
                 .addActor(receiver)
                 .build();
-        postOffice.start();
-        try {
+        
 
             sender.send("receiver", "noArg");
             sender.sendThen("receiver", "noArgWithReturn").thenAccept(str -> {
@@ -480,9 +445,7 @@ public class ActorTest {
             });
             Assert.assertTrue(latch.await(10, TimeUnit.SECONDS));
 
-        } finally {
-            postOffice.stop();
-        }
+
     }
 
 
@@ -499,18 +462,15 @@ public class ActorTest {
             latch.countDown();
         }).build();
         Actor sender = Actor.builder("sender").build();
-        PostOffice postOffice = PostOffice.builder()
+        PostOffice.builder()
                 .addActor(sender)
                 .addActor(receiver)
                 .build();
-        postOffice.start();
-        try {
+        
 
             sender.send("receiver", "test", "Hello, world!", 12);
             Assert.assertTrue(latch.await(10, TimeUnit.SECONDS));
-        } finally {
-            postOffice.stop();
-        }
+
     }
 
     @Test
@@ -529,21 +489,18 @@ public class ActorTest {
             latch.countDown();
         }).build();
         Actor sender = Actor.builder("sender").build();
-        PostOffice postOffice = PostOffice.builder()
+        PostOffice.builder()
                 .addActor(sender)
                 .addActor(receiver)
                 .build();
-        postOffice.start();
-        try {
+        
 
             sender.send("receiver", "topic1");
             sender.send("receiver", "topic2");
             Assert.assertTrue(latch.await(10, TimeUnit.SECONDS));
             Assert.assertEquals(1, topic1Count.get());
             Assert.assertEquals(1, topic2Count.get());
-        } finally {
-            postOffice.stop();
-        }
+
     }
 
     @Test
@@ -559,19 +516,16 @@ public class ActorTest {
             Assert.assertEquals("World!", resp.getResult());
             latch.countDown();
         }).build();
-        PostOffice postOffice = PostOffice.builder()
+        PostOffice.builder()
                 .addActor(sender)
                 .addActor(receiver)
                 .build();
-        postOffice.start();
-        try {
+        
 
             sender.send("receiver", "topic", "Hello!");
             Assert.assertTrue(latch.await(10, TimeUnit.SECONDS));
 
-        } finally {
-            postOffice.stop();
-        }
+
 
     }
 
@@ -612,20 +566,17 @@ public class ActorTest {
                 .build();
         ResponseAnnotationHandlerClass cls = new ResponseAnnotationHandlerClass(latch);
         Actor sender = Actor.builder("sender").setResponseHandlerInstance(cls).build();
-        PostOffice postOffice = PostOffice.builder()
+        PostOffice.builder()
                 .addActor(sender)
                 .addActor(receiver)
                 .build();
-        postOffice.start();
-        try {
+        
 
             sender.send("receiver", "my_topic1");
             sender.send("receiver", "my_topic2");
             Assert.assertTrue(latch.await(10, TimeUnit.SECONDS));
 
-        } finally {
-            postOffice.stop();
-        }
+
     }
 
 
@@ -658,19 +609,16 @@ public class ActorTest {
                 .build();
         ResponseHandlerClass cls = new ResponseHandlerClass(latch);
         Actor sender = Actor.builder("sender").setResponseHandlerInstance(cls).build();
-        PostOffice postOffice = PostOffice.builder()
+        PostOffice.builder()
                 .addActor(sender)
                 .addActor(receiver)
                 .build();
-        postOffice.start();
-        try {
+        
 
             sender.send("receiver", "topic");
             Assert.assertTrue(latch.await(10, TimeUnit.SECONDS));
 
-        } finally {
-            postOffice.stop();
-        }
+
     }
 
     // 默认
@@ -694,20 +642,17 @@ public class ActorTest {
                     latch.countDown();
                 })
                 .build();
-        PostOffice postOffice = PostOffice.builder()
+        PostOffice.builder()
                 .addActor(sender)
                 .addActor(receiver)
                 .build();
-        postOffice.start();
-        try {
+        
 
             sender.send("receiver", "topic1");
             sender.send("receiver", "topic2");
             Assert.assertTrue(latch.await(10, TimeUnit.SECONDS));
 
-        } finally {
-            postOffice.stop();
-        }
+
     }
 
     // reply
@@ -746,12 +691,11 @@ public class ActorTest {
                 .build();
         cls.setActor(receiver);
         Actor sender = Actor.builder("sender").build();
-        PostOffice postOffice = PostOffice.builder()
+        PostOffice.builder()
                 .addActor(sender)
                 .addActor(receiver)
                 .build();
-        postOffice.start();
-        try {
+        
 
             sender.sendThen("receiver", "topic1", "Hello")
                     .thenAccept(result -> {
@@ -766,9 +710,7 @@ public class ActorTest {
                     });
             Assert.assertTrue(latch.await(10, TimeUnit.SECONDS));
 
-        } finally {
-            postOffice.stop();
-        }
+
     }
     @Test
     public void testSendThen() throws InterruptedException {
@@ -783,20 +725,19 @@ public class ActorTest {
             Assert.assertEquals("World!", resp.getResult());
             latch.countDown();
         }).build();
-        PostOffice postOffice = PostOffice.builder()
+        PostOffice.builder()
                 .addActor(sender)
                 .addActor(receiver)
                 .build();
-        postOffice.start();
-        try {
+        
 
             sender.send("receiver", "topic", "Hello!");
             Assert.assertTrue(latch.await(10, TimeUnit.SECONDS));
 
-        } finally {
-            postOffice.stop();
-        }
+
 
     }
 
+    // TODO: test send with response config
+    // TODO： test ResponseManually annotation
 }

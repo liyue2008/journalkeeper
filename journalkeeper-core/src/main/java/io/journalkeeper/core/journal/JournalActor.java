@@ -3,6 +3,7 @@ package io.journalkeeper.core.journal;
 import io.journalkeeper.core.api.JournalEntry;
 import io.journalkeeper.core.api.JournalEntryParser;
 import io.journalkeeper.core.api.RaftJournal;
+import io.journalkeeper.exceptions.StateRecoverException;
 import io.journalkeeper.persistence.BufferPool;
 import io.journalkeeper.persistence.PersistenceFactory;
 import io.journalkeeper.utils.actor.Actor;
@@ -46,14 +47,10 @@ private static final Logger logger = LoggerFactory.getLogger( JournalActor.class
 
     @ActorListener
     private void recover(RecoverJournalRequest request) {
-        boolean success = false;
         try {
             doRecover(request.getPartitions(), request.getJournalSnapshot(), request.getCommitIndex());
-            success = true;
-        } catch (Exception e) {
-            logger.error("Recover Journal failed! Path: {}", config.get("working_dir"), e);
-        } finally {
-            actor.send("RaftServer", "recovered", success);
+        } catch (IOException e) {
+            throw new StateRecoverException(e);
         }
     }
     private void doRecover(Set<Integer> partitions, JournalSnapshot journalSnapshot, long commitIndex) throws IOException {

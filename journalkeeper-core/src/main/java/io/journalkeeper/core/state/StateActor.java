@@ -5,7 +5,9 @@ import io.journalkeeper.core.entry.internal.*;
 import io.journalkeeper.core.journal.JournalActor;
 import io.journalkeeper.core.raft.RaftState;
 import io.journalkeeper.core.server.PartialSnapshot;
+import io.journalkeeper.exceptions.JournalException;
 import io.journalkeeper.exceptions.RecoverException;
+import io.journalkeeper.exceptions.StateRecoverException;
 import io.journalkeeper.persistence.LockablePersistence;
 import io.journalkeeper.persistence.MetadataPersistence;
 import io.journalkeeper.persistence.PersistenceFactory;
@@ -16,7 +18,10 @@ import io.journalkeeper.rpc.server.GetServerStateResponse;
 import io.journalkeeper.utils.actor.*;
 import io.journalkeeper.utils.actor.annotation.ActorListener;
 import io.journalkeeper.utils.actor.annotation.ActorScheduler;
+import io.journalkeeper.utils.actor.annotation.ActorSubscriber;
 import io.journalkeeper.utils.config.Config;
+import io.journalkeeper.utils.event.Event;
+import io.journalkeeper.utils.event.EventType;
 import io.journalkeeper.utils.spi.ServiceSupport;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -87,6 +92,8 @@ public class StateActor implements RaftState{
     private final Config config;
 
     private final Properties properties;
+
+    private boolean isRecovered = false;
 
     public StateActor(RaftServer.Roll roll, StateFactory stateFactory, JournalEntryParser journalEntryParser, RaftJournal journal, Config config, Properties properties) {
         this.roll = roll;
@@ -192,39 +199,10 @@ public class StateActor implements RaftState{
         return this;
     }
 
-    public  static  class  InitRequest {
-        private final URI uri;
-        private final List<URI> voters;
-        private final Set<Integer> userPartitions;
-        private final URI preferredLeader;
-
-        public InitRequest(URI uri, List<URI> voters, Set<Integer> userPartitions, URI preferredLeader) {
-            this.uri = uri;
-            this.voters = voters;
-            this.userPartitions = userPartitions;
-            this.preferredLeader = preferredLeader;
-        }
-
-        public URI getUri() {
-            return uri;
-        }
-
-        public List<URI> getVoters() {
-            return voters;
-        }
-
-        public Set<Integer> getUserPartitions() {
-            return userPartitions;
-        }
-
-        public URI getPreferredLeader() {
-            return preferredLeader;
-        }
-    }
     @ActorListener
-    private void init (InitRequest request) {
+    private void init (URI uri, List<URI> voters, Set<Integer> userPartitions, URI preferredLeader) {
         try {
-            doInit(request.getUri(), request.getVoters(), request.getUserPartitions(), request.getPreferredLeader());
+            doInit(uri, voters,  userPartitions, preferredLeader);
         } catch (IOException e) {
             logger.error("Initialization failed!", e);
         }
@@ -292,19 +270,18 @@ public class StateActor implements RaftState{
     }
 
     @ActorListener
-    private void recover(ActorMsg msg) {
+    private JournalActor.RecoverJournalRequest recover() {
 
         try {
             doRecover();
-            actor.send("Journal", "recover",
-                    new JournalActor.RecoverJournalRequest(
-                            state.getPartitions(),
-                            snapshots.firstEntry().getValue().getJournalSnapshot(),
-                            lastSavedServerMetadata.getCommitIndex()
-                    )
+            isRecovered = true;
+            return new JournalActor.RecoverJournalRequest(
+                    state.getPartitions(),
+                    snapshots.firstEntry().getValue().getJournalSnapshot(),
+                    lastSavedServerMetadata.getCommitIndex()
             );
-        } catch (Exception e) {
-            logger.error("Recover state failed! Path: {}", statePath(), e);
+        } catch (IOException e) {
+            throw new StateRecoverException(e);
         }
     }
     private void doRecover() throws IOException {
@@ -374,6 +351,10 @@ public class StateActor implements RaftState{
     private LastAppliedResponse lastAppliedListener() {
         return new LastAppliedResponse(state.lastApplied());
     }
+    @ActorListener
+    private void setLeader(URI newLeader) {
+        this.leaderUri = newLeader;
+    }
     @Override
     public Long lastApplied() {
         return state.lastApplied();
@@ -402,6 +383,11 @@ public class StateActor implements RaftState{
     @Override
     public long getConfigEpoch() {
         return state.getConfigState().getEpoch();
+    }
+
+    @ActorListener
+    private GetServersResponse getServers() {
+        return new GetServersResponse(new ClusterConfiguration(this.leaderUri, state.voters(), null));
     }
 
     @ActorListener
@@ -469,18 +455,12 @@ public class StateActor implements RaftState{
         }
 
     }
-    @ActorListener
-    private void onJournalCommit(RaftJournal journal) {
-        long offset = journal.readOffset(state.lastApplied());
-        JournalEntry entryHeader = journal.readEntryHeaderByOffset(offset);
-        StateResult stateResult = state.applyEntry(entryHeader, new EntryFutureImpl(journal, offset), journal);
-        // afterStateChanged(stateResult.getUserResult());
-        actor.pub("onStateChange", stateResult);
 
-
-    }
     @ActorScheduler(interval = 100L) // TODO: flush interval 需要从配置中读取
     private void flush() {
+        if(!isRecovered){
+            return;
+        }
         try {
             state.flush();
             ServerMetadata metadata = createServerMetadata();
@@ -494,5 +474,25 @@ public class StateActor implements RaftState{
             logger.warn("Flush exception, commitIndex: {}, lastApplied: {}, server: {}: ",
                     journal.commitIndex(), state.lastApplied(), localUri, e);
         }
+    }
+
+    /**
+     * 监听属性commitIndex的变化，
+     * 当commitIndex变更时如果commitIndex > lastApplied，
+     * 反复执行applyEntries直到lastApplied == commitIndex：
+     *
+     * 1. 如果需要，复制当前状态为新的快照保存到属性snapshots, 索引值为lastApplied。
+     * 2. lastApplied自增，将log[lastApplied]应用到状态机，更新当前状态state；
+     *
+     */
+    @ActorSubscriber(topic = "onJournalCommit")
+    private void applyEntries() {
+        if(!isRecovered){
+            return;
+        }
+        long offset = journal.readOffset(state.lastApplied());
+        JournalEntry entryHeader = journal.readEntryHeaderByOffset(offset);
+        StateResult stateResult = state.applyEntry(entryHeader, new EntryFutureImpl(journal, offset), journal);
+        actor.pub("onStateChange", stateResult.getUserResult());
     }
 }

@@ -25,15 +25,13 @@ import io.journalkeeper.core.client.DefaultRaftClient;
 import io.journalkeeper.core.client.LocalClientRpc;
 import io.journalkeeper.core.client.RemoteClientRpc;
 import io.journalkeeper.core.entry.DefaultJournalEntryParser;
-import io.journalkeeper.core.server.Server;
+import io.journalkeeper.core.raft.RaftServerActor;
 import io.journalkeeper.rpc.RpcAccessPointFactory;
 import io.journalkeeper.rpc.RpcException;
 import io.journalkeeper.rpc.client.ClientServerRpcAccessPoint;
 import io.journalkeeper.utils.retry.ExponentialRetryPolicy;
-import io.journalkeeper.utils.retry.IncreasingRetryPolicy;
 import io.journalkeeper.utils.retry.RetryPolicy;
 import io.journalkeeper.utils.spi.ServiceSupport;
-import io.journalkeeper.utils.state.StateServer;
 import io.journalkeeper.utils.threads.NamedThreadFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -63,7 +61,7 @@ public class BootStrap implements ClusterAccessPoint {
     private final RaftServer.Roll roll;
     private final RpcAccessPointFactory rpcAccessPointFactory;
     private final List<URI> servers;
-    private final Server server;
+    private final RaftServerActor server;
     private final JournalEntryParser journalEntryParser;
     private final RetryPolicy remoteRetryPolicy =
             new ExponentialRetryPolicy(10L, 3000L, 10);
@@ -108,7 +106,7 @@ public class BootStrap implements ClusterAccessPoint {
         this.servers = servers;
     }
 
-    private Server createServer() {
+    private RaftServerActor createServer() {
         if (null == serverScheduledExecutor && !isExecutorProvided) {
             this.serverScheduledExecutor = Executors.newScheduledThreadPool(SCHEDULE_EXECUTOR_QUEUE_SIZE, new NamedThreadFactory("JournalKeeper-Server-Scheduled-Executor"));
         }
@@ -117,7 +115,8 @@ public class BootStrap implements ClusterAccessPoint {
         }
 
         if (null != roll) {
-            return new Server(roll, stateFactory, journalEntryParser, serverScheduledExecutor, serverAsyncExecutor, properties);
+            return new RaftServerActor(roll, stateFactory, journalEntryParser, properties);
+//            return new Server(roll, stateFactory, journalEntryParser, serverScheduledExecutor, serverAsyncExecutor, properties);
         }
         return null;
     }
@@ -150,7 +149,7 @@ public class BootStrap implements ClusterAccessPoint {
         }
 
         if (this.server != null) {
-            return new LocalClientRpc(server, remoteRetryPolicy, clientScheduledExecutor);
+            return new LocalClientRpc(server.getServerRpc(), remoteRetryPolicy, clientScheduledExecutor);
         } else {
             throw new IllegalStateException("No local server!");
         }
@@ -169,7 +168,7 @@ public class BootStrap implements ClusterAccessPoint {
         if (this.server == null) {
             clientRpc = new RemoteClientRpc(getServersForClient(), clientServerRpcAccessPoint, remoteRetryPolicy, clientAsyncExecutor, clientScheduledExecutor);
         } else {
-            clientServerRpcAccessPoint = new LocalDefaultRpcAccessPoint(server, clientServerRpcAccessPoint);
+            clientServerRpcAccessPoint = new LocalDefaultRpcAccessPoint(server.getServerRpc(), clientServerRpcAccessPoint);
             clientRpc = new RemoteClientRpc(getServersForClient(), clientServerRpcAccessPoint, remoteRetryPolicy, clientAsyncExecutor, clientScheduledExecutor);
             clientRpc.setPreferredServer(server.serverUri());
         }
@@ -227,7 +226,7 @@ public class BootStrap implements ClusterAccessPoint {
             return servers;
         } else {
             try {
-                return server.getServers().get().getClusterConfiguration().getVoters();
+                return server.getServerRpc().getServers().get().getClusterConfiguration().getVoters();
             } catch (Throwable e) {
                 throw new RpcException(e);
             }

@@ -6,6 +6,7 @@ import io.journalkeeper.rpc.server.AsyncAppendEntriesResponse;
 import io.journalkeeper.utils.actor.Actor;
 import io.journalkeeper.utils.actor.annotation.ActorListener;
 import io.journalkeeper.utils.actor.ActorMsg;
+import io.journalkeeper.utils.actor.annotation.ActorMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,7 +40,7 @@ public class FollowerActor {
      * 如果leaderCommit > commitIndex，将commitIndex设置为leaderCommit和最新日志条目索引号中较小的一个
      */
     @ActorListener
-    private void asyncAppendEntries(ActorMsg msg) {
+    private void asyncAppendEntries(@ActorMessage ActorMsg msg) {
         // 1. State.maybeRollbackConfig 如果要删除部分未提交的日志，并且待删除的这部分存在配置变更日志，则需要回滚配置
         // 2. Journal.compareOrAppendRaw 从index位置开始：
         //    如果一条已经存在的日志与新的冲突（index 相同但是任期号 term 不同），则删除已经存在的日志和它之后所有的日志

@@ -30,7 +30,6 @@ public class ServerRpcActor implements ServerRpc {
 
     protected ServerRpcActor( Properties properties) {
         this.properties  = properties;
-
     }
 
 
@@ -64,8 +63,11 @@ public class ServerRpcActor implements ServerRpc {
         return forwardRequest(null, "State");
     }
 
-    private  <T> CompletableFuture<T>  forwardRequest(){
-        return forwardRequest(null, null, null);
+    private  <T> CompletableFuture<T>  forwardRequest(String addr, String topic){
+        return forwardRequest(null, addr, topic);
+    }
+    private  <T> CompletableFuture<T>  forwardRequest(String topic){
+        return forwardRequest(null, null, topic);
     }
     private  <T> CompletableFuture<T>  forwardRequest(Object request) {
         return forwardRequest(request, null, null);
@@ -79,9 +81,6 @@ public class ServerRpcActor implements ServerRpc {
         if (addr == null) {
             addr = "RaftServer";
         }
-        if (null == request) {
-            request = new Object();
-        }
         if (topic == null) {
             topic = request.getClass().getSimpleName();
 
@@ -91,8 +90,11 @@ public class ServerRpcActor implements ServerRpc {
             topic = firstCharToLowerCase(topic);
         }
 
-
-        return actor.sendThen(addr, topic, request);
+        if (null == request) {
+            return actor.sendThen(addr, topic);
+        }else {
+            return actor.sendThen(addr, topic, request);
+        }
     }
 
     private String firstCharToLowerCase(String str) {
@@ -109,12 +111,12 @@ public class ServerRpcActor implements ServerRpc {
 
     @Override
     public CompletableFuture<GetServersResponse> getServers() {
-        return forwardRequest();
+        return forwardRequest(null, "State", "getServers");
     }
 
     @Override
     public CompletableFuture<GetServerStatusResponse> getServerStatus() {
-        return forwardRequest();
+        return forwardRequest("getServerStatus");
     }
 
     @Override
@@ -173,7 +175,7 @@ public class ServerRpcActor implements ServerRpc {
 
     @Override
     public CompletableFuture<CheckLeadershipResponse> checkLeadership() {
-        return forwardRequest();
+        return forwardRequest("checkLeadership");
 
     }
 
@@ -185,11 +187,6 @@ public class ServerRpcActor implements ServerRpc {
     @Override
     public void unWatch(EventWatcher eventWatcher) {
         actor.send("EventBus", "unWatch", eventWatcher);
-    }
-
-    @Override
-    public void stop() {
-        // nothing to do...
     }
 
     @Override
@@ -249,7 +246,7 @@ public class ServerRpcActor implements ServerRpc {
     }
 
     @ActorListener
-    private void stop(ActorMsg msg) {
+    public void stop() {
         if (this.serverState != StateServer.ServerState.RUNNING) {
             return;
         }
@@ -262,6 +259,10 @@ public class ServerRpcActor implements ServerRpc {
         } catch (Exception e) {
             logger.error("Failed to stop server RPC service.", e);
         }
+    }
+
+    public ServerRpcAccessPoint getServerRpcAccessPoint() {
+        return serverRpcAccessPoint;
     }
 
 }

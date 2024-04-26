@@ -117,6 +117,12 @@ public class Actor {
     public ActorMsg send(String addr, String topic) {
         return outbox.send(addr, topic);
     }
+    ActorMsg send(String addr, String topic, ActorMsg.Response response) {
+        return outbox.send(addr, topic, response);
+    }
+    public ActorMsg send(String addr, String topic, ActorMsg.Response response, Object... payloads) {
+        return outbox.send(addr, topic, response, payloads);
+    }
     public ActorMsg send(String addr, String topic, Object... payloads) {
         return outbox.send(addr, topic, payloads);
     }

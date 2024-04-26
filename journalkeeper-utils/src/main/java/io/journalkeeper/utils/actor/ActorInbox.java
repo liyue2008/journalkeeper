@@ -1,10 +1,7 @@
 package io.journalkeeper.utils.actor;
 
 import io.journalkeeper.utils.Tuple;
-import io.journalkeeper.utils.actor.annotation.ActorListener;
-import io.journalkeeper.utils.actor.annotation.ActorMessage;
-import io.journalkeeper.utils.actor.annotation.ActorScheduler;
-import io.journalkeeper.utils.actor.annotation.ActorSubscriber;
+import io.journalkeeper.utils.actor.annotation.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -55,15 +52,15 @@ class ActorInbox {
 
     private Map<String, Method> annotationListeners = new HashMap<>();
 
-    private List<Tuple<String, ActorScheduler>> schedulers = new LinkedList<>();
-    private List<Tuple<String, ActorScheduler>> scanSchedulers(Object handlerInstance) {
+    private List<ScheduleTask> schedulers = new LinkedList<>();
+    private List<ScheduleTask> scanSchedulers(Object handlerInstance) {
         return Arrays.stream(handlerInstance.getClass().getDeclaredMethods())
                 .filter(method -> method.isAnnotationPresent(ActorScheduler.class))
-                .map(method -> new Tuple<>(ActorUtils.methodToTopic(method, ActorScheduler.class), method.getAnnotation(ActorScheduler.class)))
+                .map(method -> new ScheduleTask(getMyAddr(), ActorUtils.methodToTopic(method, ActorScheduler.class), method.getAnnotation(ActorScheduler.class)))
                 .collect(Collectors.toList());
     }
 
-    List<Tuple<String, ActorScheduler>> getSchedulers() {
+    List<ScheduleTask> getSchedulers() {
         return schedulers;
     }
 
@@ -134,12 +131,11 @@ class ActorInbox {
                 .collect(Collectors.toSet());
     }
 
-    private boolean tryInvoke(Tuple<Object, Method> function, ActorMsg msg) throws InvocationTargetException, IllegalAccessException {
+    private boolean tryInvoke(Tuple<Object, Method> function, ActorMsg msg) throws IllegalAccessException {
         if (function != null) {
             Object instance = function.first();
             Method method = function.second();
-            Object ret = null;
-            Throwable throwable = null;
+            Object ret;
             try {
                 if (method.getParameterCount() == 1 && method.getParameters()[0].isAnnotationPresent(ActorMessage.class)) {
                     // 优先看参数个数是否是1，且带有@ActorMessage注解
@@ -149,18 +145,29 @@ class ActorInbox {
                     method.setAccessible(true);
                     ret = method.invoke(instance, msg.getPayloads());
                 }
-                if (!void.class.equals(method.getReturnType())) {
+                if (needResponse(msg, method)) {
                     this.outbox.send(msg.getSender(), RESPONSE, new ActorResponse(msg, ret));
                 }
             } catch (InvocationTargetException ite) {
-                if (!void.class.equals(method.getReturnType())) {
+                if (needResponse(msg, method)) {
                     this.outbox.send(msg.getSender(), RESPONSE, new ActorResponse(msg, ite.getCause()));
                 }
                 logger.info("Invoke message handler exception, handler: {}, msg: {}, exception: {}.", instance.getClass().getName() + "." + method.getName() + "(...)", msg, ite.getCause().toString());
+            } catch (IllegalArgumentException e) {
+                if (needResponse(msg, method)) {
+                    this.outbox.send(msg.getSender(), RESPONSE, new ActorResponse(msg, e));
+                }
+                logger.info("Invoke message handler exception, handler: {}, msg: {}, exception: {}.", instance.getClass().getName() + "." + method.getName() + "(...)", msg, e.toString());
+
             }
             return true;
         }
         return false;
+    }
+
+    private boolean needResponse(ActorMsg msg, Method method) {
+        return (msg.getResponse() == ActorMsg.Response.REQUIRED
+                || (msg.getResponse() == ActorMsg.Response.DEFAULT && !void.class.equals(method.getReturnType()))) && !method.isAnnotationPresent(ResponseManually.class);
     }
 
     private void invokeAnnotationListener(ActorMsg msg, Method method) throws InvocationTargetException, IllegalAccessException {

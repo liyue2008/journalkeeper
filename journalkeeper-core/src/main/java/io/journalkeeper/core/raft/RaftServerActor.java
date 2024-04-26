@@ -1,6 +1,7 @@
 package io.journalkeeper.core.raft;
 
 import io.journalkeeper.core.api.*;
+import io.journalkeeper.core.config.ServerConfigDeclaration;
 import io.journalkeeper.core.entry.internal.InternalEntriesSerializeSupport;
 import io.journalkeeper.core.entry.internal.InternalEntryType;
 import io.journalkeeper.core.entry.internal.UpdateVotersS1Entry;
@@ -8,13 +9,11 @@ import io.journalkeeper.core.entry.internal.UpdateVotersS2Entry;
 import io.journalkeeper.core.journal.JournalActor;
 import io.journalkeeper.core.state.ConfigState;
 import io.journalkeeper.core.state.StateActor;
+import io.journalkeeper.exceptions.JournalException;
 import io.journalkeeper.persistence.LockablePersistence;
 import io.journalkeeper.persistence.PersistenceFactory;
 import io.journalkeeper.rpc.client.*;
-import io.journalkeeper.rpc.server.GetServerEntriesRequest;
-import io.journalkeeper.rpc.server.GetServerEntriesResponse;
-import io.journalkeeper.rpc.server.InstallSnapshotRequest;
-import io.journalkeeper.rpc.server.InstallSnapshotResponse;
+import io.journalkeeper.rpc.server.*;
 import io.journalkeeper.utils.actor.*;
 import io.journalkeeper.utils.actor.annotation.ActorListener;
 import io.journalkeeper.utils.config.Config;
@@ -31,6 +30,7 @@ import java.util.List;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
 import static io.journalkeeper.core.api.RaftJournal.INTERNAL_PARTITION;
 
@@ -38,10 +38,7 @@ public class RaftServerActor implements  RaftServer {
     private static final Logger logger = LoggerFactory.getLogger( RaftServerActor.class );
 
     private final ServerContext context;
-
-
-
-
+    private ServerRpc serverRpc;
     private final Actor actor = Actor.builder("RaftServer").setHandlerInstance(this).build();
 
 
@@ -49,6 +46,8 @@ public class RaftServerActor implements  RaftServer {
         this.persistenceFactory = ServiceSupport.load(PersistenceFactory.class);
 
         Config config = new Config();
+        ServerConfigDeclaration serverConfigDeclaration = new ServerConfigDeclaration();
+        serverConfigDeclaration.declare(config);
         config.load(new PropertiesConfigProvider(properties));
 
         this.context = buildServerContext(roll, stateFactory, journalEntryParser, properties, config);
@@ -58,9 +57,11 @@ public class RaftServerActor implements  RaftServer {
     private ServerContext buildServerContext(Roll roll, StateFactory stateFactory, JournalEntryParser journalEntryParser, Properties properties, Config config) {
         JournalActor journalActor = new JournalActor(journalEntryParser, config, properties);
         StateActor stateActor = new StateActor(roll, stateFactory, journalEntryParser, journalActor.getRaftJournal(),config, properties);
-        VoterActor voterActor = new VoterActor(journalActor.getRaftJournal());
+        VoterActor voterActor = new VoterActor(journalActor.getRaftJournal(),stateActor.getState(), config);
         LeaderActor leaderActor = new LeaderActor(journalEntryParser, journalActor.getRaftJournal(), stateActor.getState(), voterActor.getRaftVoter(), config);
         ServerRpcActor serverRpcActor = new ServerRpcActor(properties);
+        this.serverRpc = serverRpcActor;
+        RpcActor rpcActor = new RpcActor(serverRpcActor.getServerRpcAccessPoint());
         EventBusActor eventBusActor = new EventBusActor();
         FollowerActor followerActor = new FollowerActor(stateActor.getState(), journalActor.getRaftJournal());
 
@@ -71,6 +72,7 @@ public class RaftServerActor implements  RaftServer {
                 .addActor(voterActor.getActor())
                 .addActor(leaderActor.getActor())
                 .addActor(serverRpcActor.getActor())
+                .addActor(rpcActor.getActor())
                 .addActor(eventBusActor.getActor())
                 .addActor(followerActor.getActor())
                 .build();
@@ -85,7 +87,11 @@ public class RaftServerActor implements  RaftServer {
 
     @Override
     public void init(URI uri, List<URI> voters, Set<Integer> partitions, URI preferredLeader) throws IOException {
-        actor.send("State", "init", new StateActor.InitRequest(uri, voters, partitions, preferredLeader));
+        try {
+            actor.sendThen("State", "init", uri, voters, partitions, preferredLeader).get();
+        } catch (InterruptedException | ExecutionException e) {
+            throw new JournalException(e);
+        }
     }
 
     @Override
@@ -96,18 +102,31 @@ public class RaftServerActor implements  RaftServer {
     @Override
     public void recover() throws IOException {
         acquireFileLock();
-        actor.send("State", "recover", null);
+        actor.<JournalActor.RecoverJournalRequest>sendThen("State", "recover")
+                .thenCompose(request -> actor.sendThen("Journal", "recover", request))
+                .thenCompose(r -> CompletableFuture.allOf(
+                        actor.sendThen("RaftServer", "recoverVoterConfig"),
+                        actor.sendThen("Voter", "maybeUpdateTermOnRecovery", context.getJournal())
+                )).whenComplete((r, e) -> {
+                    if (e != null) {
+                        logger.warn("Recover failed!", e);
+                    } else {
+                        logger.info("Recover ends!");
+                    }
+                    releaseFileLock();
+                });
     }
     @ActorListener
     private void recovered(boolean isRecoveredFromJournal) {
         if (isRecoveredFromJournal) {
 
             CompletableFuture.allOf(
-                    actor.sendThen("RaftServer", "recoverVoterConfig", null),
+                    actor.sendThen("RaftServer", "recoverVoterConfig"),
                     actor.sendThen("Voter", "maybeUpdateTermOnRecovery", context.getJournal())
             ).thenRun(this::releaseFileLock);
+        } else {
+            releaseFileLock();
         }
-        releaseFileLock();
     }
 
     /**
@@ -159,7 +178,7 @@ public class RaftServerActor implements  RaftServer {
 
     @Override
     public void stop() {
-        actor.send("ServerRpc", "stop", null);
+        actor.send("ServerRpc", "stop");
     }
 
     @Override
@@ -238,5 +257,7 @@ public class RaftServerActor implements  RaftServer {
         return null;
     }
 
-
+    public ServerRpc getServerRpc() {
+        return serverRpc;
+    }
 }

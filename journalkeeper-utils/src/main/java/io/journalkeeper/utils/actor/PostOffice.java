@@ -44,15 +44,17 @@ public class PostOffice{
             threadOutboxList.get(i).forEach(builder::addOutbox);
             this.postmanList.add(builder.build());
         }
-
+        start();
+        // add shutdown hook
+        Runtime.getRuntime().addShutdownHook(new Thread(this::stop));
     }
 
 
+    // TODO: 需要支持动态添加定时任务
     private void addActor(Actor actor) {
         inboxMap.put(actor.getInbox().getMyAddr(), actor.getInbox());
         actor.getInbox().getSubscribedTopics().forEach(topic -> this.subTopic(topic, actor));
-        actor.getInbox().getSchedulers().forEach(t -> scheduleActor.addTask(t.second().timeUnit(), t.second().interval(), actor.getAddr(), t.first()));
-
+        actor.getInbox().getSchedulers().forEach(scheduleActor::addTask);
     }
 
     private void subTopic(String topic, Actor actor) {
@@ -80,16 +82,17 @@ public class PostOffice{
         }
     }
 
-    public void start() {
+    private void start() {
         for (Postman postman : postmanList) {
-            new Thread(postman, "Postman-" + postmanList.indexOf(postman)).start();
+            Thread thread = new Thread(postman, "Postman-" + postmanList.indexOf(postman));
+            thread.setDaemon(true);
+            thread.start();
         }
     }
 
-    public void stop() {
-        for (Postman postman: postmanList) {
-            postman.stop();
-        }
+    private void stop() {
+        // TODO：清理完未处理的消息
+
     }
 
     public static Builder builder() {

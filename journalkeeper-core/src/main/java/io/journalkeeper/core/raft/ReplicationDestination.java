@@ -79,42 +79,33 @@ class ReplicationDestination {
                         entries, state.commitIndex(), maxIndex);
 
 
-        actor.sendThen("Rpc", "asyncAppendEntries", request)
-                .thenAccept(resp -> {
-                    handleAppendEntriesResponse(resp, entries.size(), fistSnapShotEntry.getKey());
+        actor.<AsyncAppendEntriesResponse>sendThen("Rpc", "asyncAppendEntries", request)
+                .thenAccept(resp -> handleAppendEntriesResponse(resp, entries.size(), fistSnapShotEntry.getKey()))
+                .exceptionally(e -> {
+                    logger.warn("Replication execution exception, from {} to {}, cause: {}.", state.getLocalUri(), uri, null == e.getCause() ? e.getMessage() : e.getCause().getMessage());
+                    return null;
                 });
         lastHeartbeatRequestTime = System.currentTimeMillis();
     }
 
 
-    private void handleAppendEntriesResponse(Object resp, int entrySize, long startIndex) {
-        if (null == resp) {
-            // 没收到响应或者请求失败
-            // 等下一个心跳超时之后，再进入这个方法会自动重试
-        } else if (resp instanceof Exception) {
-            Exception e = (Exception) resp;
-            logger.warn("Replication execution exception, from {} to {}, cause: {}.", state.getLocalUri(), uri, null == e.getCause()? e.getMessage() : e.getCause().getMessage());
+    private void handleAppendEntriesResponse(AsyncAppendEntriesResponse response, int entrySize, long startIndex) {
+        if(!response.success()) {
+            return;
+        }
+        // 成功收到响应响应
+        lastHeartbeatResponseTime = System.currentTimeMillis();
+        if (response.isSuccess()) { // 复制成功
+            if (entrySize > 0) {
+                nextIndex += entrySize;
+                matchIndex = nextIndex;
+                committed = false;
+                actor.send("Leader","commit");
+            }
         } else {
-
-
-            AsyncAppendEntriesResponse response = (AsyncAppendEntriesResponse) resp;
-            if(!response.success()) {
-                return;
-            }
-            // 成功收到响应响应
-            lastHeartbeatResponseTime = System.currentTimeMillis();
-            if (response.isSuccess()) { // 复制成功
-                if (entrySize > 0) {
-                    nextIndex += entrySize;
-                    matchIndex = nextIndex;
-                    committed = false;
-                    actor.send("Leader","commit",null);
-                }
-            } else {
-                // 不匹配，回退
-                int rollbackSize = (int) Math.min(replicationBatchSize, nextIndex - startIndex);
-                nextIndex -= rollbackSize;
-            }
+            // 不匹配，回退
+            int rollbackSize = (int) Math.min(replicationBatchSize, nextIndex - startIndex);
+            nextIndex -= rollbackSize;
         }
     }
 

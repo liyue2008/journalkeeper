@@ -25,8 +25,14 @@ class ActorOutbox {
     ActorMsg send(String addr, String topic){
         return send(addr, topic, new Object[] {});
     }
-    ActorMsg send(String addr, String topic, Object... payloads){
-        ActorMsg actorMsg = new ActorMsg(msgId.getAndIncrement(), myAddr, addr, topic, payloads);
+    ActorMsg send(String addr, String topic, ActorMsg.Response response) {
+        return send(addr, topic, response, new Object[] {});
+    }
+    ActorMsg send(String addr, String topic, Object... payloads) {
+        return send(addr, topic, ActorMsg.Response.DEFAULT, payloads);
+    }
+    ActorMsg send(String addr, String topic, ActorMsg.Response response, Object... payloads){
+        ActorMsg actorMsg = new ActorMsg(msgId.getAndIncrement(), myAddr, addr, topic,response, payloads);
         msgQueue.add(actorMsg);
         ring();
         return actorMsg;

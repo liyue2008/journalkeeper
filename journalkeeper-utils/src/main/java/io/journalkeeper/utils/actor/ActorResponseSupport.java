@@ -45,7 +45,7 @@ class ActorResponseSupport {
     }
     <T> CompletableFuture<T> send(String addr, String topic, Object... payloads){
         CompletableFuture<T> future = new CompletableFuture<>();
-        ActorMsg request = this.outbox.send(addr, topic, payloads);
+        ActorMsg request = this.outbox.send(addr, topic, ActorMsg.Response.REQUIRED, payloads);
         responseFutures.put(request, future);
         return future;
     }

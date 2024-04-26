@@ -3,6 +3,7 @@ package io.journalkeeper.core.raft;
 import io.journalkeeper.core.api.*;
 import io.journalkeeper.core.entry.internal.InternalEntriesSerializeSupport;
 import io.journalkeeper.core.entry.internal.InternalEntryType;
+import io.journalkeeper.core.entry.internal.OnStateChangeEvent;
 import io.journalkeeper.core.state.Snapshot;
 import io.journalkeeper.core.transaction.JournalTransactionManager;
 import io.journalkeeper.exceptions.IndexUnderflowException;
@@ -13,7 +14,10 @@ import io.journalkeeper.rpc.server.DisableLeaderWriteResponse;
 import io.journalkeeper.utils.actor.*;
 import io.journalkeeper.utils.actor.annotation.ActorListener;
 import io.journalkeeper.utils.actor.annotation.ActorScheduler;
+import io.journalkeeper.utils.actor.annotation.ActorSubscriber;
 import io.journalkeeper.utils.config.Config;
+import io.journalkeeper.utils.event.Event;
+import io.journalkeeper.utils.event.EventType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -66,6 +70,9 @@ public class LeaderActor {
         //      2.2 Leader.replication
         // 3. (RPC) Follower.asyncAppendEntries
         // 4. Leader.commit
+        // 5. Journal.commit
+        // 6. State.applyEntries
+        // 7. Leader.callback
         UpdateClusterStateRequest request = msg.getPayload();
         if (voter.getVoterState() != VoterState.LEADER) {
             actor.reply(msg, new UpdateClusterStateResponse(new NotLeaderException(getClusterLeader())));
@@ -85,28 +92,32 @@ public class LeaderActor {
         List<JournalEntry> journalEntries = requestToJournalEntries(request);
 
         actor.<Long>sendThen("Journal", "append", journalEntries)
-                .thenAccept(position -> {
-                            this.waitingResponses.add(
-                                    new WaitingResponse(msg, position - journalEntries.size() + 1, position + 1, config.get("rpc_timeout_ms"), actor)
-                            );
-                            switch (request.getResponseConfig()) {
-                                case PERSISTENCE:
-                                    actor.send("Journal", "flush", null);
-                                    break;
-                                case REPLICATION:
-                                    actor.send("Leader", "replication", null);
-                                    break;
-                                case ALL:
-                                    actor.send("Journal", "flush", null);
-                                    actor.send("Leader", "replication", null);
-                                    break;
-                                default:
-                                    // nothing to do.
-                            }
-                        }
-                );
+                .thenApply(position -> new WaitingResponse(msg, position - journalEntries.size() + 1, position + 1, config.get("rpc_timeout_ms"), actor))
+                .thenAccept(this.waitingResponses::add)
+                .thenRun(() -> onJournalAppend(request.getResponseConfig()));
 
     }
+
+    private void onJournalAppend(ResponseConfig responseConfig) {
+        if (voter.getVoterState() != VoterState.LEADER) {
+            return;
+        }
+        switch (responseConfig) {
+            case PERSISTENCE:
+                actor.send("Journal", "flush");
+                break;
+            case REPLICATION:
+                actor.send("Leader", "replication");
+                break;
+            case ALL:
+                actor.send("Journal", "flush");
+                actor.send("Leader", "replication");
+                break;
+            default:
+                // nothing to do.
+        }
+    }
+
     /**
      * 对于每一个AsyncAppendRequest RPC请求，当收到成功响应的时需要更新repStartIndex、matchIndex和commitIndex。
      * 由于接收者按照日志的索引位置串行处理请求，一般情况下，收到的响应也是按照顺序返回的，但是考虑到网络延时和数据重传，
@@ -126,13 +137,16 @@ public class LeaderActor {
      */
     @ActorScheduler(interval = 100L)
     private void commit() {
+        if (voter.getVoterState() != VoterState.LEADER) {
+            return;
+        }
         boolean isAnyFollowerNextIndexUpdated = false;
         if (
                 journal.commitIndex() < journal.maxIndex() && (
                         replicationDestinations.isEmpty() ||  (isAnyFollowerNextIndexUpdated = this.replicationDestinations.stream()
                 .noneMatch(ReplicationDestination::isCommitted))
                 )) {
-            long N = calcuateN(isAnyFollowerNextIndexUpdated);
+            long N = calculateN(isAnyFollowerNextIndexUpdated);
             if (N > journal.commitIndex() && getTerm(N - 1) == getCurrentTerm()) {
                 if (logger.isDebugEnabled()) {
                     logger.debug("Set commitIndex {} to {}, {}.", journal.commitIndex(), N, voterInfo());
@@ -162,7 +176,7 @@ public class LeaderActor {
         }
     }
 
-    private long calcuateN(boolean isAnyFollowerNextIndexUpdated) {
+    private long calculateN(boolean isAnyFollowerNextIndexUpdated) {
         long N = 0L;
         if (this.replicationDestinations.isEmpty()) {
             N = journal.maxIndex();
@@ -199,21 +213,36 @@ public class LeaderActor {
 
         return N;
     }
-    @ActorListener
+    @ActorSubscriber
     private void onStateChange(StateResult stateResult) {
+        if (voter.getVoterState() != VoterState.LEADER) {
+            return;
+        }
+        if(config.get("enable_events")) {
+            OnStateChangeEvent event = new OnStateChangeEvent(state.lastApplied());
+            byte [] serializedEvent =  InternalEntriesSerializeSupport.serialize(event);
+            actor.send("EventBus", "fireEvent", new Event(EventType.ON_STATE_CHANGE, serializedEvent));
+        }
         this.waitingResponses.removeIf(waitingResponse -> waitingResponse.positionMatch(stateResult.getLastApplied()) && waitingResponse.countdownReplication());
     }
 
     @ActorListener
     private void onJournalFlush(long journalFlushIndex) {
+        if (voter.getVoterState() != VoterState.LEADER) {
+            return;
+        }
         this.waitingResponses.removeIf(waitingResponse -> waitingResponse.getToPosition() <= journalFlushIndex && waitingResponse.countdownFlush());
     }
 
+    @ActorSubscriber(topic = "onJournalCommit")
     @ActorScheduler(interval = 100)
     private void replication() {
+        if (voter.getVoterState() != VoterState.LEADER) {
+            return;
+        }
         this.replicationDestinations.forEach(ReplicationDestination::replication);
     }
-    @ActorListener
+    @ActorScheduler
     private void removeTimeoutResponses() {
         this.waitingResponses.removeIf(WaitingResponse::isTimeout);
     }
