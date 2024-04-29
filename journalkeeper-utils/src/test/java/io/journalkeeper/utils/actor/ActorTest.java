@@ -5,6 +5,7 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
@@ -409,6 +410,42 @@ public class ActorTest {
     }
 
     @Test
+    public void testAddScheduler () throws InterruptedException {
+        Actor receiver = Actor.builder("receiver").build();
+        AtomicInteger counter = new AtomicInteger();
+        PostOffice.builder()
+                .addActor(receiver)
+                .build();
+        receiver.addScheduler(10, TimeUnit.MILLISECONDS, "onEvent", counter::incrementAndGet);
+        Thread.sleep(100);
+        int count = counter.get();
+        Assert.assertTrue(8 < count && count < 12);
+    }
+
+    @Test
+    public void testRemoveScheduler () throws InterruptedException {
+        Actor receiver = Actor.builder("receiver").build();
+        AtomicInteger counter = new AtomicInteger();
+        PostOffice.builder()
+                .addActor(receiver)
+                .build();
+        receiver.addScheduler(10, TimeUnit.MILLISECONDS, "onEvent", counter::incrementAndGet);
+        Thread.sleep(100);
+        int count = counter.get();
+        Assert.assertTrue(8 < count && count < 12);
+
+        receiver.removeScheduler("onEvent");
+        // 等待消息被处理
+        Thread.sleep(20);
+        // 之后counter不再增长
+        count = counter.get();
+        Thread.sleep(100);
+        Assert.assertEquals(count, counter.get());
+    }
+
+
+
+    @Test
     public void testAddTopicHandlerFunctionWithAnnotation() throws InterruptedException {
         final CountDownLatch latch = new CountDownLatch(12);
         AnnotationHandlerFunctions handlerFunctions = new AnnotationHandlerFunctions(latch);
@@ -664,12 +701,14 @@ public class ActorTest {
             this.latch = latch;
         }
 
+        @ResponseManually
         private void topic1(@ActorMessage ActorMsg msg) {
             Assert.assertEquals("Hello", msg.getPayload());
             actor.reply(msg, "World");
             latch.countDown();
         }
 
+        @ResponseManually
         private void topic2(@ActorMessage ActorMsg msg) {
             Assert.assertEquals("Hello", msg.getPayload());
             actor.replyException(msg, new RuntimeException("exception msg"));
@@ -738,6 +777,78 @@ public class ActorTest {
 
     }
 
-    // TODO: test send with response config
-    // TODO： test ResponseManually annotation
+    @Test
+    public void testResponseConfigIgnored() throws InterruptedException {
+        final CountDownLatch latch = new CountDownLatch(2);
+        Actor receiver = Actor.builder("receiver").addTopicHandlerFunction("topic", request -> {
+            Assert.assertEquals("Hello!", request);
+            latch.countDown();
+            return "World";
+        }).build();
+
+        Actor sender = Actor.builder("sender").addResponseHandlerFunction("topic", resp -> {
+            // 响应配置为忽略，不应调用到这里
+            latch.countDown();
+        }).build();
+        PostOffice.builder()
+                .addActor(sender)
+                .addActor(receiver)
+                .build();
+        sender.send("receiver", "topic", ActorMsg.Response.IGNORE, "Hello!");
+        Assert.assertFalse(latch.await(1, TimeUnit.SECONDS));
+        Assert.assertEquals(1, latch.getCount());
+    }
+
+    @Test
+    public void testResponseConfigRequired() throws InterruptedException {
+        final CountDownLatch latch = new CountDownLatch(2);
+        Actor receiver = Actor.builder("receiver").addTopicHandlerFunction("topic", request -> {
+            Assert.assertEquals("Hello!", request);
+            latch.countDown();
+        }).build();
+        Actor sender = Actor.builder("sender").addResponseHandlerFunction("topic", resp -> {
+
+            Assert.assertNull(resp.getResult());
+            latch.countDown();
+        }).build();
+        PostOffice.builder()
+                .addActor(sender)
+                .addActor(receiver)
+                .build();
+        sender.send("receiver", "topic", ActorMsg.Response.REQUIRED, "Hello!");
+        Assert.assertTrue(latch.await(10, TimeUnit.SECONDS));
+    }
+
+    private static class ResponseManuallyCls {
+        private Actor actor;
+        @ActorListener
+        @ResponseManually
+        private String topic(@ActorMessage ActorMsg msg) {
+            actor.reply(msg, "result1");
+            return "result2";
+        }
+
+        public void setActor(Actor actor) {
+            this.actor = actor;
+        }
+    }
+
+
+    @Test
+    public void testResponseManually() throws InterruptedException, ExecutionException {
+        ResponseManuallyCls cls = new ResponseManuallyCls();
+        Actor receiver = Actor.builder("receiver").setHandlerInstance(cls).build();
+        cls.setActor(receiver);
+        Actor sender = Actor.builder("sender").addResponseHandlerFunction("topic", resp -> {
+
+            Assert.assertEquals("result1", resp.getResult());
+        }).build();
+        PostOffice.builder()
+                .addActor(sender)
+                .addActor(receiver)
+                .build();
+        String result = sender.<String>sendThen("receiver", "topic", ActorMsg.Response.REQUIRED, "Hello!").get();
+        Assert.assertEquals("result1", result);
+
+    }
 }

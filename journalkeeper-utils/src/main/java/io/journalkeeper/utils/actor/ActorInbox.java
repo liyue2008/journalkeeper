@@ -8,7 +8,9 @@ import org.slf4j.LoggerFactory;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.function.*;
 import java.util.stream.Collectors;
 
@@ -43,7 +45,7 @@ class ActorInbox {
         msgQueue = new LinkedBlockingQueue<>(capacity);
         this.outbox = outbox;
         this.defaultHandlerFunction = null;
-        this.topicHandlerFunctions = new HashMap<>();
+        this.topicHandlerFunctions = new ConcurrentHashMap<>();
     }
 
     String getMyAddr() {
@@ -63,6 +65,7 @@ class ActorInbox {
     List<ScheduleTask> getSchedulers() {
         return schedulers;
     }
+
 
     <R> void addTopicHandlerFunction(String topic, Supplier<R> handler) {
         try {
@@ -114,6 +117,10 @@ class ActorInbox {
         topicHandlerFunctions.put(topic, new Tuple<>(instance, method));
     }
 
+    void removeTopicHandlerFunction(String topic) {
+        topicHandlerFunctions.remove(topic);
+    }
+
     void setDefaultHandlerFunction(Consumer<ActorMsg> handlerFunction) {
         this.defaultHandlerFunction = handlerFunction;
     }
@@ -152,7 +159,7 @@ class ActorInbox {
                 if (needResponse(msg, method)) {
                     this.outbox.send(msg.getSender(), RESPONSE, new ActorResponse(msg, ite.getCause()));
                 }
-                logger.info("Invoke message handler exception, handler: {}, msg: {}, exception: {}.", instance.getClass().getName() + "." + method.getName() + "(...)", msg, ite.getCause().toString());
+                logger.info("Invoke message handler exception, handler: {}, msg: {}, exception: ", instance.getClass().getName() + "." + method.getName() + "(...)", msg, ite.getCause());
             } catch (IllegalArgumentException e) {
                 if (needResponse(msg, method)) {
                     this.outbox.send(msg.getSender(), RESPONSE, new ActorResponse(msg, e));
@@ -170,7 +177,7 @@ class ActorInbox {
                 || (msg.getResponse() == ActorMsg.Response.DEFAULT && !void.class.equals(method.getReturnType()))) && !method.isAnnotationPresent(ResponseManually.class);
     }
 
-    private void invokeAnnotationListener(ActorMsg msg, Method method) throws InvocationTargetException, IllegalAccessException {
+    private void invokeAnnotationListener(ActorMsg msg, Method method) throws IllegalAccessException {
         if (method.isAnnotationPresent(ActorScheduler.class)) {
             try {
                 method.setAccessible(true);
@@ -204,6 +211,18 @@ class ActorInbox {
         ActorMsg msg = msgQueue.poll();
         if (msg != null) {
             try {
+                if(msg.getTopic().startsWith("@")) {
+                    String methodName = msg.getTopic().substring(1);
+                    if ("addTopicHandlerFunction".equals(methodName)) {
+                        addTopicHandlerFunction(msg.getPayload(), msg.<Runnable>getPayload(1));
+                    } else if ("removeTopicHandlerFunction".equals(methodName)) {
+                        removeTopicHandlerFunction(msg.getPayload());
+                    }else {
+                        throw new IllegalArgumentException("Unsupported method: " + methodName);
+                    }
+                    return true;
+                }
+
                 // 显式注册的方法
                 Tuple<Object, Method> tuple = topicHandlerFunctions.get(msg.getTopic());
                 if (tryInvoke(tuple, msg)){
@@ -273,5 +292,9 @@ class ActorInbox {
                 ring.notify();
             }
         }
+    }
+
+    boolean cleared() {
+        return msgQueue.isEmpty();
     }
 }

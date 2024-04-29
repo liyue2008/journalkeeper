@@ -1,22 +1,28 @@
 package io.journalkeeper.utils.actor;
 
 import io.journalkeeper.utils.actor.annotation.ActorMessage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class PostOffice{
 
+    private static final Logger logger = LoggerFactory.getLogger(PostOffice.class);
     private final Map<String, ActorInbox> inboxMap = new HashMap<>();
     private final List<Postman> postmanList;
     private final static int DEFAULT_POSTMAN_COUNT = 1;
     public final static String PUB_ADDR = "PUB";
-
+    private final Actor pubSubActor;
     private final Map<String, Set<ActorInbox>> pubSubMap = new ConcurrentHashMap<>();
     private final ScheduleActor scheduleActor = new ScheduleActor();
+    private final List<Actor> actorList;
 
     private PostOffice(int threadCount, List<Actor> actorList) {
-        Actor pubSubActor = Actor.builder(PUB_ADDR).setDefaultHandlerFunction(this::pubMsg).build();
+
+        this.actorList = Collections.unmodifiableList(actorList);
+        pubSubActor = Actor.builder(PUB_ADDR).setDefaultHandlerFunction(this::pubMsg).build();
         List<Actor> allActors = new ArrayList<>(actorList.size() + 2);
         allActors.add(pubSubActor);
         allActors.add(scheduleActor.getActor());
@@ -50,7 +56,6 @@ public class PostOffice{
     }
 
 
-    // TODO: 需要支持动态添加定时任务
     private void addActor(Actor actor) {
         inboxMap.put(actor.getInbox().getMyAddr(), actor.getInbox());
         actor.getInbox().getSubscribedTopics().forEach(topic -> this.subTopic(topic, actor));
@@ -71,7 +76,6 @@ public class PostOffice{
     }
 
     private void pubMsg(@ActorMessage ActorMsg msg) {
-        assert PUB_ADDR.equals(msg.getReceiver());
         Set<ActorInbox> subscribers = pubSubMap.get(msg.getTopic());
         if (subscribers == null) {
             return;
@@ -90,9 +94,38 @@ public class PostOffice{
         }
     }
 
-    private void stop() {
-        // TODO：清理完未处理的消息
+    // TODO: 还是不够优雅，会报错
+    public void stop() {
+        try {
+            // 停止接收新的定时任务
+            // 取消所有定时任务
+            scheduleActor.getActor().sendThen("Scheduler","stop");
 
+            // 停止并等待pubsubActor
+            this.pubSubActor.stop();
+            while (!(pubSubActor.outboxCleared() && pubSubActor.inboxCleared())) {
+                //noinspection BusyWait
+                Thread.sleep(10);
+            }
+            // 停止接收新的消息
+            actorList.forEach(Actor::stop);
+            // 处理所有发件箱的消息
+            while (actorList.stream().anyMatch(actor -> !actor.outboxCleared())) {
+                //noinspection BusyWait
+                Thread.sleep(10);
+            }
+            // 处理所有收件箱的消息
+            while (actorList.stream().anyMatch(actor -> !actor.inboxCleared())) {
+                //noinspection BusyWait
+                Thread.sleep(10);
+            }
+            // 停止所有Postman线程
+            for (Postman postman : postmanList) {
+                postman.stop();
+            }
+        } catch (InterruptedException e) {
+            logger.warn("Stop post office exception!", e);
+        }
     }
 
     public static Builder builder() {

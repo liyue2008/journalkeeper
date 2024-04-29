@@ -25,6 +25,7 @@ public class FollowerActor {
      * Leader 日志当前的最大位置
      */
     private long leaderMaxIndex = -1L;
+    private boolean isActive = true;
 
     FollowerActor(RaftState state, RaftJournal journal) {
         this.state = state;
@@ -48,7 +49,10 @@ public class FollowerActor {
         // 3. State.maybeUpdateNonLeaderConfig 非Leader（Follower和Observer）复制日志到本地后，如果日志中包含配置变更，则立即变更配置
         // 4. Journal.commit 提交日志：如果leaderCommit > commitIndex，将commitIndex设置为leaderCommit和最新日志条目索引号中较小的一个。
         // 5. Follower.onCommit 更新leaderMaxIndex，返回响应。
-
+        // TODO: 增加preferLeader逻辑。
+        if (!isActive) {
+            throw new IllegalStateException("FOLLOWER is not active!");
+        }
         AsyncAppendEntriesRequest request = msg.getPayload();
         boolean notHeartBeat = null != request.getEntries() && !request.getEntries().isEmpty();
         // Reply false if log does not contain an entry at prevLogIndex
@@ -89,5 +93,10 @@ public class FollowerActor {
 
     public Actor getActor() {
         return actor;
+    }
+
+    @ActorListener
+    private void setActive(boolean active) {
+        this.isActive = active;
     }
 }

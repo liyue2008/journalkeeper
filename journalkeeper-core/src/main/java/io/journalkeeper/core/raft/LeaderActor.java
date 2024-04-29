@@ -3,7 +3,9 @@ package io.journalkeeper.core.raft;
 import io.journalkeeper.core.api.*;
 import io.journalkeeper.core.entry.internal.InternalEntriesSerializeSupport;
 import io.journalkeeper.core.entry.internal.InternalEntryType;
+import io.journalkeeper.core.entry.internal.LeaderAnnouncementEntry;
 import io.journalkeeper.core.entry.internal.OnStateChangeEvent;
+import io.journalkeeper.core.state.ApplyInternalEntryInterceptor;
 import io.journalkeeper.core.state.Snapshot;
 import io.journalkeeper.core.transaction.JournalTransactionManager;
 import io.journalkeeper.exceptions.IndexUnderflowException;
@@ -12,9 +14,7 @@ import io.journalkeeper.rpc.client.*;
 import io.journalkeeper.rpc.server.DisableLeaderWriteRequest;
 import io.journalkeeper.rpc.server.DisableLeaderWriteResponse;
 import io.journalkeeper.utils.actor.*;
-import io.journalkeeper.utils.actor.annotation.ActorListener;
-import io.journalkeeper.utils.actor.annotation.ActorScheduler;
-import io.journalkeeper.utils.actor.annotation.ActorSubscriber;
+import io.journalkeeper.utils.actor.annotation.*;
 import io.journalkeeper.utils.config.Config;
 import io.journalkeeper.utils.event.Event;
 import io.journalkeeper.utils.event.EventType;
@@ -23,6 +23,7 @@ import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 import static io.journalkeeper.core.api.RaftJournal.INTERNAL_PARTITION;
@@ -52,6 +53,9 @@ public class LeaderActor {
 
     private final List<ReplicationDestination> replicationDestinations = new ArrayList<>();
 
+    private boolean isActive = false; // 选举收到多数选票，成为leader。
+    private boolean isAnnounced = false; // 发布Leader announcement 被多数确认，正式行使leader职权。
+    private final ApplyInternalEntryInterceptor leaderAnnouncementInterceptor;
 
     public LeaderActor(JournalEntryParser journalEntryParser, RaftJournal journal, RaftState state, RaftVoter voter, Config config) {
         this.journalEntryParser = journalEntryParser;
@@ -59,10 +63,18 @@ public class LeaderActor {
         this.state = state;
         this.voter = voter;
         this.config = config;
+
+        this.leaderAnnouncementInterceptor = (type, internalEntry) -> {
+            if (type == InternalEntryType.TYPE_LEADER_ANNOUNCEMENT) {
+                LeaderAnnouncementEntry leaderAnnouncementEntry = InternalEntriesSerializeSupport.parse(internalEntry);
+                actor.send("Leader", "onLeaderAnnouncementEntryApplied", leaderAnnouncementEntry);
+            }
+        };
     }
 
     @ActorListener
-    private void updateClusterState(ActorMsg msg) {
+    @ResponseManually
+    private void updateClusterState(@ActorMessage ActorMsg msg) {
         // 1. Leader.updateClusterState
         //      1.1. Journal.append
         // 2.
@@ -74,7 +86,7 @@ public class LeaderActor {
         // 6. State.applyEntries
         // 7. Leader.callback
         UpdateClusterStateRequest request = msg.getPayload();
-        if (voter.getVoterState() != VoterState.LEADER) {
+        if (!(isActive && isAnnounced)) {
             actor.reply(msg, new UpdateClusterStateResponse(new NotLeaderException(getClusterLeader())));
         }
         if (!checkWriteable()) {
@@ -99,7 +111,7 @@ public class LeaderActor {
     }
 
     private void onJournalAppend(ResponseConfig responseConfig) {
-        if (voter.getVoterState() != VoterState.LEADER) {
+        if (!isActive) {
             return;
         }
         switch (responseConfig) {
@@ -135,9 +147,9 @@ public class LeaderActor {
      * 5.2 N > commitIndex
      * 5.3 log[N].term == currentTerm
      */
-    @ActorScheduler(interval = 100L)
+    @ActorListener
     private void commit() {
-        if (voter.getVoterState() != VoterState.LEADER) {
+        if (!isActive) {
             return;
         }
         boolean isAnyFollowerNextIndexUpdated = false;
@@ -215,7 +227,7 @@ public class LeaderActor {
     }
     @ActorSubscriber
     private void onStateChange(StateResult stateResult) {
-        if (voter.getVoterState() != VoterState.LEADER) {
+        if (!isActive) {
             return;
         }
         if(config.get("enable_events")) {
@@ -223,21 +235,29 @@ public class LeaderActor {
             byte [] serializedEvent =  InternalEntriesSerializeSupport.serialize(event);
             actor.send("EventBus", "fireEvent", new Event(EventType.ON_STATE_CHANGE, serializedEvent));
         }
-        this.waitingResponses.removeIf(waitingResponse -> waitingResponse.positionMatch(stateResult.getLastApplied()) && waitingResponse.countdownReplication());
+        Iterator<WaitingResponse> iterator = waitingResponses.iterator();
+        while (iterator.hasNext()) {
+            WaitingResponse waitingResponse = iterator.next();
+            if (waitingResponse.positionMatch(stateResult.getLastApplied())) {
+                waitingResponse.putResult(stateResult.getUserResult());
+                waitingResponse.countdownReplication();
+                iterator.remove();
+                break;
+            }
+        }
     }
 
     @ActorListener
     private void onJournalFlush(long journalFlushIndex) {
-        if (voter.getVoterState() != VoterState.LEADER) {
+        if (!isActive) {
             return;
         }
         this.waitingResponses.removeIf(waitingResponse -> waitingResponse.getToPosition() <= journalFlushIndex && waitingResponse.countdownFlush());
     }
 
     @ActorSubscriber(topic = "onJournalCommit")
-    @ActorScheduler(interval = 100)
     private void replication() {
-        if (voter.getVoterState() != VoterState.LEADER) {
+        if (!isActive) {
             return;
         }
         this.replicationDestinations.forEach(ReplicationDestination::replication);
@@ -313,7 +333,7 @@ public class LeaderActor {
 
     @ActorListener
     private DisableLeaderWriteResponse disableLeaderWrite(DisableLeaderWriteRequest request) {
-        if (voter.getVoterState() != VoterState.LEADER) {
+        if (!isActive) {
             return new DisableLeaderWriteResponse(new NotLeaderException(getClusterLeader()));
         }
         long timeoutMs = request.getTimeoutMs();
@@ -326,6 +346,80 @@ public class LeaderActor {
         this.disableWriteTimeout = System.currentTimeMillis() + timeoutMs;
         return new DisableLeaderWriteResponse(getCurrentTerm());
     }
+
+
+    private void checkQuorum() {
+        if (!isActive) {
+            return;
+        }
+
+        if (replicationDestinations.isEmpty()) {
+            return;
+        }
+        long[] sortedHeartbeatResponseTimes = replicationDestinations.stream().mapToLong(ReplicationDestination::getLastHeartbeatResponseTime)
+                .sorted().toArray();
+
+        long leaderShipDeadLineMs =
+                (sortedHeartbeatResponseTimes[sortedHeartbeatResponseTimes.length / 2]) + config.<Long>get("heartbeat_interval_ms");
+
+        if (leaderShipDeadLineMs > 0 && System.currentTimeMillis() > leaderShipDeadLineMs) {
+            logger.info("Leader check quorum failed, convert myself to follower, {}.", voterInfo());
+            actor.send("Voter", "convertToFollower");
+        }
+    }
+
+    private void announceLeader() {
+        if (!isActive || isAnnounced) {
+            return;
+        }
+        byte[] payload = InternalEntriesSerializeSupport.serialize(new LeaderAnnouncementEntry(state.getTerm(), state.getLocalUri()));
+        UpdateClusterStateRequest request = new UpdateClusterStateRequest(new UpdateRequest(payload));
+        JournalEntry journalEntry = journalEntryParser.createJournalEntry(payload);
+        journalEntry.setTerm(state.getTerm());
+        journalEntry.setPartition(INTERNAL_PARTITION);
+
+        actor.send("Journal", "append", ActorMsg.Response.IGNORE, Collections.singletonList(journalEntry));
+    }
+
+    @ActorListener(topic = "checkLeadership")
+    private CheckLeadershipResponse clientCheckLeadership() {
+        if (isActive && isAnnounced) {
+            return new CheckLeadershipResponse();
+        } else {
+            return new CheckLeadershipResponse(new NotLeaderException(getClusterLeader()));
+        }
+    }
+
+    @ActorListener
+    private void onLeaderAnnouncementEntryApplied(LeaderAnnouncementEntry leaderAnnouncementEntry) {
+        if (isActive && !isAnnounced && leaderAnnouncementEntry.getTerm() == state.getTerm()) {
+            this.isAnnounced = true;
+            logger.info("Leader announcement applied! Leader: {}, term: {}.", state.getLeaderUri(), state.getTerm());
+        }
+    }
+    @ActorListener
+    private void setActive(boolean active) {
+        isActive = active;
+        if (!active) {
+            isAnnounced = false;
+        } else {
+            announceLeader();
+        }
+    }
+
+    @ActorSubscriber
+    private void onStart(ServerContext context) {
+        if (config.<Boolean>get("enable_check_quorum")) {
+            actor.addScheduler(config.get("check_quorum_timeout_ms"), TimeUnit.MILLISECONDS, "checkQuorum", this::checkQuorum);
+        }
+        actor.addScheduler(config.get("heartbeat_interval_ms"), TimeUnit.MILLISECONDS, "replication", this::replication);
+        actor.addScheduler(config.get("heartbeat_interval_ms"), TimeUnit.MILLISECONDS, "commit", this::commit);
+
+        actor.send("State", "addInterceptor",InternalEntryType.TYPE_LEADER_ANNOUNCEMENT, this.leaderAnnouncementInterceptor);
+
+    }
+
+
 
     private static class WaitingResponse implements Comparable<WaitingResponse>{
         private final ActorMsg requestMsg;

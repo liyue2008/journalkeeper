@@ -1,6 +1,7 @@
 package io.journalkeeper.core.raft;
 
 import io.journalkeeper.core.api.RaftServer;
+import io.journalkeeper.core.state.ConfigState;
 import io.journalkeeper.core.state.Snapshot;
 
 import java.net.URI;
@@ -26,5 +27,9 @@ public interface RaftState {
     List<URI> getConfigAll();
     boolean isJointConsensus();
     long getConfigEpoch();
+
+    URI getPreferredLeader();
+
+    ConfigState getConfigState();
 
 }

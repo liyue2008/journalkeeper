@@ -104,7 +104,7 @@ private static final Logger logger = LoggerFactory.getLogger( JournalActor.class
 
         if (commitIndex > journal.commitIndex()) {
             journal.commit(Math.min(commitIndex, journal.maxIndex()));
-            actor.pub("onJournalCommit", this.getRaftJournal());
+            actor.pub("onJournalCommit");
         }
 
     }

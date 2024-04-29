@@ -1,6 +1,7 @@
 package io.journalkeeper.utils.actor;
 
 import java.util.Arrays;
+import java.util.Objects;
 
 /**
  * Actor之间传递的消息消息
@@ -80,5 +81,18 @@ public class ActorMsg {
                 ", payloads=" + Arrays.toString(payloads) +
                 ", response=" + response +
                 '}';
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        ActorMsg actorMsg = (ActorMsg) o;
+        return sequentialId == actorMsg.sequentialId && Objects.equals(sender, actorMsg.sender);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(sequentialId, sender);
     }
 }

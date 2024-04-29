@@ -5,6 +5,7 @@ import io.journalkeeper.rpc.client.*;
 import io.journalkeeper.rpc.server.*;
 import io.journalkeeper.utils.actor.*;
 import io.journalkeeper.utils.actor.annotation.ActorListener;
+import io.journalkeeper.utils.actor.annotation.ActorSubscriber;
 import io.journalkeeper.utils.event.EventWatcher;
 import io.journalkeeper.utils.spi.ServiceSupport;
 import io.journalkeeper.utils.state.StateServer;
@@ -20,16 +21,15 @@ public class ServerRpcActor implements ServerRpc {
     private static final Logger logger = LoggerFactory.getLogger( ServerRpcActor.class );
     private URI uri;
 
-    private final Properties properties;
-    private RpcAccessPointFactory rpcAccessPointFactory;
-    private ServerRpcAccessPoint serverRpcAccessPoint;
+    private final RpcAccessPointFactory rpcAccessPointFactory;
     private StateServer rpcServer = null;
     private final Actor actor = Actor.builder("ServerRpc").setHandlerInstance(this).build();
 
     private StateServer.ServerState serverState = StateServer.ServerState.CREATED;
 
-    protected ServerRpcActor( Properties properties) {
-        this.properties  = properties;
+    protected ServerRpcActor() {
+        this.rpcAccessPointFactory = ServiceSupport.load(RpcAccessPointFactory.class);
+
     }
 
 
@@ -175,7 +175,7 @@ public class ServerRpcActor implements ServerRpc {
 
     @Override
     public CompletableFuture<CheckLeadershipResponse> checkLeadership() {
-        return forwardRequest("checkLeadership");
+        return forwardRequest("Leader", "checkLeadership");
 
     }
 
@@ -197,7 +197,7 @@ public class ServerRpcActor implements ServerRpc {
 
     @Override
     public CompletableFuture<RequestVoteResponse> requestVote(RequestVoteRequest request) {
-        return forwardRequest(request);
+        return forwardRequest(request, "Voter");
 
     }
 
@@ -224,18 +224,14 @@ public class ServerRpcActor implements ServerRpc {
         return forwardRequest(request);
     }
 
-    @ActorListener
-    private void start(URI uri) {
+    @ActorSubscriber(topic = "onStart")
+    private void start(ServerContext context) {
         if (this.serverState != StateServer.ServerState.CREATED) {
             return;
         }
         try {
-            this.uri = uri;
+            this.uri = context.getState().getLocalUri();
             this.serverState = StateServer.ServerState.STARTING;
-
-            this.rpcAccessPointFactory = ServiceSupport.load(RpcAccessPointFactory.class);
-            this.serverRpcAccessPoint = rpcAccessPointFactory.createServerRpcAccessPoint(properties);
-
             this.rpcServer = rpcAccessPointFactory.bindServerService(this);
             this.rpcServer.start();
             this.serverState = StateServer.ServerState.RUNNING;
@@ -245,7 +241,7 @@ public class ServerRpcActor implements ServerRpc {
 
     }
 
-    @ActorListener
+    @ActorSubscriber(topic = "onStop")
     public void stop() {
         if (this.serverState != StateServer.ServerState.RUNNING) {
             return;
@@ -261,8 +257,5 @@ public class ServerRpcActor implements ServerRpc {
         }
     }
 
-    public ServerRpcAccessPoint getServerRpcAccessPoint() {
-        return serverRpcAccessPoint;
-    }
 
 }

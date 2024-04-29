@@ -1,7 +1,10 @@
 package io.journalkeeper.utils.actor;
 
+import io.journalkeeper.utils.actor.annotation.ActorListener;
+
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.function.*;
 
 /**
@@ -21,6 +24,7 @@ public class Actor {
     // 对请求/响应模式的封装支持
     private final ActorResponseSupport responseSupport;
 
+    private boolean stopped = false;
     private Actor(String addr) {
         this.addr = addr;
         this.outbox = new ActorOutbox(addr);
@@ -95,6 +99,16 @@ public class Actor {
         inbox.addTopicHandlerFunction(topic, handler);
     }
 
+    public void addScheduler(long interval, TimeUnit timeUnit, String topic, Runnable runnable) {
+        inbox.receive(new ActorMsg(0L, addr,addr,"@addTopicHandlerFunction", topic, runnable));
+        send("Scheduler", "addTask", new ScheduleTask(timeUnit, interval, this.addr, topic));
+    }
+
+    public void removeScheduler(String topic) {
+        send("Scheduler", "removeTask", addr, topic);
+        inbox.receive(new ActorMsg(0L, addr,addr,"@removeTopicHandlerFunction", topic));
+
+    }
     /**
      * 设置默认消息处理函数。所有未处理的消息都由这个函数处理。
      * @param handler 默认的消息处理函数
@@ -165,6 +179,19 @@ public class Actor {
 
     public static Builder builder(String addr) {
         return new Builder(addr);
+    }
+
+    void stop() {
+        stopped = true;
+        outbox.stop();
+    }
+
+    boolean outboxCleared() {
+        return outbox.cleared();
+    }
+
+    boolean inboxCleared() {
+        return inbox.cleared();
     }
 
     // Builder

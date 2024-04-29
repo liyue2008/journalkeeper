@@ -1,7 +1,7 @@
 package io.journalkeeper.utils.actor;
 
 import java.util.Queue;
-import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
@@ -15,11 +15,13 @@ class ActorOutbox {
 
     final static int DEFAULT_CAPACITY = 1000;
 
+    private boolean stopped = false;
+
     ActorOutbox(String myAddr) {
         this(DEFAULT_CAPACITY, myAddr);
     }
     ActorOutbox(int capacity, String myAddr) {
-        this.msgQueue = new ArrayBlockingQueue<>(capacity);
+        this.msgQueue = new LinkedBlockingQueue<>(capacity);
         this.myAddr = myAddr;
     }
     ActorMsg send(String addr, String topic){
@@ -32,6 +34,9 @@ class ActorOutbox {
         return send(addr, topic, ActorMsg.Response.DEFAULT, payloads);
     }
     ActorMsg send(String addr, String topic, ActorMsg.Response response, Object... payloads){
+        if (stopped) {
+            throw new IllegalStateException("ActorOutbox is stopped");
+        }
         ActorMsg actorMsg = new ActorMsg(msgId.getAndIncrement(), myAddr, addr, topic,response, payloads);
         msgQueue.add(actorMsg);
         ring();
@@ -64,4 +69,11 @@ class ActorOutbox {
         }
     }
 
+    void stop() {
+        stopped = true;
+    }
+
+    boolean cleared() {
+        return this.msgQueue.isEmpty();
+    }
 }

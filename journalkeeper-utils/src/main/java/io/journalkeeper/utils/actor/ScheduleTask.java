@@ -2,6 +2,7 @@ package io.journalkeeper.utils.actor;
 
 import io.journalkeeper.utils.actor.annotation.ActorScheduler;
 
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
 class ScheduleTask {
@@ -37,5 +38,28 @@ class ScheduleTask {
 
     public String getTopic() {
         return topic;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        ScheduleTask that = (ScheduleTask) o;
+        return interval == that.interval && timeUnit == that.timeUnit && Objects.equals(addr, that.addr) && Objects.equals(topic, that.topic);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(timeUnit, interval, addr, topic);
+    }
+
+    @Override
+    public String toString() {
+        return "ScheduleTask{" +
+                "timeUnit=" + timeUnit +
+                ", interval=" + interval +
+                ", addr='" + addr + '\'' +
+                ", topic='" + topic + '\'' +
+                '}';
     }
 }

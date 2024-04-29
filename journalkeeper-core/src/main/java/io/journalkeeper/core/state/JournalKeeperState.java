@@ -262,7 +262,7 @@ public class JournalKeeperState implements Flushable {
         return result;
     }
 
-
+    // TODO: 改成actor 事件方式时间
     private void applyInternalEntry(byte[] internalEntry) {
         InternalEntryType type = InternalEntriesSerializeSupport.parseEntryType(internalEntry);
         logger.info("Apply internal entry, type: {}", type);

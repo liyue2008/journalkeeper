@@ -16,6 +16,8 @@ import io.journalkeeper.rpc.client.*;
 import io.journalkeeper.rpc.server.*;
 import io.journalkeeper.utils.actor.*;
 import io.journalkeeper.utils.actor.annotation.ActorListener;
+import io.journalkeeper.utils.actor.annotation.ActorMessage;
+import io.journalkeeper.utils.actor.annotation.ResponseManually;
 import io.journalkeeper.utils.config.Config;
 import io.journalkeeper.utils.config.PropertiesConfigProvider;
 import io.journalkeeper.utils.spi.ServiceSupport;
@@ -59,9 +61,9 @@ public class RaftServerActor implements  RaftServer {
         StateActor stateActor = new StateActor(roll, stateFactory, journalEntryParser, journalActor.getRaftJournal(),config, properties);
         VoterActor voterActor = new VoterActor(journalActor.getRaftJournal(),stateActor.getState(), config);
         LeaderActor leaderActor = new LeaderActor(journalEntryParser, journalActor.getRaftJournal(), stateActor.getState(), voterActor.getRaftVoter(), config);
-        ServerRpcActor serverRpcActor = new ServerRpcActor(properties);
+        ServerRpcActor serverRpcActor = new ServerRpcActor();
         this.serverRpc = serverRpcActor;
-        RpcActor rpcActor = new RpcActor(serverRpcActor.getServerRpcAccessPoint());
+        RpcActor rpcActor = new RpcActor(properties);
         EventBusActor eventBusActor = new EventBusActor();
         FollowerActor followerActor = new FollowerActor(stateActor.getState(), journalActor.getRaftJournal());
 
@@ -106,7 +108,7 @@ public class RaftServerActor implements  RaftServer {
                 .thenCompose(request -> actor.sendThen("Journal", "recover", request))
                 .thenCompose(r -> CompletableFuture.allOf(
                         actor.sendThen("RaftServer", "recoverVoterConfig"),
-                        actor.sendThen("Voter", "maybeUpdateTermOnRecovery", context.getJournal())
+                        actor.sendThen("Voter", "maybeUpdateTermOnRecovery")
                 )).whenComplete((r, e) -> {
                     if (e != null) {
                         logger.warn("Recover failed!", e);
@@ -133,7 +135,8 @@ public class RaftServerActor implements  RaftServer {
      * Check reserved entries to ensure the last UpdateVotersConfig entry is applied to the current voter config.
      */
     @ActorListener
-    private void recoverVoterConfig(ActorMsg msg) {
+    @ResponseManually
+    private void recoverVoterConfig(@ActorMessage ActorMsg msg) {
         boolean isRecoveredFromJournal = false;
         List<CompletableFuture<?>> futures = new ArrayList<>();
         for (long index = context.getJournal().maxIndex(INTERNAL_PARTITION) - 1;
@@ -173,12 +176,13 @@ public class RaftServerActor implements  RaftServer {
 
     @Override
     public void start() {
-        actor.send("ServerRpc", "start", serverUri());
+        actor.pub("onStart", context);
     }
 
     @Override
     public void stop() {
-        actor.send("ServerRpc", "stop");
+        actor.pub("onStop");
+        context.getPostOffice().stop();
     }
 
     @Override
@@ -240,11 +244,7 @@ public class RaftServerActor implements  RaftServer {
         return null;
     }
 
-    @ActorListener
-    private CheckLeadershipResponse checkLeadership() {
-        // TODO
-        return null;
-    }
+
     @ActorListener
     private GetServerEntriesResponse getServerEntries(GetServerEntriesRequest request) {
         // TODO

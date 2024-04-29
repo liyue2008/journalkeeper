@@ -6,6 +6,7 @@ import io.journalkeeper.core.journal.JournalActor;
 import io.journalkeeper.core.raft.RaftState;
 import io.journalkeeper.core.server.PartialSnapshot;
 import io.journalkeeper.exceptions.JournalException;
+import io.journalkeeper.exceptions.NotLeaderException;
 import io.journalkeeper.exceptions.RecoverException;
 import io.journalkeeper.exceptions.StateRecoverException;
 import io.journalkeeper.persistence.LockablePersistence;
@@ -338,14 +339,17 @@ public class StateActor implements RaftState{
     }
     @ActorListener
     public QueryStateResponse queryServerState(QueryStateRequest request) {
-        // TODO
-        return null;
+        StateQueryResult result = state.query(request.getQuery(), journal);
+        return new QueryStateResponse(result.getResult(), result.getLastApplied());
     }
 
     @ActorListener
     public QueryStateResponse queryClusterState(QueryStateRequest request) {
-        // TODO
-        return null;
+        if (localUri.equals(leaderUri)) {
+            return queryServerState(request);
+        } else {
+            return new QueryStateResponse(new NotLeaderException(leaderUri));
+        }
     }
     @ActorListener(topic = "lastApplied")
     private LastAppliedResponse lastAppliedListener() {
@@ -383,6 +387,16 @@ public class StateActor implements RaftState{
     @Override
     public long getConfigEpoch() {
         return state.getConfigState().getEpoch();
+    }
+
+    @Override
+    public URI getPreferredLeader() {
+        return state.getPreferredLeader();
+    }
+
+    @Override
+    public ConfigState getConfigState() {
+        return state.getConfigState();
     }
 
     @ActorListener
@@ -490,9 +504,21 @@ public class StateActor implements RaftState{
         if(!isRecovered){
             return;
         }
+        if (state.lastApplied() >= journal.commitIndex()) {
+            return;
+        }
         long offset = journal.readOffset(state.lastApplied());
         JournalEntry entryHeader = journal.readEntryHeaderByOffset(offset);
         StateResult stateResult = state.applyEntry(entryHeader, new EntryFutureImpl(journal, offset), journal);
-        actor.pub("onStateChange", stateResult.getUserResult());
+        actor.pub("onStateChange", stateResult);
+    }
+    @ActorListener
+    private void addInterceptor(InternalEntryType type, ApplyInternalEntryInterceptor internalEntryInterceptor) {
+        state.addInterceptor(type, internalEntryInterceptor);
+    }
+    @ActorListener
+    private void removeInterceptor(InternalEntryType type, ApplyInternalEntryInterceptor internalEntryInterceptor) {
+        state.removeInterceptor(type, internalEntryInterceptor);
+
     }
 }
