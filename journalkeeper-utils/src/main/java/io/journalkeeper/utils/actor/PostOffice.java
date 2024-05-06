@@ -18,9 +18,10 @@ public class PostOffice{
     private final Map<String, Set<ActorInbox>> pubSubMap = new ConcurrentHashMap<>();
     private final ScheduleActor scheduleActor = new ScheduleActor();
     private final List<Actor> actorList;
+    private final String name;
 
-    private PostOffice(int threadCount, List<Actor> actorList) {
-
+    private PostOffice(int threadCount, List<Actor> actorList, String name) {
+        this.name = null == name ? "" : name;
         this.actorList = Collections.unmodifiableList(actorList);
         pubSubActor = Actor.builder(PUB_ADDR).setDefaultHandlerFunction(this::pubMsg).build();
         List<Actor> allActors = new ArrayList<>(actorList.size() + 2);
@@ -88,7 +89,7 @@ public class PostOffice{
 
     private void start() {
         for (Postman postman : postmanList) {
-            Thread thread = new Thread(postman, "Postman-" + postmanList.indexOf(postman));
+            Thread thread = new Thread(postman, "Postman-" + (name.isEmpty() ? "" : (name + "-")) + postmanList.indexOf(postman));
             thread.setDaemon(true);
             thread.start();
         }
@@ -135,6 +136,7 @@ public class PostOffice{
         private Builder() {}
         private int threadCount = DEFAULT_POSTMAN_COUNT;
         private final List<Actor> actorList = new ArrayList<>();
+        private String name = null;
 
         public Builder threadCount(int threadCount) {
             this.threadCount = threadCount;
@@ -147,7 +149,12 @@ public class PostOffice{
         }
 
         public PostOffice build() {
-            return new PostOffice(threadCount, actorList);
+            return new PostOffice(threadCount, actorList, name);
+        }
+
+        public Builder name(String name) {
+            this.name = name;
+            return this;
         }
     }
 }

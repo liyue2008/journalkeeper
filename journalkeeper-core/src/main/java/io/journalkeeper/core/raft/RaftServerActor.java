@@ -60,7 +60,7 @@ public class RaftServerActor implements  RaftServer {
         JournalActor journalActor = new JournalActor(journalEntryParser, config, properties);
         StateActor stateActor = new StateActor(roll, stateFactory, journalEntryParser, journalActor.getRaftJournal(),config, properties);
         VoterActor voterActor = new VoterActor(journalActor.getRaftJournal(),stateActor.getState(), config);
-        LeaderActor leaderActor = new LeaderActor(journalEntryParser, journalActor.getRaftJournal(), stateActor.getState(), voterActor.getRaftVoter(), config);
+        LeaderActor leaderActor = new LeaderActor(journalEntryParser, journalActor.getRaftJournal(), stateActor.getState(), config);
         ServerRpcActor serverRpcActor = new ServerRpcActor();
         this.serverRpc = serverRpcActor;
         RpcActor rpcActor = new RpcActor(properties);
@@ -69,6 +69,7 @@ public class RaftServerActor implements  RaftServer {
 
         PostOffice postOffice = PostOffice.builder()
                 .addActor(actor)
+                .name(config.get("server_name"))
                 .addActor(journalActor.getActor())
                 .addActor(stateActor.getActor())
                 .addActor(voterActor.getActor())
@@ -108,7 +109,7 @@ public class RaftServerActor implements  RaftServer {
                 .thenCompose(request -> actor.sendThen("Journal", "recover", request))
                 .thenCompose(r -> CompletableFuture.allOf(
                         actor.sendThen("RaftServer", "recoverVoterConfig"),
-                        actor.sendThen("Voter", "maybeUpdateTermOnRecovery")
+                        actor.sendThen("State", "maybeUpdateTermOnRecovery")
                 )).whenComplete((r, e) -> {
                     if (e != null) {
                         logger.warn("Recover failed!", e);
@@ -124,7 +125,7 @@ public class RaftServerActor implements  RaftServer {
 
             CompletableFuture.allOf(
                     actor.sendThen("RaftServer", "recoverVoterConfig"),
-                    actor.sendThen("Voter", "maybeUpdateTermOnRecovery", context.getJournal())
+                    actor.sendThen("State", "maybeUpdateTermOnRecovery", context.getJournal())
             ).thenRun(this::releaseFileLock);
         } else {
             releaseFileLock();

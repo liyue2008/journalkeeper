@@ -882,6 +882,7 @@ public class KvTest {
             serverURIs.add(uri);
             Path workingDir = path.resolve("server" + i);
             Properties properties = new Properties();
+            properties.setProperty("server_name", String.valueOf(i));
             properties.setProperty("working_dir", workingDir.toString());
             properties.setProperty("persistence.journal.file_data_size", String.valueOf(128 * 1024));
             properties.setProperty("persistence.index.file_data_size", String.valueOf(16 * 1024));

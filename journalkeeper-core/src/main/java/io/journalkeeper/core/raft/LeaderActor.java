@@ -25,6 +25,7 @@ import java.net.URI;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.stream.Collectors;
 
 import static io.journalkeeper.core.api.RaftJournal.INTERNAL_PARTITION;
 import static io.journalkeeper.core.entry.internal.InternalEntryType.TYPE_UPDATE_VOTERS_S1;
@@ -42,7 +43,6 @@ public class LeaderActor {
     private final RaftJournal journal;
     private final RaftState state;
 
-    private final RaftVoter voter;
 
     private final Config config;
 
@@ -57,11 +57,10 @@ public class LeaderActor {
     private boolean isAnnounced = false; // 发布Leader announcement 被多数确认，正式行使leader职权。
     private final ApplyInternalEntryInterceptor leaderAnnouncementInterceptor;
 
-    public LeaderActor(JournalEntryParser journalEntryParser, RaftJournal journal, RaftState state, RaftVoter voter, Config config) {
+    public LeaderActor(JournalEntryParser journalEntryParser, RaftJournal journal, RaftState state, Config config) {
         this.journalEntryParser = journalEntryParser;
         this.journal = journal;
         this.state = state;
-        this.voter = voter;
         this.config = config;
 
         this.leaderAnnouncementInterceptor = (type, internalEntry) -> {
@@ -156,7 +155,7 @@ public class LeaderActor {
         if (
                 journal.commitIndex() < journal.maxIndex() && (
                         replicationDestinations.isEmpty() ||  (isAnyFollowerNextIndexUpdated = this.replicationDestinations.stream()
-                .noneMatch(ReplicationDestination::isCommitted))
+                .anyMatch(r -> !r.isCommitted()))
                 )) {
             long N = calculateN(isAnyFollowerNextIndexUpdated);
             if (N > journal.commitIndex() && getTerm(N - 1) == getCurrentTerm()) {
@@ -260,6 +259,7 @@ public class LeaderActor {
         if (!isActive) {
             return;
         }
+        this.replicationDestinations.forEach(ReplicationDestination::onJournalCommit);
         this.replicationDestinations.forEach(ReplicationDestination::replication);
     }
     @ActorScheduler
@@ -400,6 +400,7 @@ public class LeaderActor {
     @ActorListener
     private void setActive(boolean active) {
         isActive = active;
+        this.replicationDestinations.forEach(ReplicationDestination::reset);
         if (!active) {
             isAnnounced = false;
         } else {
@@ -414,12 +415,17 @@ public class LeaderActor {
         }
         actor.addScheduler(config.get("heartbeat_interval_ms"), TimeUnit.MILLISECONDS, "replication", this::replication);
         actor.addScheduler(config.get("heartbeat_interval_ms"), TimeUnit.MILLISECONDS, "commit", this::commit);
-
         actor.send("State", "addInterceptor",InternalEntryType.TYPE_LEADER_ANNOUNCEMENT, this.leaderAnnouncementInterceptor);
-
     }
 
 
+    @ActorSubscriber
+    private void onStateRecovered() {
+        this.replicationDestinations.addAll(state.getConfigState().voters().stream()
+                .filter(uri -> !uri.equals(state.getLocalUri()))
+                .map(uri -> new ReplicationDestination(uri, journal.maxIndex(), actor, state, journal, config.get("heartbeat_interval_ms")))
+                .collect(Collectors.toList()));
+    }
 
     private static class WaitingResponse implements Comparable<WaitingResponse>{
         private final ActorMsg requestMsg;

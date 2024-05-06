@@ -21,6 +21,7 @@ public class ServerConfigDeclaration {
         config.declare("print_metric_interval_sec", Integer.class, 0, true, "指标打印间隔，单位：秒");
         config.declare("journal_retention_min", Integer.class, 0, true, "日志保留时间，单位：分钟");
         config.declare("enable_events", Boolean.class, true, true, "是否启用事件");
+        config.declare("server_name", String.class, "", true, "Server名称，用于在同一进程多Server情况下区分");
 
         // JournalPersistence
         config.declare("persistence.journal.file_header_size", Integer.class, 128, true, "文件头长度");

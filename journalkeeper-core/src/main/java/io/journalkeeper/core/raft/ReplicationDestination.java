@@ -42,22 +42,38 @@ class ReplicationDestination {
      */
     private long lastHeartbeatResponseTime;
     private long lastHeartbeatRequestTime = 0L;
-
+    private final long heartbeatIntervalMs;
     private boolean committed = true;
+    private boolean waitingForResponse = false;
 
+    void reset() {
+        lastHeartbeatResponseTime = System.currentTimeMillis();
+        lastHeartbeatRequestTime = lastHeartbeatResponseTime;
+        committed = true;
+        waitingForResponse = false;
+        installSnapshotInProgress = false;
+    }
 
-    ReplicationDestination(URI uri, long nextIndex, Actor actor, RaftState state, RaftJournal journal) {
+    ReplicationDestination(URI uri, long nextIndex, Actor actor, RaftState state, RaftJournal journal, long heartbeatIntervalMs) {
         this.uri = uri;
         this.nextIndex = nextIndex;
         this.actor = actor;
         this.state = state;
         this.journal = journal;
+        this.heartbeatIntervalMs = heartbeatIntervalMs;
         this.lastHeartbeatResponseTime = 0L;
     }
 
 
     void replication() {
-        long maxIndex = journal.maxIndex();
+        long maxIndex;
+
+        if (waitingForResponse || (nextIndex >= (maxIndex = journal.maxIndex()) // NOT 还有需要复制的数据
+                &&
+                System.currentTimeMillis() - lastHeartbeatRequestTime < heartbeatIntervalMs // NOT 距离上次复制/心跳已经超过一个心跳超时了
+        )) {
+            return;
+        }
 
 
         // 如果有必要，先安装第一个快照
@@ -78,13 +94,13 @@ class ReplicationDestination {
                         nextIndex - 1, this.getPreLogTerm(nextIndex),
                         entries, state.commitIndex(), maxIndex);
 
-
-        actor.<AsyncAppendEntriesResponse>sendThen("Rpc", "asyncAppendEntries", request)
+        waitingForResponse = true;
+        actor.<AsyncAppendEntriesResponse>sendThen("Rpc", "asyncAppendEntries", new RpcMsg<>(this.uri, request))
                 .thenAccept(resp -> handleAppendEntriesResponse(resp, entries.size(), fistSnapShotEntry.getKey()))
                 .exceptionally(e -> {
                     logger.warn("Replication execution exception, from {} to {}, cause: {}.", state.getLocalUri(), uri, null == e.getCause() ? e.getMessage() : e.getCause().getMessage());
                     return null;
-                });
+                }).whenComplete((c, r) -> waitingForResponse = false);
         lastHeartbeatRequestTime = System.currentTimeMillis();
     }
 
@@ -134,8 +150,8 @@ class ReplicationDestination {
                         offset, trunk, !iterator.hasMoreTrunks()
                 );
                 boolean lastRequest = !iterator.hasMoreTrunks();
-                actor.sendThen("Rpc", "installSnapshot", request)
-                        .thenAccept(resp -> handleInstallSnapshotResponse(resp, lastRequest));
+                actor.<InstallSnapshotResponse>sendThen("Rpc", "installSnapshot", new RpcMsg<>(this.uri, request))
+                        .whenComplete((response, exception) -> handleInstallSnapshotResponse(response, exception, lastRequest));
                 offset += trunk.length;
             }
         } catch (IOException t) {
@@ -144,15 +160,13 @@ class ReplicationDestination {
         }
     }
 
-    private void handleInstallSnapshotResponse(Object resp, boolean last) {
-        if (resp instanceof Exception) {
-            Exception e = (Exception) resp;
-            logger.warn("Install snapshot execution exception, from {} to {}, cause: {}.", state.getLocalUri(), uri, null == e.getCause()? e.getMessage() : e.getCause().getMessage());
+    private void handleInstallSnapshotResponse(InstallSnapshotResponse response, Throwable exception, boolean last) {
+        if (null != exception) {
+            logger.warn("Install snapshot execution exception, from {} to {}, cause: {}.", state.getLocalUri(), uri, null == exception.getCause()? exception.getMessage() : exception.getCause().getMessage());
             if (last) {
                 installSnapshotInProgress = false;
             }
         } else {
-            InstallSnapshotResponse response = (InstallSnapshotResponse) resp;
             if (!response.success()) {
                 logger.warn("Install snapshot to {} failed! Cause: {}.", this.getUri(), response.errorString());
                 if (last) {
@@ -199,10 +213,6 @@ class ReplicationDestination {
         return committed;
     }
 
-    public void setCommitted(boolean committed) {
-        this.committed = committed;
-    }
-
     @Override
     public String toString() {
         return "{" +
@@ -210,6 +220,10 @@ class ReplicationDestination {
                 ", nextIndex=" + nextIndex +
                 ", matchIndex=" + matchIndex +
                 '}';
+    }
+
+    public void onJournalCommit() {
+        this.committed = journal.commitIndex() >= matchIndex;
     }
 }
 

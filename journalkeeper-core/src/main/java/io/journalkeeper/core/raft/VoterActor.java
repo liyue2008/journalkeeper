@@ -28,7 +28,6 @@ public class VoterActor implements RaftVoter{
     private final VoterStateMachine voterState = new VoterStateMachine();
     private final RaftJournal journal;
     private final RaftState state;
-    private int term = 0;
     private long lastHeartbeat;
     private long electionTimeoutMs;
     private long nextElectionTime;
@@ -208,15 +207,15 @@ public class VoterActor implements RaftVoter{
 
         if (state.getRole() != RaftServer.Roll.VOTER) {
             actor.reply(msg, new AsyncAppendEntriesResponse(false, request.getPrevLogIndex() + 1,
-                    term, request.getEntries().size()));
+                    state.getTerm(), request.getEntries().size()));
             return;
         }
         boolean isTermChanged = checkTerm(request.getTerm());
 
-        if (request.getTerm() < term) {
+        if (request.getTerm() < state.getTerm()) {
             // 如果收到的请求term小于当前term，拒绝请求
             actor.reply(msg, new AsyncAppendEntriesResponse(false, request.getPrevLogIndex() + 1,
-                    term, request.getEntries().size()));
+                    state.getTerm(), request.getEntries().size()));
             return;
         }
 
@@ -236,23 +235,12 @@ public class VoterActor implements RaftVoter{
             logger.debug("Update lastHeartbeat.");
         }
 
-
         if (isTermChanged) {
             actor.send("State", "setLeader", request.getLeader());
         }
-        actor.send("Follower", "asyncAppendEntries", request);
+        actor.send("Follower", "asyncAppendEntries", msg);
     }
-    @ActorListener
-    private void maybeUpdateTermOnRecovery() {
-        if (journal.minIndex() < journal.maxIndex()) {
-            JournalEntry lastEntry = journal.read(journal.maxIndex() - 1);
-            if (lastEntry.getTerm() > term) {
-                term = lastEntry.getTerm();
-                logger.info("Set current term to {}, this is the term of the last entry in the journal.",
-                        term);
-            }
-        }
-    }
+
     private static class VoterStateMachine {
         private VoterState state = VoterState.FOLLOWER;
 
@@ -415,7 +403,7 @@ public class VoterActor implements RaftVoter{
     private String voterInfo() {
         return String.format("voterState: %s, currentTerm: %d, minIndex: %d, " +
                         "maxIndex: %d, commitIndex: %d, lastApplied: %d, uri: %s",
-                VoterState.LEADER, state.getTerm(), journal.minIndex(),
+                voterState.getState(), state.getTerm(), journal.minIndex(),
                 journal.maxIndex(), journal.commitIndex(), state.lastApplied(), state.getLocalUri().toString());
     }
     @ActorSubscriber

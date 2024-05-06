@@ -3,14 +3,18 @@ package io.journalkeeper.core.raft;
 import io.journalkeeper.core.api.RaftJournal;
 import io.journalkeeper.rpc.server.AsyncAppendEntriesRequest;
 import io.journalkeeper.rpc.server.AsyncAppendEntriesResponse;
+import io.journalkeeper.rpc.server.InstallSnapshotRequest;
+import io.journalkeeper.rpc.server.InstallSnapshotResponse;
 import io.journalkeeper.utils.actor.Actor;
 import io.journalkeeper.utils.actor.annotation.ActorListener;
 import io.journalkeeper.utils.actor.ActorMsg;
 import io.journalkeeper.utils.actor.annotation.ActorMessage;
+import io.journalkeeper.utils.actor.annotation.ResponseManually;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 
 public class FollowerActor {
@@ -41,7 +45,7 @@ public class FollowerActor {
      * 如果leaderCommit > commitIndex，将commitIndex设置为leaderCommit和最新日志条目索引号中较小的一个
      */
     @ActorListener
-    private void asyncAppendEntries(@ActorMessage ActorMsg msg) {
+    private void asyncAppendEntries(ActorMsg msg) {
         // 1. State.maybeRollbackConfig 如果要删除部分未提交的日志，并且待删除的这部分存在配置变更日志，则需要回滚配置
         // 2. Journal.compareOrAppendRaw 从index位置开始：
         //    如果一条已经存在的日志与新的冲突（index 相同但是任期号 term 不同），则删除已经存在的日志和它之后所有的日志
@@ -70,7 +74,7 @@ public class FollowerActor {
             // 如果要删除部分未提交的日志，并且待删除的这部分存在配置变更日志，则需要回滚配置
             actor.sendThen("State", "maybeRollbackConfig", startIndex)
                     .thenCompose(ignored -> actor.sendThen("Journal","compareOrAppendRaw", entries, request.getPrevLogIndex() + 1))
-                    .thenCompose(ignored -> actor.sendThen("State", "maybeUpdateNonLeaderConfig", msg))
+                    .thenCompose(ignored -> actor.sendThen("State", "maybeUpdateNonLeaderConfig", entries))
                     .thenCompose(ignored -> actor.sendThen("Journal", "commit", request.getLeaderCommit()))
                     .thenRun(() -> this.onCommit(msg))
                     .exceptionally(t -> {
@@ -98,5 +102,26 @@ public class FollowerActor {
     @ActorListener
     private void setActive(boolean active) {
         this.isActive = active;
+    }
+
+    //Receiver implementation:
+    //1. Reply immediately if term < currentTerm
+    //2. Create new snapshot file if first chunk (offset is 0)
+    //3. Write data into snapshot file at given offset
+    //4. Reply and wait for more data chunks if done is false
+    //5. Save snapshot file, discard any existing or partial snapshot
+    //with a smaller index
+    //6. If existing log entry has same index and term as snapshot’s
+    //last included entry, retain log entries following it and reply
+    //7. Discard the entire log
+    //8. Reset state machine using snapshot contents (and load
+    //snapshot’s cluster configuration)
+    @ActorListener
+    public InstallSnapshotResponse installSnapshot(InstallSnapshotRequest request) {
+        if (checkTerm(request.getTerm())) {
+            return new InstallSnapshotResponse(state.getTerm());
+        }
+        lastHeartbeat = System.currentTimeMillis();
+        return installSnapshotAsync(request);
     }
 }

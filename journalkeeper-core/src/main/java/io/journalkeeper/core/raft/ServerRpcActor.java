@@ -191,7 +191,7 @@ public class ServerRpcActor implements ServerRpc {
 
     @Override
     public CompletableFuture<AsyncAppendEntriesResponse> asyncAppendEntries(AsyncAppendEntriesRequest request) {
-        return forwardRequest(request);
+        return forwardRequest(request, "Voter");
 
     }
 

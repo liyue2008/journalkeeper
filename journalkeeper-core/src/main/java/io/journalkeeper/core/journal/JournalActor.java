@@ -116,6 +116,24 @@ private static final Logger logger = LoggerFactory.getLogger( JournalActor.class
         }
     }
 
+    @ActorListener
+    private void compact(JournalSnapshot journalSnapshot, long lastIncludedIndex, int lastIncludedTerm) throws IOException {
+        // If existing log entry has same index and term as snapshot’s
+        // last included entry, retain log entries following it.
+        // Discard the entire log
+
+        logger.info("Compact journal entries, journal: {}...", journal);
+        if (journal.minIndex() >= lastIncludedIndex &&
+                lastIncludedIndex < journal.maxIndex() &&
+                journal.getTerm(lastIncludedIndex) == lastIncludedTerm) {
+            journal.compact(journalSnapshot);
+
+        } else {
+            journal.clear(journalSnapshot);
+        }
+        logger.info("Compact journal finished, journal: {}.", journal);
+    }
+
     public Actor getActor() {
         return actor;
     }

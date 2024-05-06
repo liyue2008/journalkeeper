@@ -5,6 +5,7 @@ import io.journalkeeper.core.entry.internal.*;
 import io.journalkeeper.core.journal.JournalActor;
 import io.journalkeeper.core.raft.RaftState;
 import io.journalkeeper.core.server.PartialSnapshot;
+import io.journalkeeper.core.server.ThreadNames;
 import io.journalkeeper.exceptions.JournalException;
 import io.journalkeeper.exceptions.NotLeaderException;
 import io.journalkeeper.exceptions.RecoverException;
@@ -16,6 +17,7 @@ import io.journalkeeper.persistence.ServerMetadata;
 import io.journalkeeper.rpc.client.*;
 import io.journalkeeper.rpc.server.GetServerStateRequest;
 import io.journalkeeper.rpc.server.GetServerStateResponse;
+import io.journalkeeper.utils.ThreadSafeFormat;
 import io.journalkeeper.utils.actor.*;
 import io.journalkeeper.utils.actor.annotation.ActorListener;
 import io.journalkeeper.utils.actor.annotation.ActorScheduler;
@@ -34,6 +36,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.StreamSupport;
@@ -276,6 +281,7 @@ public class StateActor implements RaftState{
         try {
             doRecover();
             isRecovered = true;
+            actor.pub("onStateRecovered");
             return new JournalActor.RecoverJournalRequest(
                     state.getPartitions(),
                     snapshots.firstEntry().getValue().getJournalSnapshot(),
@@ -296,8 +302,6 @@ public class StateActor implements RaftState{
         onMetadataRecovered(lastSavedServerMetadata);
         state.recover(statePath(), properties);
         recoverSnapshots();
-
-
     }
 
 
@@ -520,5 +524,79 @@ public class StateActor implements RaftState{
     private void removeInterceptor(InternalEntryType type, ApplyInternalEntryInterceptor internalEntryInterceptor) {
         state.removeInterceptor(type, internalEntryInterceptor);
 
+    }
+
+    @ActorListener
+    private void maybeUpdateTermOnRecovery() {
+        if (journal.minIndex() < journal.maxIndex()) {
+            JournalEntry lastEntry = journal.read(journal.maxIndex() - 1);
+            if (lastEntry.getTerm() > term) {
+                term = lastEntry.getTerm();
+                logger.info("Set current term to {}, this is the term of the last entry in the journal.",
+                        term);
+            }
+        }
+    }
+
+    @ActorListener
+    private void incTerm() {
+        this.term++;
+    }
+
+    @ActorListener
+    private void installSnapshot(long offset, long lastIncludedIndex, int lastIncludedTerm, byte[] data, boolean isDone) throws IOException, TimeoutException {
+        synchronized (partialSnapshot) {
+            logger.info("Install snapshot, offset: {}, lastIncludedIndex: {}, lastIncludedTerm: {}, data length: {}, isDone: {}... " +
+                            "journal minIndex: {}, maxIndex: {}, commitIndex: {}...",
+                    ThreadSafeFormat.formatWithComma(offset),
+                    ThreadSafeFormat.formatWithComma(lastIncludedIndex),
+                    lastIncludedTerm,
+                    data.length,
+                    isDone,
+                    ThreadSafeFormat.formatWithComma(journal.minIndex()),
+                    ThreadSafeFormat.formatWithComma(journal.maxIndex()),
+                    ThreadSafeFormat.formatWithComma(journal.commitIndex())
+            );
+
+            Snapshot snapshot;
+            long lastApplied = lastIncludedIndex + 1;
+            Path snapshotPath = snapshotsPath().resolve(String.valueOf(lastApplied));
+            partialSnapshot.installTrunk(offset, data, snapshotPath);
+
+            if (isDone) {
+                logger.info("All snapshot files received, discard any existing snapshot with a same or smaller index...");
+                // discard any existing snapshot with a same or smaller index
+                NavigableMap<Long, Snapshot> headMap = snapshots.headMap(lastApplied, true);
+                while (!headMap.isEmpty()) {
+                    snapshot = headMap.remove(headMap.firstKey());
+                    logger.info("Discard snapshot: {}.", snapshot.getPath());
+                    snapshot.close();
+                    snapshot.clear();
+                }
+                logger.info("add the installed snapshot to snapshots: {}...", snapshotPath);
+                partialSnapshot.finish();
+                // add the installed snapshot to snapshots.
+                snapshot = new Snapshot(stateFactory, metadataPersistence);
+                snapshot.recover(snapshotPath, properties);
+                snapshots.put(lastApplied, snapshot);
+
+                logger.info("New installed snapshot: {}.", snapshot.getJournalSnapshot());
+                actor.send("Journal", "compact", snapshot.getJournalSnapshot(), lastIncludedIndex, lastIncludedTerm);
+
+
+
+                // Reset state machine using snapshot contents (and load
+                // snapshot’s cluster configuration)
+
+                logger.info("Use the new installed snapshot as server's state...");
+
+                state.close();
+                state.clear();
+                snapshot.dump(statePath());
+                state.recover(statePath(), properties);
+
+                logger.info("Install snapshot successfully!");
+            }
+        }
     }
 }

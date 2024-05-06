@@ -124,6 +124,9 @@ public class Actor {
     public ActorMsg pub(String topic, Object payload) {
         return send(PostOffice.PUB_ADDR, topic, payload);
     }
+    public ActorMsg pub(String topic) {
+        return send(PostOffice.PUB_ADDR, topic);
+    }
     public ActorMsg pub(String topic, Object... payloads) {
         return send(PostOffice.PUB_ADDR, topic, payloads);
     }

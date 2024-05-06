@@ -86,7 +86,7 @@ public class PartialSnapshot {
      * @param snapshotPath 安装路径
      * @throws IOException 发生IO异常时抛出
      */
-    void installTrunk(long offset, byte[] data, Path snapshotPath) throws IOException {
+    public void installTrunk(long offset, byte[] data, Path snapshotPath) throws IOException {
 
         if (offset == 0) {
             begin(snapshotPath);
@@ -158,7 +158,7 @@ public class PartialSnapshot {
         return false;
     }
 
-    void finish() throws IOException {
+    public void finish() throws IOException {
         FileUtils.deleteFolder(snapshotPath);
         FileUtils.dump(partialSnapshotPath, snapshotPath);
         snapshotPath = null;
