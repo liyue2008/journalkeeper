@@ -25,6 +25,8 @@ public class FollowerActor {
 
     private final RaftJournal journal;
 
+    private int term;
+
     /**
      * Leader 日志当前的最大位置
      */
@@ -92,7 +94,7 @@ public class FollowerActor {
             leaderMaxIndex = request.getMaxIndex();
         }
         actor.reply(msg, new AsyncAppendEntriesResponse(true, request.getPrevLogIndex() + 1,
-                state.getTerm(), request.getEntries().size()));
+                request.getTerm(), request.getEntries().size()));
     }
 
     public Actor getActor() {
@@ -100,28 +102,10 @@ public class FollowerActor {
     }
 
     @ActorListener
-    private void setActive(boolean active) {
+    private void setActive(boolean active, int term) {
         this.isActive = active;
+        this.term = term;
     }
 
-    //Receiver implementation:
-    //1. Reply immediately if term < currentTerm
-    //2. Create new snapshot file if first chunk (offset is 0)
-    //3. Write data into snapshot file at given offset
-    //4. Reply and wait for more data chunks if done is false
-    //5. Save snapshot file, discard any existing or partial snapshot
-    //with a smaller index
-    //6. If existing log entry has same index and term as snapshot’s
-    //last included entry, retain log entries following it and reply
-    //7. Discard the entire log
-    //8. Reset state machine using snapshot contents (and load
-    //snapshot’s cluster configuration)
-    @ActorListener
-    public InstallSnapshotResponse installSnapshot(InstallSnapshotRequest request) {
-        if (checkTerm(request.getTerm())) {
-            return new InstallSnapshotResponse(state.getTerm());
-        }
-        lastHeartbeat = System.currentTimeMillis();
-        return installSnapshotAsync(request);
-    }
+
 }

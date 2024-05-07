@@ -1,5 +1,6 @@
 package io.journalkeeper.core.raft;
 
+import io.journalkeeper.core.api.ClusterConfiguration;
 import io.journalkeeper.rpc.RpcAccessPointFactory;
 import io.journalkeeper.rpc.client.*;
 import io.journalkeeper.rpc.server.*;
@@ -13,6 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.URI;
+import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
 
@@ -111,7 +113,12 @@ public class ServerRpcActor implements ServerRpc {
 
     @Override
     public CompletableFuture<GetServersResponse> getServers() {
-        return forwardRequest(null, "State", "getServers");
+        final ClusterConfiguration clusterConfiguration = new ClusterConfiguration();
+        return CompletableFuture.allOf(
+                actor.<URI>sendThen("Voter", "getLeaderUri").thenAccept(clusterConfiguration::setLeader),
+                actor.<List<URI>>sendThen("State", "getVoters").thenAccept(clusterConfiguration::setVoters),
+                actor.<List<URI>>sendThen("RaftServer", "getObservers").thenAccept(clusterConfiguration::setObservers)
+        ).thenApply(any -> new GetServersResponse(clusterConfiguration));
     }
 
     @Override
@@ -191,13 +198,13 @@ public class ServerRpcActor implements ServerRpc {
 
     @Override
     public CompletableFuture<AsyncAppendEntriesResponse> asyncAppendEntries(AsyncAppendEntriesRequest request) {
-        return forwardRequest(request, "Voter");
+        return forwardRequest(request, "State");
 
     }
 
     @Override
     public CompletableFuture<RequestVoteResponse> requestVote(RequestVoteRequest request) {
-        return forwardRequest(request, "Voter");
+        return forwardRequest(request, "State");
 
     }
 

@@ -5,6 +5,9 @@ import io.journalkeeper.core.api.RaftJournal;
 import io.journalkeeper.core.api.RaftServer;
 import io.journalkeeper.core.api.VoterState;
 import io.journalkeeper.core.state.ConfigState;
+import io.journalkeeper.exceptions.NotLeaderException;
+import io.journalkeeper.rpc.client.QueryStateRequest;
+import io.journalkeeper.rpc.client.QueryStateResponse;
 import io.journalkeeper.rpc.server.*;
 import io.journalkeeper.utils.actor.Actor;
 import io.journalkeeper.utils.actor.ActorMsg;
@@ -15,6 +18,8 @@ import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 import java.util.List;
+import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -33,11 +38,24 @@ public class VoterActor implements RaftVoter{
     private long nextElectionTime;
     private final Config config;
     private URI votedFor = null;
+    private int term = 0;
+    private URI leaderUri = null;
     VoterActor(RaftJournal journal, RaftState state, Config config) {
         this.journal = journal;
         this.state = state;
-
         this.config = config;
+    }
+
+    @ActorListener
+    private void maybeUpdateTermOnRecovery() {
+        if (journal.minIndex() < journal.maxIndex()) {
+            JournalEntry lastEntry = journal.read(journal.maxIndex() - 1);
+            if (lastEntry.getTerm() > term) {
+                term = lastEntry.getTerm();
+                logger.info("Set current term to {}, this is the term of the last entry in the journal.",
+                        term);
+            }
+        }
     }
     /**
      * 接收者收到requestVote方法后的实现流程如下：
@@ -53,7 +71,7 @@ public class VoterActor implements RaftVoter{
                 request.getLastLogIndex(), request.getLastLogTerm(), request.isFromPreferredLeader(), request.isPreVote(),
                 voterInfo());
         String rejectMsg;
-        int currentTerm = state.getTerm();
+        int currentTerm = this.term;
         // 来自推荐Leader的投票请求例外
         if (!request.isFromPreferredLeader()) {
             // 如果当前是LEADER那直接拒绝投票
@@ -74,9 +92,11 @@ public class VoterActor implements RaftVoter{
                     request.getTerm(), currentTerm);
             return rejectAndResponse(currentTerm, request.getCandidate(), rejectMsg);
         }
+
+        // 如果不是预投票，检查term
         if (!request.isPreVote()) {
             checkTerm(request.getTerm());
-            currentTerm = state.getTerm();
+            currentTerm = this.term;
         }
         // 如果已经投票给其它候选人，拒绝投票
         if (votedFor != null && currentTerm == request.getTerm() && !votedFor.equals(request.getCandidate())) {
@@ -102,6 +122,25 @@ public class VoterActor implements RaftVoter{
         return new RequestVoteResponse(currentTerm, true);
     }
 
+    private boolean checkTerm(int term) {
+        boolean isTermChanged;
+            if (term > this.term) {
+                logger.info("Set current term from {} to {}, {}.", this.term, term, voterInfo());
+                this.term = term;
+                this.votedFor = null;
+
+                isTermChanged = true;
+            } else {
+                isTermChanged = false;
+            }
+
+
+        if (isTermChanged) {
+            convertToFollower();
+        }
+        return isTermChanged;
+    }
+
     private RequestVoteResponse rejectAndResponse(int term, URI candidate, String rejectMessage) {
         logger.debug("Reject vote request from candidate {}, cause: [{}], {}.", candidate, rejectMessage, voterInfo());
         return new RequestVoteResponse(term, false);
@@ -122,8 +161,8 @@ public class VoterActor implements RaftVoter{
             VoterState oldState = voterState.getState();
 
             if (oldState == VoterState.LEADER) {
-                actor.send("State", "setLeader", (Object) null);
-                actor.sendThen("Leader", "setActive", false)
+                leaderUri = null;
+                actor.sendThen("Leader", "setActive", false, term)
                         .thenRun(voterState::convertToFollower)
                         .thenCompose(ignored -> actor.sendThen("Follower", "setActive", true))
                         .thenRun(() -> {
@@ -132,7 +171,7 @@ public class VoterActor implements RaftVoter{
                         });
             } else {
                 voterState.convertToFollower();
-                actor.sendThen("Follower", "setActive", true).thenRun(() -> {
+                actor.sendThen("Follower", "setActive", true, term).thenRun(() -> {
                     this.electionTimeoutMs = config.<Long>get("election_timeout_ms") + randomInterval(config.get("election_timeout_ms"));
                     logger.info("Convert voter state from {} to FOLLOWER, electionTimeout: {}.", oldState, electionTimeoutMs);
                 });
@@ -151,8 +190,9 @@ public class VoterActor implements RaftVoter{
 
     private void convertToPreVoting() {
             VoterState oldState = voterState.getState();
+            this.leaderUri = null;
             if (oldState == VoterState.FOLLOWER) {
-                actor.sendThen("Follower", "setActive", false)
+                actor.sendThen("Follower", "setActive", false, term)
                         .thenRun(() ->  {
                             voterState.convertToPreVoting();
                             logger.info("Convert voter state from {} to PRE_VOTING, electionTimeout: {}, {}.", oldState, electionTimeoutMs, voterInfo());
@@ -174,8 +214,8 @@ public class VoterActor implements RaftVoter{
     private void convertToLeader() {
         VoterState oldState = voterState.getState();
         voterState.convertToLeader();
-        actor.send("State", "setLeader", state.getLocalUri());
-        actor.send("Leader", "setActive", true);
+        leaderUri = state.getLocalUri();
+        actor.send("Leader", "setActive", true, term);
         logger.info("Convert voter state from {} to LEADER, {}.", oldState, voterInfo());
     }
 
@@ -183,61 +223,21 @@ public class VoterActor implements RaftVoter{
         return interval + Math.round(ThreadLocalRandom.current().nextDouble(-1 * RAND_INTERVAL_RANGE, RAND_INTERVAL_RANGE) * interval);
     }
 
-    private boolean checkTerm(int term) {
-        boolean isTermChanged;
-            if (term > this.term) {
-                logger.info("Set current term from {} to {}.", this.term, term);
-                this.term = term;
-                this.votedFor = null;
-                isTermChanged = true;
-            } else {
-                isTermChanged = false;
-            }
-
-        if (isTermChanged) {
-            convertToFollower();
-        }
-        return isTermChanged;
-    }
 
     @ActorListener
     @ResponseManually
     public void asyncAppendEntries(@ActorMessage ActorMsg msg) {
         AsyncAppendEntriesRequest request = msg.getPayload();
 
-        if (state.getRole() != RaftServer.Roll.VOTER) {
+        if (state.getRole() != RaftServer.Roll.VOTER || request.getTerm() < term) {
             actor.reply(msg, new AsyncAppendEntriesResponse(false, request.getPrevLogIndex() + 1,
-                    state.getTerm(), request.getEntries().size()));
+                    term, request.getEntries().size()));
             return;
         }
-        boolean isTermChanged = checkTerm(request.getTerm());
-
-        if (request.getTerm() < state.getTerm()) {
-            // 如果收到的请求term小于当前term，拒绝请求
-            actor.reply(msg, new AsyncAppendEntriesResponse(false, request.getPrevLogIndex() + 1,
-                    state.getTerm(), request.getEntries().size()));
-            return;
+        if (checkTerm(request.getTerm()) && !Objects.equals(leaderUri, request.getLeader())) {
+            this.leaderUri = request.getLeader();
         }
 
-        if (voterState.getState() != VoterState.FOLLOWER) {
-            convertToFollower();
-        }
-        if (logger.isDebugEnabled() && request.getEntries() != null && !request.getEntries().isEmpty()) {
-            logger.debug("Received appendEntriesRequest, term: {}, leader: {}, prevLogIndex: {}, prevLogTerm: {}, " +
-                            "entries: {}, leaderCommit: {}.",
-                    request.getTerm(), request.getLeader(), request.getPrevLogIndex(), request.getPrevLogTerm(),
-                    request.getEntries().size(), request.getLeaderCommit());
-        }
-
-        // reset heartbeat
-        lastHeartbeat = System.currentTimeMillis();
-        if (logger.isDebugEnabled()) {
-            logger.debug("Update lastHeartbeat.");
-        }
-
-        if (isTermChanged) {
-            actor.send("State", "setLeader", request.getLeader());
-        }
         actor.send("Follower", "asyncAppendEntries", msg);
     }
 
@@ -352,9 +352,8 @@ public class VoterActor implements RaftVoter{
         nextElectionTime = Long.MAX_VALUE;
         votedFor = state.getLocalUri();
         boolean isPreVote = voterState.getState() == VoterState.PRE_VOTING;
-        int term = state.getTerm() + 1;
         if (!isPreVote) {
-            actor.send("State", "incTerm");
+            this.term ++;
             logger.info("Start election, {}", voterInfo());
         } else {
             logger.info("Start pre vote, {}", voterInfo());
@@ -403,7 +402,7 @@ public class VoterActor implements RaftVoter{
     private String voterInfo() {
         return String.format("voterState: %s, currentTerm: %d, minIndex: %d, " +
                         "maxIndex: %d, commitIndex: %d, lastApplied: %d, uri: %s",
-                voterState.getState(), state.getTerm(), journal.minIndex(),
+                voterState.getState(), this.term, journal.minIndex(),
                 journal.maxIndex(), journal.commitIndex(), state.lastApplied(), state.getLocalUri().toString());
     }
     @ActorSubscriber
@@ -416,4 +415,5 @@ public class VoterActor implements RaftVoter{
         }
         actor.addScheduler(config.<Long>get("heartbeat_interval_ms"), TimeUnit.MILLISECONDS, "checkElectionTimeout", this::checkElectionTimeout);
     }
+
 }

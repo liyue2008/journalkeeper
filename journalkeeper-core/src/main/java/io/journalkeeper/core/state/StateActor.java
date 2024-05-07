@@ -5,8 +5,6 @@ import io.journalkeeper.core.entry.internal.*;
 import io.journalkeeper.core.journal.JournalActor;
 import io.journalkeeper.core.raft.RaftState;
 import io.journalkeeper.core.server.PartialSnapshot;
-import io.journalkeeper.core.server.ThreadNames;
-import io.journalkeeper.exceptions.JournalException;
 import io.journalkeeper.exceptions.NotLeaderException;
 import io.journalkeeper.exceptions.RecoverException;
 import io.journalkeeper.exceptions.StateRecoverException;
@@ -15,16 +13,14 @@ import io.journalkeeper.persistence.MetadataPersistence;
 import io.journalkeeper.persistence.PersistenceFactory;
 import io.journalkeeper.persistence.ServerMetadata;
 import io.journalkeeper.rpc.client.*;
+import io.journalkeeper.rpc.server.AsyncAppendEntriesRequest;
+import io.journalkeeper.rpc.server.AsyncAppendEntriesResponse;
 import io.journalkeeper.rpc.server.GetServerStateRequest;
 import io.journalkeeper.rpc.server.GetServerStateResponse;
 import io.journalkeeper.utils.ThreadSafeFormat;
 import io.journalkeeper.utils.actor.*;
-import io.journalkeeper.utils.actor.annotation.ActorListener;
-import io.journalkeeper.utils.actor.annotation.ActorScheduler;
-import io.journalkeeper.utils.actor.annotation.ActorSubscriber;
+import io.journalkeeper.utils.actor.annotation.*;
 import io.journalkeeper.utils.config.Config;
-import io.journalkeeper.utils.event.Event;
-import io.journalkeeper.utils.event.EventType;
 import io.journalkeeper.utils.spi.ServiceSupport;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,9 +31,8 @@ import java.nio.channels.ClosedByInterruptException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentSkipListMap;
-import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -83,9 +78,6 @@ public class StateActor implements RaftState{
     private URI localUri;
     private RaftServer.Roll roll;
 
-    private int term;
-
-    private URI leaderUri = null;
 
     private final JournalEntryParser journalEntryParser;
     /**
@@ -255,15 +247,6 @@ public class StateActor implements RaftState{
         return localUri;
     }
 
-    @Override
-    public URI getLeaderUri() {
-        return leaderUri;
-    }
-
-    @Override
-    public int getTerm() {
-        return term;
-    }
 
     @Override
     public RaftServer.Roll getRole() {
@@ -347,22 +330,11 @@ public class StateActor implements RaftState{
         return new QueryStateResponse(result.getResult(), result.getLastApplied());
     }
 
-    @ActorListener
-    public QueryStateResponse queryClusterState(QueryStateRequest request) {
-        if (localUri.equals(leaderUri)) {
-            return queryServerState(request);
-        } else {
-            return new QueryStateResponse(new NotLeaderException(leaderUri));
-        }
-    }
     @ActorListener(topic = "lastApplied")
     private LastAppliedResponse lastAppliedListener() {
         return new LastAppliedResponse(state.lastApplied());
     }
-    @ActorListener
-    private void setLeader(URI newLeader) {
-        this.leaderUri = newLeader;
-    }
+
     @Override
     public Long lastApplied() {
         return state.lastApplied();
@@ -401,11 +373,6 @@ public class StateActor implements RaftState{
     @Override
     public ConfigState getConfigState() {
         return state.getConfigState();
-    }
-
-    @ActorListener
-    private GetServersResponse getServers() {
-        return new GetServersResponse(new ClusterConfiguration(this.leaderUri, state.voters(), null));
     }
 
     @ActorListener
@@ -526,22 +493,6 @@ public class StateActor implements RaftState{
 
     }
 
-    @ActorListener
-    private void maybeUpdateTermOnRecovery() {
-        if (journal.minIndex() < journal.maxIndex()) {
-            JournalEntry lastEntry = journal.read(journal.maxIndex() - 1);
-            if (lastEntry.getTerm() > term) {
-                term = lastEntry.getTerm();
-                logger.info("Set current term to {}, this is the term of the last entry in the journal.",
-                        term);
-            }
-        }
-    }
-
-    @ActorListener
-    private void incTerm() {
-        this.term++;
-    }
 
     @ActorListener
     private void installSnapshot(long offset, long lastIncludedIndex, int lastIncludedTerm, byte[] data, boolean isDone) throws IOException, TimeoutException {

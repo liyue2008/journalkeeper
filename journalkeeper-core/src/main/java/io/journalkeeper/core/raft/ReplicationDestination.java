@@ -45,13 +45,15 @@ class ReplicationDestination {
     private final long heartbeatIntervalMs;
     private boolean committed = true;
     private boolean waitingForResponse = false;
+    private int term;
 
-    void reset() {
+    void reset(int term) {
         lastHeartbeatResponseTime = System.currentTimeMillis();
         lastHeartbeatRequestTime = lastHeartbeatResponseTime;
         committed = true;
         waitingForResponse = false;
         installSnapshotInProgress = false;
+        this.term = term;
     }
 
     ReplicationDestination(URI uri, long nextIndex, Actor actor, RaftState state, RaftJournal journal, long heartbeatIntervalMs) {
@@ -90,7 +92,7 @@ class ReplicationDestination {
 
         // 构建请求并发送
         AsyncAppendEntriesRequest request =
-                new AsyncAppendEntriesRequest(state.getTerm(), state.getLocalUri(),
+                new AsyncAppendEntriesRequest(term, state.getLocalUri(),
                         nextIndex - 1, this.getPreLogTerm(nextIndex),
                         entries, state.commitIndex(), maxIndex);
 
@@ -146,7 +148,7 @@ class ReplicationDestination {
             while (iterator.hasMoreTrunks()) {
                 byte[] trunk = iterator.nextTrunk();
                 InstallSnapshotRequest request = new InstallSnapshotRequest(
-                        state.getTerm(), state.getLocalUri(), snapshot.lastIncludedIndex(), snapshot.lastIncludedTerm(),
+                        term, state.getLocalUri(), snapshot.lastIncludedIndex(), snapshot.lastIncludedTerm(),
                         offset, trunk, !iterator.hasMoreTrunks()
                 );
                 boolean lastRequest = !iterator.hasMoreTrunks();

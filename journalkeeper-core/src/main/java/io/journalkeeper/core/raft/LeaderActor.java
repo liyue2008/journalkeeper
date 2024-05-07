@@ -56,6 +56,7 @@ public class LeaderActor {
     private boolean isActive = false; // 选举收到多数选票，成为leader。
     private boolean isAnnounced = false; // 发布Leader announcement 被多数确认，正式行使leader职权。
     private final ApplyInternalEntryInterceptor leaderAnnouncementInterceptor;
+    private int term;
 
     public LeaderActor(JournalEntryParser journalEntryParser, RaftJournal journal, RaftState state, Config config) {
         this.journalEntryParser = journalEntryParser;
@@ -158,20 +159,21 @@ public class LeaderActor {
                 .anyMatch(r -> !r.isCommitted()))
                 )) {
             long N = calculateN(isAnyFollowerNextIndexUpdated);
-            if (N > journal.commitIndex() && getTerm(N - 1) == getCurrentTerm()) {
+            if (N > journal.commitIndex() && getTerm(N - 1) == this.term) {
                 if (logger.isDebugEnabled()) {
                     logger.debug("Set commitIndex {} to {}, {}.", journal.commitIndex(), N, voterInfo());
                 }
                 actor.send("Journal", "commit", N);
-//                onCommitted();
             }
         }
     }
 
+
+
     private String voterInfo() {
         return String.format("voterState: %s, currentTerm: %d, minIndex: %d, " +
                         "maxIndex: %d, commitIndex: %d, lastApplied: %d, uri: %s",
-                VoterState.LEADER, getCurrentTerm(), journal.minIndex(),
+                VoterState.LEADER, this.term, journal.minIndex(),
                 journal.maxIndex(), journal.commitIndex(), state.lastApplied(), state.getLocalUri().toString());
     }
     private int getTerm(long index) {
@@ -279,7 +281,7 @@ public class LeaderActor {
             }
             entry.setPartition(serializedUpdateRequest.getPartition());
             entry.setBatchSize(serializedUpdateRequest.getBatchSize());
-            entry.setTerm(getCurrentTerm());
+            entry.setTerm(this.term);
 
 
             if (request.getTransactionId() != null) {
@@ -338,13 +340,13 @@ public class LeaderActor {
         }
         long timeoutMs = request.getTimeoutMs();
         int term = request.getTerm();
-        if (getCurrentTerm() != term) {
+        if (this.term != term) {
             return  new DisableLeaderWriteResponse(new IllegalStateException(
-                    String.format("Term not matched! Term in leader: %d, term in request: %d", getCurrentTerm(), term)));
+                    String.format("Term not matched! Term in leader: %d, term in request: %d", this.term, term)));
         }
         this.isWritable = false;
         this.disableWriteTimeout = System.currentTimeMillis() + timeoutMs;
-        return new DisableLeaderWriteResponse(getCurrentTerm());
+        return new DisableLeaderWriteResponse(this.term);
     }
 
 
@@ -372,10 +374,10 @@ public class LeaderActor {
         if (!isActive || isAnnounced) {
             return;
         }
-        byte[] payload = InternalEntriesSerializeSupport.serialize(new LeaderAnnouncementEntry(state.getTerm(), state.getLocalUri()));
+        byte[] payload = InternalEntriesSerializeSupport.serialize(new LeaderAnnouncementEntry(this.term, state.getLocalUri()));
         UpdateClusterStateRequest request = new UpdateClusterStateRequest(new UpdateRequest(payload));
         JournalEntry journalEntry = journalEntryParser.createJournalEntry(payload);
-        journalEntry.setTerm(state.getTerm());
+        journalEntry.setTerm(this.term);
         journalEntry.setPartition(INTERNAL_PARTITION);
 
         actor.send("Journal", "append", ActorMsg.Response.IGNORE, Collections.singletonList(journalEntry));
@@ -392,18 +394,20 @@ public class LeaderActor {
 
     @ActorListener
     private void onLeaderAnnouncementEntryApplied(LeaderAnnouncementEntry leaderAnnouncementEntry) {
-        if (isActive && !isAnnounced && leaderAnnouncementEntry.getTerm() == state.getTerm()) {
+        if (isActive && !isAnnounced && leaderAnnouncementEntry.getTerm() == this.term) {
             this.isAnnounced = true;
-            logger.info("Leader announcement applied! Leader: {}, term: {}.", state.getLeaderUri(), state.getTerm());
+            logger.info("Leader announcement applied! Leader: {}, term: {}.", state.getLocalUri(), term);
         }
     }
     @ActorListener
-    private void setActive(boolean active) {
+    private void setActive(boolean active, int term) {
         isActive = active;
-        this.replicationDestinations.forEach(ReplicationDestination::reset);
+        this.term = term;
+
         if (!active) {
             isAnnounced = false;
         } else {
+            this.replicationDestinations.forEach(r -> r.reset(term));
             announceLeader();
         }
     }
@@ -425,6 +429,19 @@ public class LeaderActor {
                 .filter(uri -> !uri.equals(state.getLocalUri()))
                 .map(uri -> new ReplicationDestination(uri, journal.maxIndex(), actor, state, journal, config.get("heartbeat_interval_ms")))
                 .collect(Collectors.toList()));
+    }
+
+
+    @ResponseManually
+    @ActorListener
+    public void queryClusterState(@ActorMessage ActorMsg msg) {
+        QueryStateRequest request = msg.getPayload();
+        if (isActive) {
+            actor.sendThen("State", "queryServerState", request)
+                    .thenAccept(resp -> actor.reply(msg, resp));
+        } else {
+            actor.reply(msg, new QueryStateResponse(new NotLeaderException(getClusterLeader())));
+        }
     }
 
     private static class WaitingResponse implements Comparable<WaitingResponse>{
@@ -538,12 +555,10 @@ public class LeaderActor {
         return actor;
     }
 
-    private int getCurrentTerm() {
-        return state.getTerm();
-    }
 
     private URI getClusterLeader() {
-        return state.getLeaderUri();
+        // TODO
+        return null;
     }
 
 }

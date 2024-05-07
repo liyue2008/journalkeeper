@@ -14,8 +14,6 @@ public interface RaftState {
     boolean isInitialized();
 
     URI getLocalUri();
-    URI getLeaderUri();
-    int getTerm();
     RaftServer.Roll getRole();
 
     long commitIndex();

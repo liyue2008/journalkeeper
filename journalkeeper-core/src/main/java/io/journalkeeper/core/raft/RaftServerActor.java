@@ -109,7 +109,7 @@ public class RaftServerActor implements  RaftServer {
                 .thenCompose(request -> actor.sendThen("Journal", "recover", request))
                 .thenCompose(r -> CompletableFuture.allOf(
                         actor.sendThen("RaftServer", "recoverVoterConfig"),
-                        actor.sendThen("State", "maybeUpdateTermOnRecovery")
+                        actor.sendThen("Voter", "maybeUpdateTermOnRecovery")
                 )).whenComplete((r, e) -> {
                     if (e != null) {
                         logger.warn("Recover failed!", e);
@@ -118,18 +118,6 @@ public class RaftServerActor implements  RaftServer {
                     }
                     releaseFileLock();
                 });
-    }
-    @ActorListener
-    private void recovered(boolean isRecoveredFromJournal) {
-        if (isRecoveredFromJournal) {
-
-            CompletableFuture.allOf(
-                    actor.sendThen("RaftServer", "recoverVoterConfig"),
-                    actor.sendThen("State", "maybeUpdateTermOnRecovery", context.getJournal())
-            ).thenRun(this::releaseFileLock);
-        } else {
-            releaseFileLock();
-        }
     }
 
     /**
