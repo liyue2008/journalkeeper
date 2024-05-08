@@ -1,6 +1,7 @@
 package io.journalkeeper.core.raft;
 
 import io.journalkeeper.core.api.RaftJournal;
+import io.journalkeeper.core.api.RaftServer;
 import io.journalkeeper.rpc.server.AsyncAppendEntriesRequest;
 import io.journalkeeper.rpc.server.AsyncAppendEntriesResponse;
 import io.journalkeeper.rpc.server.InstallSnapshotRequest;
@@ -14,6 +15,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 
 
@@ -47,7 +49,11 @@ public class FollowerActor {
      * 如果leaderCommit > commitIndex，将commitIndex设置为leaderCommit和最新日志条目索引号中较小的一个
      */
     @ActorListener
-    private void asyncAppendEntries(ActorMsg msg) {
+    @ResponseManually
+    public void asyncAppendEntries(@ActorMessage ActorMsg msg) {
+        AsyncAppendEntriesRequest request = msg.getPayload();
+
+
         // 1. State.maybeRollbackConfig 如果要删除部分未提交的日志，并且待删除的这部分存在配置变更日志，则需要回滚配置
         // 2. Journal.compareOrAppendRaw 从index位置开始：
         //    如果一条已经存在的日志与新的冲突（index 相同但是任期号 term 不同），则删除已经存在的日志和它之后所有的日志
@@ -56,10 +62,15 @@ public class FollowerActor {
         // 4. Journal.commit 提交日志：如果leaderCommit > commitIndex，将commitIndex设置为leaderCommit和最新日志条目索引号中较小的一个。
         // 5. Follower.onCommit 更新leaderMaxIndex，返回响应。
         // TODO: 增加preferLeader逻辑。
-        if (!isActive) {
-            throw new IllegalStateException("FOLLOWER is not active!");
+
+        if (!isActive || request.getTerm() < term) {
+            actor.reply(msg, new AsyncAppendEntriesResponse(false, request.getPrevLogIndex() + 1,
+                    term, request.getEntries().size()));
+            return;
         }
-        AsyncAppendEntriesRequest request = msg.getPayload();
+
+        actor.send("Voter", "onAppendEntries", request.getTerm(), request.getLeader());
+
         boolean notHeartBeat = null != request.getEntries() && !request.getEntries().isEmpty();
         // Reply false if log does not contain an entry at prevLogIndex
         // whose term matches prevLogTerm
@@ -72,29 +83,25 @@ public class FollowerActor {
         ) {
             actor.reply(msg, new AsyncAppendEntriesResponse(false, startIndex,
                     request.getTerm(), request.getEntries().size()));
-        } else {
-            // 如果要删除部分未提交的日志，并且待删除的这部分存在配置变更日志，则需要回滚配置
-            actor.sendThen("State", "maybeRollbackConfig", startIndex)
-                    .thenCompose(ignored -> actor.sendThen("Journal","compareOrAppendRaw", entries, request.getPrevLogIndex() + 1))
-                    .thenCompose(ignored -> actor.sendThen("State", "maybeUpdateNonLeaderConfig", entries))
-                    .thenCompose(ignored -> actor.sendThen("Journal", "commit", request.getLeaderCommit()))
-                    .thenRun(() -> this.onCommit(msg))
-                    .exceptionally(t -> {
-                        actor.reply(msg, new AsyncAppendEntriesResponse(t));
-                        return null;
-                    });
+            return;
         }
-    }
+        // 如果要删除部分未提交的日志，并且待删除的这部分存在配置变更日志，则需要回滚配置
+        actor.sendThen("State", "maybeRollbackConfig", startIndex)
+                .thenCompose(ignored -> actor.sendThen("Journal","compareOrAppendRaw", entries, request.getPrevLogIndex() + 1))
+                .thenCompose(ignored -> actor.sendThen("State", "maybeUpdateNonLeaderConfig", entries))
+                .thenCompose(ignored -> actor.sendThen("Journal", "commit", request.getLeaderCommit()))
+                .thenRun(() -> {
+                    if (leaderMaxIndex < request.getMaxIndex()) {
+                        leaderMaxIndex = request.getMaxIndex();
+                    }
+                    actor.reply(msg, new AsyncAppendEntriesResponse(true, request.getPrevLogIndex() + 1,
+                            request.getTerm(), request.getEntries().size()));
+                })
+                .exceptionally(t -> {
+                    actor.reply(msg, new AsyncAppendEntriesResponse(t));
+                    return null;
+                });
 
-
-
-    private void onCommit(ActorMsg msg) {
-        AsyncAppendEntriesRequest request = msg.getPayload();
-        if (leaderMaxIndex < request.getMaxIndex()) {
-            leaderMaxIndex = request.getMaxIndex();
-        }
-        actor.reply(msg, new AsyncAppendEntriesResponse(true, request.getPrevLogIndex() + 1,
-                request.getTerm(), request.getEntries().size()));
     }
 
     public Actor getActor() {

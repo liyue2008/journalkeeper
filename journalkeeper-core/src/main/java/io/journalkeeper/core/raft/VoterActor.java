@@ -5,9 +5,6 @@ import io.journalkeeper.core.api.RaftJournal;
 import io.journalkeeper.core.api.RaftServer;
 import io.journalkeeper.core.api.VoterState;
 import io.journalkeeper.core.state.ConfigState;
-import io.journalkeeper.exceptions.NotLeaderException;
-import io.journalkeeper.rpc.client.QueryStateRequest;
-import io.journalkeeper.rpc.client.QueryStateResponse;
 import io.journalkeeper.rpc.server.*;
 import io.journalkeeper.utils.actor.Actor;
 import io.journalkeeper.utils.actor.ActorMsg;
@@ -19,7 +16,6 @@ import org.slf4j.LoggerFactory;
 import java.net.URI;
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -120,6 +116,19 @@ public class VoterActor implements RaftVoter{
             this.votedFor = request.getCandidate();
         }
         return new RequestVoteResponse(currentTerm, true);
+    }
+
+    @ActorListener
+    private void onAppendEntries(int term, URI leaderUri) {
+        if (checkTerm(term)) {
+            setLeaderUri(leaderUri);
+        }
+        lastHeartbeat = System.currentTimeMillis();
+    }
+
+    private void setLeaderUri(URI leaderUri) {
+        this.leaderUri = leaderUri;
+        actor.pub("onLeaderChange", leaderUri);
     }
 
     private boolean checkTerm(int term) {

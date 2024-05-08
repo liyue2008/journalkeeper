@@ -57,7 +57,7 @@ public class LeaderActor {
     private boolean isAnnounced = false; // 发布Leader announcement 被多数确认，正式行使leader职权。
     private final ApplyInternalEntryInterceptor leaderAnnouncementInterceptor;
     private int term;
-
+    private URI leaderUri = null; // 当前Leader
     public LeaderActor(JournalEntryParser journalEntryParser, RaftJournal journal, RaftState state, Config config) {
         this.journalEntryParser = journalEntryParser;
         this.journal = journal;
@@ -555,10 +555,13 @@ public class LeaderActor {
         return actor;
     }
 
+    @ActorSubscriber
+    private void onLeaderChange(URI leaderUri) {
+        this.leaderUri = leaderUri;
+    }
 
     private URI getClusterLeader() {
-        // TODO
-        return null;
+        return leaderUri;
     }
 
 }
