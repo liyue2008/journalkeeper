@@ -5,7 +5,6 @@ import io.journalkeeper.rpc.RpcAccessPointFactory;
 import io.journalkeeper.rpc.client.*;
 import io.journalkeeper.rpc.server.*;
 import io.journalkeeper.utils.actor.*;
-import io.journalkeeper.utils.actor.annotation.ActorListener;
 import io.journalkeeper.utils.actor.annotation.ActorSubscriber;
 import io.journalkeeper.utils.event.EventWatcher;
 import io.journalkeeper.utils.spi.ServiceSupport;
@@ -15,7 +14,6 @@ import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 import java.util.List;
-import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
 
 
@@ -204,7 +202,7 @@ public class ServerRpcActor implements ServerRpc {
 
     @Override
     public CompletableFuture<RequestVoteResponse> requestVote(RequestVoteRequest request) {
-        return forwardRequest(request, "State");
+        return forwardRequest(request, "Voter");
 
     }
 

@@ -5,19 +5,14 @@ import io.journalkeeper.core.entry.internal.*;
 import io.journalkeeper.core.journal.JournalActor;
 import io.journalkeeper.core.raft.RaftState;
 import io.journalkeeper.core.server.PartialSnapshot;
-import io.journalkeeper.exceptions.NotLeaderException;
 import io.journalkeeper.exceptions.RecoverException;
 import io.journalkeeper.exceptions.StateRecoverException;
-import io.journalkeeper.persistence.LockablePersistence;
 import io.journalkeeper.persistence.MetadataPersistence;
 import io.journalkeeper.persistence.PersistenceFactory;
 import io.journalkeeper.persistence.ServerMetadata;
 import io.journalkeeper.rpc.client.*;
-import io.journalkeeper.rpc.server.AsyncAppendEntriesRequest;
-import io.journalkeeper.rpc.server.AsyncAppendEntriesResponse;
 import io.journalkeeper.rpc.server.GetServerStateRequest;
 import io.journalkeeper.rpc.server.GetServerStateResponse;
-import io.journalkeeper.utils.ThreadSafeFormat;
 import io.journalkeeper.utils.actor.*;
 import io.journalkeeper.utils.actor.annotation.*;
 import io.journalkeeper.utils.config.Config;
@@ -31,9 +26,7 @@ import java.nio.channels.ClosedByInterruptException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentSkipListMap;
-import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.StreamSupport;
@@ -74,7 +67,6 @@ public class StateActor implements RaftState{
      */
     protected MetadataPersistence metadataPersistence;
 
-    private LockablePersistence lockablePersistence;
     private URI localUri;
     private RaftServer.Roll roll;
 
@@ -280,7 +272,7 @@ public class StateActor implements RaftState{
         if (lastSavedServerMetadata == null || !lastSavedServerMetadata.isInitialized()) {
             throw new RecoverException(
                     String.format("Recover failed! Cause: metadata is not initialized. Metadata path: %s.",
-                            metadataFile().toString()));
+                            metadataFile()));
         }
         onMetadataRecovered(lastSavedServerMetadata);
         state.recover(statePath(), properties);
@@ -488,7 +480,7 @@ public class StateActor implements RaftState{
                 metadataPersistence.save(metadataFile(), metadata);
                 lastSavedServerMetadata = metadata;
             }
-            actor.pub("onStateFlush", null);
+            actor.pub("onStateFlush");
         } catch (ClosedByInterruptException ignored) {
         } catch (Throwable e) {
             logger.warn("Flush exception, commitIndex: {}, lastApplied: {}, server: {}: ",
@@ -500,7 +492,6 @@ public class StateActor implements RaftState{
      * 监听属性commitIndex的变化，
      * 当commitIndex变更时如果commitIndex > lastApplied，
      * 反复执行applyEntries直到lastApplied == commitIndex：
-     *
      * 1. 如果需要，复制当前状态为新的快照保存到属性snapshots, 索引值为lastApplied。
      * 2. lastApplied自增，将log[lastApplied]应用到状态机，更新当前状态state；
      *
@@ -528,61 +519,4 @@ public class StateActor implements RaftState{
 
     }
 
-
-    @ActorListener
-    private void installSnapshot(long offset, long lastIncludedIndex, int lastIncludedTerm, byte[] data, boolean isDone) throws IOException, TimeoutException {
-        synchronized (partialSnapshot) {
-            logger.info("Install snapshot, offset: {}, lastIncludedIndex: {}, lastIncludedTerm: {}, data length: {}, isDone: {}... " +
-                            "journal minIndex: {}, maxIndex: {}, commitIndex: {}...",
-                    ThreadSafeFormat.formatWithComma(offset),
-                    ThreadSafeFormat.formatWithComma(lastIncludedIndex),
-                    lastIncludedTerm,
-                    data.length,
-                    isDone,
-                    ThreadSafeFormat.formatWithComma(journal.minIndex()),
-                    ThreadSafeFormat.formatWithComma(journal.maxIndex()),
-                    ThreadSafeFormat.formatWithComma(journal.commitIndex())
-            );
-
-            Snapshot snapshot;
-            long lastApplied = lastIncludedIndex + 1;
-            Path snapshotPath = snapshotsPath().resolve(String.valueOf(lastApplied));
-            partialSnapshot.installTrunk(offset, data, snapshotPath);
-
-            if (isDone) {
-                logger.info("All snapshot files received, discard any existing snapshot with a same or smaller index...");
-                // discard any existing snapshot with a same or smaller index
-                NavigableMap<Long, Snapshot> headMap = snapshots.headMap(lastApplied, true);
-                while (!headMap.isEmpty()) {
-                    snapshot = headMap.remove(headMap.firstKey());
-                    logger.info("Discard snapshot: {}.", snapshot.getPath());
-                    snapshot.close();
-                    snapshot.clear();
-                }
-                logger.info("add the installed snapshot to snapshots: {}...", snapshotPath);
-                partialSnapshot.finish();
-                // add the installed snapshot to snapshots.
-                snapshot = new Snapshot(stateFactory, metadataPersistence);
-                snapshot.recover(snapshotPath, properties);
-                snapshots.put(lastApplied, snapshot);
-
-                logger.info("New installed snapshot: {}.", snapshot.getJournalSnapshot());
-                actor.send("Journal", "compact", snapshot.getJournalSnapshot(), lastIncludedIndex, lastIncludedTerm);
-
-
-
-                // Reset state machine using snapshot contents (and load
-                // snapshot’s cluster configuration)
-
-                logger.info("Use the new installed snapshot as server's state...");
-
-                state.close();
-                state.clear();
-                snapshot.dump(statePath());
-                state.recover(statePath(), properties);
-
-                logger.info("Install snapshot successfully!");
-            }
-        }
-    }
 }
