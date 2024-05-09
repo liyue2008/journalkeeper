@@ -376,6 +376,41 @@ public class StateActor implements RaftState{
     }
 
     @ActorListener
+    private List<URI> getVoters() {
+        return state.voters();
+    }
+    @ActorListener
+    private Snapshot installSnapshot(Path snapshotPath, long lastApplied) throws IOException {
+        Snapshot snapshot;
+        logger.info("All snapshot files received, discard any existing snapshot with a same or smaller index...");
+        // discard any existing snapshot with a same or smaller index
+        NavigableMap<Long, Snapshot> headMap = snapshots.headMap(lastApplied, true);
+        while (!headMap.isEmpty()) {
+            snapshot = headMap.remove(headMap.firstKey());
+            logger.info("Discard snapshot: {}.", snapshot.getPath());
+            snapshot.close();
+            snapshot.clear();
+        }
+        logger.info("add the installed snapshot to snapshots: {}...", snapshotPath);
+        partialSnapshot.finish();
+        // add the installed snapshot to snapshots.
+        snapshot = new Snapshot(stateFactory, metadataPersistence);
+        snapshot.recover(snapshotPath, properties);
+        snapshots.put(lastApplied, snapshot);
+
+        logger.info("New installed snapshot: {}.", snapshot.getJournalSnapshot());
+        return snapshot;
+    }
+
+    @ActorListener
+    private void recoverFromSnapshot(Snapshot snapshot) throws IOException {
+        state.close();
+        state.clear();
+        snapshot.dump(statePath());
+        state.recover(statePath(), properties);
+    }
+
+    @ActorListener
     private QueryStateResponse querySnapshot(QueryStateRequest request) {
         // TODO
         return null;

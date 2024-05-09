@@ -1,6 +1,7 @@
 package io.journalkeeper.utils.actor;
 
 import io.journalkeeper.utils.actor.annotation.ActorListener;
+import io.journalkeeper.utils.threads.NamedThreadFactory;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -11,13 +12,19 @@ class ScheduleActor {
     private ScheduledExecutorService executorService;
     private final Map<String /* addr-topic */, ScheduledFuture<?>> runningTasks = new HashMap<>();
     private boolean stopped = false;
+    private final String name;
+
+    ScheduleActor(String name) {
+        this.name = name;
+    }
+
     @ActorListener
     void addTask(ScheduleTask task) {
         if (stopped) {
             throw new IllegalStateException("ScheduleActor has been stopped");
         }
         if (null == executorService) {
-            executorService = Executors.newScheduledThreadPool(1, Executors.defaultThreadFactory());
+            executorService = Executors.newScheduledThreadPool(1, new NamedThreadFactory("ActorScheduler-" + (name.isEmpty() ? "" : (name + "-"))));
         }
         long delay = task.getInterval();
         ScheduledFuture<?> scheduledFuture = executorService.scheduleAtFixedRate(() -> actor.send(task.getAddr(), task.getTopic()), ThreadLocalRandom.current().nextLong(delay), delay, TimeUnit.MILLISECONDS);

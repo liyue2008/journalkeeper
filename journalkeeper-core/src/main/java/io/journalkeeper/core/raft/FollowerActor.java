@@ -1,31 +1,40 @@
 package io.journalkeeper.core.raft;
 
 import io.journalkeeper.core.api.RaftJournal;
-import io.journalkeeper.core.api.RaftServer;
+import io.journalkeeper.core.server.PartialSnapshot;
+import io.journalkeeper.core.state.Snapshot;
 import io.journalkeeper.rpc.server.AsyncAppendEntriesRequest;
 import io.journalkeeper.rpc.server.AsyncAppendEntriesResponse;
 import io.journalkeeper.rpc.server.InstallSnapshotRequest;
 import io.journalkeeper.rpc.server.InstallSnapshotResponse;
+import io.journalkeeper.utils.ThreadSafeFormat;
 import io.journalkeeper.utils.actor.Actor;
 import io.journalkeeper.utils.actor.annotation.ActorListener;
 import io.journalkeeper.utils.actor.ActorMsg;
 import io.journalkeeper.utils.actor.annotation.ActorMessage;
 import io.journalkeeper.utils.actor.annotation.ResponseManually;
+import io.journalkeeper.utils.config.Config;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+import java.nio.file.Path;
 import java.util.List;
-import java.util.Objects;
-import java.util.concurrent.CompletableFuture;
+import java.util.NavigableMap;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 
 
 public class FollowerActor {
     private static final Logger logger = LoggerFactory.getLogger( FollowerActor.class );
+    private static final String PARTIAL_SNAPSHOT_PATH = "partial_snapshot";
     private final Actor actor = Actor.builder("Follower").setHandlerInstance(this).build();
 
     private final RaftState state;
 
     private final RaftJournal journal;
+
+    private final Config config;
 
     private int term;
 
@@ -35,11 +44,18 @@ public class FollowerActor {
     private long leaderMaxIndex = -1L;
     private boolean isActive = true;
 
-    FollowerActor(RaftState state, RaftJournal journal) {
+    private final PartialSnapshot partialSnapshot;
+
+    FollowerActor(RaftState state, RaftJournal journal, Config config) {
         this.state = state;
         this.journal = journal;
+        this.config = config;
+        this.partialSnapshot = new PartialSnapshot(snapshotsPath());
     }
 
+    private Path snapshotsPath() {
+        return config.<Path>get("working_dir").resolve("snapshots");
+    }
     /**
      * 1. 如果 term < currentTerm返回 false
      * 如果 term > currentTerm且节点当前的状态不是FOLLOWER，将节点当前的状态转换为FOLLOWER；
@@ -113,6 +129,78 @@ public class FollowerActor {
         this.isActive = active;
         this.term = term;
     }
+
+    //Receiver implementation:
+    //1. Reply immediately if term < currentTerm
+    //2. Create new snapshot file if first chunk (offset is 0)
+    //3. Write data into snapshot file at given offset
+    //4. Reply and wait for more data chunks if done is false
+    //5. Save snapshot file, discard any existing or partial snapshot
+    //with a smaller index
+    //6. If existing log entry has same index and term as snapshot’s
+    //last included entry, retain log entries following it and reply
+    //7. Discard the entire log
+    //8. Reset state machine using snapshot contents (and load
+    //snapshot’s cluster configuration)
+    @ResponseManually
+    @ActorListener
+    private void installSnapshot(@ActorMessage ActorMsg msg) {
+        InstallSnapshotRequest request = msg.getPayload();
+        if (term < request.getTerm()) {
+            actor.reply(msg, new InstallSnapshotResponse(term));
+            return;
+        }
+        actor.send("Voter", "onAppendEntries", request.getTerm(), request.getLeaderId());
+
+        long offset = request.getOffset();
+        long lastIncludedIndex = request.getLastIncludedIndex();
+        int lastIncludedTerm = request.getLastIncludedTerm();
+        byte[] data = request.getData();
+        boolean isDone = request.isDone();
+
+        logger.info("Install snapshot, offset: {}, lastIncludedIndex: {}, lastIncludedTerm: {}, data length: {}, isDone: {}... " +
+                        "journal minIndex: {}, maxIndex: {}, commitIndex: {}...",
+                ThreadSafeFormat.formatWithComma(offset),
+                ThreadSafeFormat.formatWithComma(lastIncludedIndex),
+                lastIncludedTerm,
+                data.length,
+                isDone,
+                ThreadSafeFormat.formatWithComma(journal.minIndex()),
+                ThreadSafeFormat.formatWithComma(journal.maxIndex()),
+                ThreadSafeFormat.formatWithComma(journal.commitIndex())
+        );
+
+        long lastApplied = lastIncludedIndex + 1;
+        Path snapshotPath = snapshotsPath().resolve(String.valueOf(lastApplied));
+        try {
+            partialSnapshot.installTrunk(offset, data, snapshotPath);
+
+        } catch (IOException e) {
+            logger.warn("Install snapshot exception: ", e);
+            actor.reply(msg, new InstallSnapshotResponse(e));
+            return;
+        }
+        if (isDone) {
+            actor.<Snapshot>sendThen("State", "installSnapshot", snapshotPath, lastApplied)
+                    .thenCompose(snapshot ->
+                            actor.sendThen("Journal", "compact", snapshot.getJournalSnapshot(), lastIncludedIndex, lastIncludedTerm)
+                            .thenApply(ignored -> snapshot)
+                    ).thenCompose(snapshot -> actor.sendThen("State", "recoverFromSnapshot", snapshot))
+                    .thenRun(() -> logger.info("Install snapshot successfully!"))
+                    .thenRun(() -> actor.reply(msg, new InstallSnapshotResponse(term)))
+                    .exceptionally(t -> {
+                        logger.warn("Install snapshot exception: ", t);
+                        actor.reply(msg, new InstallSnapshotResponse(t));
+                        return null;
+                    });
+
+        } else {
+            actor.reply(msg, new InstallSnapshotResponse(term));
+        }
+
+    }
+
+
 
 
 }

@@ -27,10 +27,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Properties;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
@@ -65,7 +62,7 @@ public class RaftServerActor implements  RaftServer {
         this.serverRpc = serverRpcActor;
         RpcActor rpcActor = new RpcActor(properties);
         EventBusActor eventBusActor = new EventBusActor();
-        FollowerActor followerActor = new FollowerActor(stateActor.getState(), journalActor.getRaftJournal());
+        FollowerActor followerActor = new FollowerActor(stateActor.getState(), journalActor.getRaftJournal(), config);
 
         PostOffice postOffice = PostOffice.builder()
                 .addActor(actor)
@@ -215,6 +212,11 @@ public class RaftServerActor implements  RaftServer {
     }
 
 
+    @ActorListener
+    private List<URI> getObservers() {
+        // TODO
+        return Collections.emptyList();
+    }
 
     @ActorListener
     private GetServersResponse getServers() {

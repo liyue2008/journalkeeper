@@ -1,11 +1,15 @@
 package io.journalkeeper.utils.actor;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.Queue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
 class ActorOutbox {
+    private static final Logger logger = LoggerFactory.getLogger( ActorOutbox.class );
 
     private final AtomicLong msgId = new AtomicLong(0);
 
@@ -34,10 +38,10 @@ class ActorOutbox {
         return send(addr, topic, ActorMsg.Response.DEFAULT, payloads);
     }
     ActorMsg send(String addr, String topic, ActorMsg.Response response, Object... payloads){
-        if (stopped) {
-            throw new IllegalStateException("ActorOutbox is stopped");
-        }
         ActorMsg actorMsg = new ActorMsg(msgId.getAndIncrement(), myAddr, addr, topic,response, payloads);
+        if (stopped) {
+            logger.info("Actor stopped, ignore message: {}.", actorMsg);
+        }
         msgQueue.add(actorMsg);
         ring();
         return actorMsg;

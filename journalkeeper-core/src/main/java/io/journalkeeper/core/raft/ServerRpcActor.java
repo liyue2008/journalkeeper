@@ -51,7 +51,7 @@ public class ServerRpcActor implements ServerRpc {
 
     @Override
     public CompletableFuture<QueryStateResponse> queryClusterState(QueryStateRequest request) {
-        return forwardRequest(request, "State", "queryClusterState");
+        return forwardRequest(request, "Leader", "queryClusterState");
     }
 
     @Override
@@ -198,7 +198,7 @@ public class ServerRpcActor implements ServerRpc {
 
     @Override
     public CompletableFuture<AsyncAppendEntriesResponse> asyncAppendEntries(AsyncAppendEntriesRequest request) {
-        return forwardRequest(request, "State");
+        return forwardRequest(request, "Follower");
 
     }
 

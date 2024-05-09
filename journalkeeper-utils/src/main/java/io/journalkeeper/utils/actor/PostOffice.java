@@ -16,12 +16,13 @@ public class PostOffice{
     public final static String PUB_ADDR = "PUB";
     private final Actor pubSubActor;
     private final Map<String, Set<ActorInbox>> pubSubMap = new ConcurrentHashMap<>();
-    private final ScheduleActor scheduleActor = new ScheduleActor();
+    private final ScheduleActor scheduleActor;
     private final List<Actor> actorList;
     private final String name;
 
     private PostOffice(int threadCount, List<Actor> actorList, String name) {
         this.name = null == name ? "" : name;
+        this.scheduleActor = new ScheduleActor(this.name);
         this.actorList = Collections.unmodifiableList(actorList);
         pubSubActor = Actor.builder(PUB_ADDR).setDefaultHandlerFunction(this::pubMsg).build();
         List<Actor> allActors = new ArrayList<>(actorList.size() + 2);
@@ -95,7 +96,6 @@ public class PostOffice{
         }
     }
 
-    // TODO: 还是不够优雅，会报错
     public void stop() {
         try {
             // 停止接收新的定时任务

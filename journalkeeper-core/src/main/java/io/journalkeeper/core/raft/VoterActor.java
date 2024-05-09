@@ -130,6 +130,10 @@ public class VoterActor implements RaftVoter{
         this.leaderUri = leaderUri;
         actor.pub("onLeaderChange", leaderUri);
     }
+    @ActorListener
+    private URI getLeaderUri() {
+        return leaderUri;
+    }
 
     private boolean checkTerm(int term) {
         boolean isTermChanged;
