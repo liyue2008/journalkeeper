@@ -36,6 +36,11 @@ public class VoterActor implements RaftVoter{
     private URI votedFor = null;
     private int term = 0;
     private URI leaderUri = null;
+    /**
+     * Leader 日志当前的最大位置
+     */
+    private long leaderMaxIndex = -1L;
+
     VoterActor(RaftJournal journal, RaftState state, Config config) {
         this.journal = journal;
         this.state = state;
@@ -53,6 +58,8 @@ public class VoterActor implements RaftVoter{
             }
         }
     }
+
+
     /**
      * 接收者收到requestVote方法后的实现流程如下：
      * <p>
@@ -68,6 +75,13 @@ public class VoterActor implements RaftVoter{
                 voterInfo());
         String rejectMsg;
         int currentTerm = this.term;
+
+        // 如果不是预投票，检查并更新term
+        if (!request.isPreVote()) {
+            if (checkTerm(request.getTerm())) {
+                currentTerm = this.term;
+            }
+        }
         // 来自推荐Leader的投票请求例外
         if (!request.isFromPreferredLeader()) {
             // 如果当前是LEADER那直接拒绝投票
@@ -89,16 +103,12 @@ public class VoterActor implements RaftVoter{
             return rejectAndResponse(currentTerm, request.getCandidate(), rejectMsg);
         }
 
-        // 如果不是预投票，检查term
-        if (!request.isPreVote()) {
-            checkTerm(request.getTerm());
-            currentTerm = this.term;
-        }
         // 如果已经投票给其它候选人，拒绝投票
         if (votedFor != null && currentTerm == request.getTerm() && !votedFor.equals(request.getCandidate())) {
             rejectMsg = "Already vote to " + votedFor.toString();
             return rejectAndResponse(currentTerm, request.getCandidate(), rejectMsg);
         }
+
         // 如果term相同，候选人的日志比我的短，拒绝投票
         final long finalMaxJournalIndex = journal.maxIndex();
         final int lastLogTerm = journal.getTerm(finalMaxJournalIndex - 1);
@@ -119,11 +129,79 @@ public class VoterActor implements RaftVoter{
     }
 
     @ActorListener
-    private void onAppendEntries(int term, URI leaderUri) {
+    @ResponseManually
+    public void asyncAppendEntries(@ActorMessage ActorMsg msg) {
+        AsyncAppendEntriesRequest request = msg.getPayload();
+
+        if (request.getTerm() > term) {
+            logger.info("Set current term from {} to {}, {}.", this.term, term, voterInfo());
+            this.term = request.getTerm();
+            this.votedFor = null;
+            setLeaderUri(request.getLeader());
+            convertToFollower();
+        }
+
+        if (request.getTerm() < term) {
+            actor.reply(msg, new AsyncAppendEntriesResponse(false, request.getPrevLogIndex() + 1,
+                    term, request.getEntries().size()));
+            return;
+        }
+
+        if (voterState.getState() != VoterState.FOLLOWER && request.getLeader().equals(this.votedFor) && this.term == request.getTerm()) {
+            this.votedFor = null;
+            setLeaderUri(request.getLeader());
+            convertToFollower();
+        }
+
+        lastHeartbeat = System.currentTimeMillis();
+
+        boolean notHeartBeat = null != request.getEntries() && !request.getEntries().isEmpty();
+        // Reply false if log does not contain an entry at prevLogIndex
+        // whose term matches prevLogTerm
+        final long startIndex = request.getPrevLogIndex() + 1;
+        final List<byte[]> entries = request.getEntries();
+        if (notHeartBeat &&
+                (request.getPrevLogIndex() < journal.minIndex() - 1 ||
+                        request.getPrevLogIndex() >= journal.maxIndex() ||
+                        journal.getTerm(request.getPrevLogIndex()) != request.getPrevLogTerm())
+        ) {
+            actor.reply(msg, new AsyncAppendEntriesResponse(false, startIndex,
+                    request.getTerm(), request.getEntries().size()));
+            return;
+        }
+        // 如果要删除部分未提交的日志，并且待删除的这部分存在配置变更日志，则需要回滚配置
+        actor.sendThen("State", "maybeRollbackConfig", startIndex)
+                .thenCompose(ignored -> actor.sendThen("Journal","compareOrAppendRaw", entries, request.getPrevLogIndex() + 1))
+                .thenCompose(ignored -> actor.sendThen("State", "maybeUpdateNonLeaderConfig", entries))
+                .thenCompose(ignored -> actor.sendThen("Journal", "commit", request.getLeaderCommit()))
+                .thenRun(() -> {
+                    if (leaderMaxIndex < request.getMaxIndex()) {
+                        leaderMaxIndex = request.getMaxIndex();
+                    }
+                    actor.reply(msg, new AsyncAppendEntriesResponse(true, request.getPrevLogIndex() + 1,
+                            request.getTerm(), request.getEntries().size()));
+                })
+                .exceptionally(t -> {
+                    actor.reply(msg, new AsyncAppendEntriesResponse(t));
+                    return null;
+                });
+
+    }
+    @ActorListener
+    private int onAppendEntries(int term, URI leaderUri) {
         if (checkTerm(term)) {
             setLeaderUri(leaderUri);
+        } else {
+            if (leaderUri.equals(this.votedFor) && this.term == term) {
+                convertToFollower();
+                this.votedFor = null;
+                setLeaderUri(leaderUri);
+            }
         }
-        lastHeartbeat = System.currentTimeMillis();
+        if (this.term == term) {
+            lastHeartbeat = System.currentTimeMillis();
+        }
+        return this.term;
     }
 
     private void setLeaderUri(URI leaderUri) {
@@ -135,6 +213,7 @@ public class VoterActor implements RaftVoter{
         return leaderUri;
     }
 
+    @ActorListener
     private boolean checkTerm(int term) {
         boolean isTermChanged;
             if (term > this.term) {
@@ -155,7 +234,7 @@ public class VoterActor implements RaftVoter{
     }
 
     private RequestVoteResponse rejectAndResponse(int term, URI candidate, String rejectMessage) {
-        logger.debug("Reject vote request from candidate {}, cause: [{}], {}.", candidate, rejectMessage, voterInfo());
+        logger.info("Reject vote request from candidate {}, cause: [{}], {}.", candidate, rejectMessage, voterInfo());
         return new RequestVoteResponse(term, false);
     }
 
@@ -177,17 +256,14 @@ public class VoterActor implements RaftVoter{
                 leaderUri = null;
                 actor.sendThen("Leader", "setActive", false, term)
                         .thenRun(voterState::convertToFollower)
-                        .thenCompose(ignored -> actor.sendThen("Follower", "setActive", true))
                         .thenRun(() -> {
                             this.electionTimeoutMs = config.<Long>get("election_timeout_ms") + randomInterval(config.get("election_timeout_ms"));
                             logger.info("Convert voter state from {} to FOLLOWER, electionTimeout: {}.", oldState, electionTimeoutMs);
                         });
             } else {
                 voterState.convertToFollower();
-                actor.sendThen("Follower", "setActive", true, term).thenRun(() -> {
-                    this.electionTimeoutMs = config.<Long>get("election_timeout_ms") + randomInterval(config.get("election_timeout_ms"));
-                    logger.info("Convert voter state from {} to FOLLOWER, electionTimeout: {}.", oldState, electionTimeoutMs);
-                });
+                this.electionTimeoutMs = config.<Long>get("election_timeout_ms") + randomInterval(config.get("election_timeout_ms"));
+                logger.info("Convert voter state from {} to FOLLOWER, electionTimeout: {}.", oldState, electionTimeoutMs);
             }
     }
 
@@ -205,14 +281,11 @@ public class VoterActor implements RaftVoter{
             VoterState oldState = voterState.getState();
             this.leaderUri = null;
             if (oldState == VoterState.FOLLOWER) {
-                actor.sendThen("Follower", "setActive", false, term)
-                        .thenRun(() ->  {
-                            voterState.convertToPreVoting();
-                            logger.info("Convert voter state from {} to PRE_VOTING, electionTimeout: {}, {}.", oldState, electionTimeoutMs, voterInfo());
-                            if(isSingleNodeCluster()){
-                                convertToCandidate();
-                            }
-                        });
+                voterState.convertToPreVoting();
+                logger.info("Convert voter state from {} to PRE_VOTING, electionTimeout: {}, {}.", oldState, electionTimeoutMs, voterInfo());
+                if(isSingleNodeCluster()){
+                    convertToCandidate();
+                }
             } else {
                 voterState.convertToPreVoting();
                 logger.info("Convert voter state from {} to PRE_VOTING, electionTimeout: {}, {}.", oldState, electionTimeoutMs, voterInfo());
@@ -234,24 +307,6 @@ public class VoterActor implements RaftVoter{
 
     private long randomInterval(long interval) {
         return interval + Math.round(ThreadLocalRandom.current().nextDouble(-1 * RAND_INTERVAL_RANGE, RAND_INTERVAL_RANGE) * interval);
-    }
-
-
-    @ActorListener
-    @ResponseManually
-    public void asyncAppendEntries(@ActorMessage ActorMsg msg) {
-        AsyncAppendEntriesRequest request = msg.getPayload();
-
-        if (state.getRole() != RaftServer.Roll.VOTER || request.getTerm() < term) {
-            actor.reply(msg, new AsyncAppendEntriesResponse(false, request.getPrevLogIndex() + 1,
-                    term, request.getEntries().size()));
-            return;
-        }
-        if (checkTerm(request.getTerm()) && !Objects.equals(leaderUri, request.getLeader())) {
-            this.leaderUri = request.getLeader();
-        }
-
-        actor.send("Follower", "asyncAppendEntries", msg);
     }
 
     private static class VoterStateMachine {
@@ -365,6 +420,9 @@ public class VoterActor implements RaftVoter{
         nextElectionTime = Long.MAX_VALUE;
         votedFor = state.getLocalUri();
         boolean isPreVote = voterState.getState() == VoterState.PRE_VOTING;
+        long lastLogIndex = journal.maxIndex() - 1;
+        int lastLogTerm = journal.getTerm(lastLogIndex);
+        int requestTerm = this.term + 1;
         if (!isPreVote) {
             this.term ++;
             logger.info("Start election, {}", voterInfo());
@@ -372,10 +430,9 @@ public class VoterActor implements RaftVoter{
             logger.info("Start pre vote, {}", voterInfo());
         }
 
-        long lastLogIndex = journal.maxIndex() - 1;
-        int lastLogTerm = journal.getTerm(lastLogIndex);
 
-        RequestVoteRequest request = new RequestVoteRequest(term, state.getLocalUri(), lastLogIndex, lastLogTerm, fromPreferredLeader, isPreVote);
+
+        RequestVoteRequest request = new RequestVoteRequest(requestTerm, state.getLocalUri(), lastLogIndex, lastLogTerm, fromPreferredLeader, isPreVote);
         List<URI> destinations = state.getConfigState().voters().stream()
                 .filter(uri -> !uri.equals(this.state.getLocalUri())).collect(Collectors.toList());
 
@@ -395,7 +452,7 @@ public class VoterActor implements RaftVoter{
                                         response.isVoteGranted(),
                                         destination,
                                         voterInfo());
-                                if (response.isVoteGranted()) {
+                                if (!checkTerm(response.getTerm())  && response.isVoteGranted()) {
                                     updateVotes(isWinTheElection, votesGrantedInNewConfig, votesGrantedInOldConfig, destination);
                                 }
                             }

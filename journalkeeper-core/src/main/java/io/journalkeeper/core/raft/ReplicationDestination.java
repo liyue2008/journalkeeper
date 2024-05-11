@@ -7,6 +7,7 @@ import io.journalkeeper.core.state.Snapshot;
 import io.journalkeeper.exceptions.IndexUnderflowException;
 import io.journalkeeper.rpc.server.*;
 import io.journalkeeper.utils.actor.Actor;
+import io.journalkeeper.utils.actor.ActorMsg;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -24,7 +25,7 @@ class ReplicationDestination {
 
     private final RaftJournal journal;
     private final RaftState state;
-    private final int replicationBatchSize = -1;
+    private final int replicationBatchSize;
     private final Actor actor;
     private boolean installSnapshotInProgress = false;
 
@@ -56,7 +57,7 @@ class ReplicationDestination {
         this.term = term;
     }
 
-    ReplicationDestination(URI uri, long nextIndex, Actor actor, RaftState state, RaftJournal journal, long heartbeatIntervalMs) {
+    ReplicationDestination(URI uri, long nextIndex, Actor actor, RaftState state, RaftJournal journal, long heartbeatIntervalMs, int replicationBatchSize) {
         this.uri = uri;
         this.nextIndex = nextIndex;
         this.actor = actor;
@@ -64,6 +65,7 @@ class ReplicationDestination {
         this.journal = journal;
         this.heartbeatIntervalMs = heartbeatIntervalMs;
         this.lastHeartbeatResponseTime = 0L;
+        this.replicationBatchSize = replicationBatchSize;
     }
 
 
@@ -77,14 +79,20 @@ class ReplicationDestination {
             return;
         }
 
+        if (installSnapshotInProgress) {
+            return;
+        }
+
 
         // 如果有必要，先安装第一个快照
         Map.Entry<Long, Snapshot> fistSnapShotEntry = state.getSnapshots().firstEntry();
-        maybeInstallSnapshotFirst(fistSnapShotEntry);
+        if (installSnapshot(fistSnapShotEntry)) {
+            return;
+        }
 
         // 读取需要复制的Entry
         List<byte[]> entries;
-        if (!installSnapshotInProgress && nextIndex < maxIndex) { // 复制
+        if (nextIndex < maxIndex) { // 复制
             entries = journal.readRaw(nextIndex, this.replicationBatchSize);
         } else { // 心跳
             entries = Collections.emptyList();
@@ -102,12 +110,17 @@ class ReplicationDestination {
                 .exceptionally(e -> {
                     logger.warn("Replication execution exception, from {} to {}, cause: {}.", state.getLocalUri(), uri, null == e.getCause() ? e.getMessage() : e.getCause().getMessage());
                     return null;
-                }).whenComplete((c, r) -> waitingForResponse = false);
+                })
+                .whenComplete((c, r) -> {
+                    waitingForResponse = false;
+                });
         lastHeartbeatRequestTime = System.currentTimeMillis();
     }
 
 
     private void handleAppendEntriesResponse(AsyncAppendEntriesResponse response, int entrySize, long startIndex) {
+        actor.send("Voter", "checkTerm", ActorMsg.Response.IGNORE, response.getTerm());
+
         if(!response.success()) {
             return;
         }
@@ -127,16 +140,11 @@ class ReplicationDestination {
         }
     }
 
-    private void maybeInstallSnapshotFirst(Map.Entry<Long, Snapshot> fistSnapShotEntry) {
-        if (nextIndex <= fistSnapShotEntry.getKey()) {
-            installSnapshot(fistSnapShotEntry.getValue());
-            nextIndex = fistSnapShotEntry.getKey();
-        }
-    }
-
-    private void installSnapshot(Snapshot snapshot) {
-        if (installSnapshotInProgress) {
-            return;
+    private boolean installSnapshot(Map.Entry<Long, Snapshot> snapShotEntry) {
+        long snapshotIndex = snapShotEntry.getKey();
+        Snapshot snapshot = snapShotEntry.getValue();
+        if (nextIndex >= snapshotIndex) {
+            return false;
         }
         installSnapshotInProgress = true;
 
@@ -153,28 +161,33 @@ class ReplicationDestination {
                 );
                 boolean lastRequest = !iterator.hasMoreTrunks();
                 actor.<InstallSnapshotResponse>sendThen("Rpc", "installSnapshot", new RpcMsg<>(this.uri, request))
-                        .whenComplete((response, exception) -> handleInstallSnapshotResponse(response, exception, lastRequest));
+                        .whenComplete((response, exception) -> handleInstallSnapshotResponse(response, exception, lastRequest, snapshotIndex));
                 offset += trunk.length;
             }
         } catch (IOException t) {
             logger.warn("Install snapshot to {} failed!", this.getUri(), t);
             installSnapshotInProgress = false;
         }
+        return true;
     }
 
-    private void handleInstallSnapshotResponse(InstallSnapshotResponse response, Throwable exception, boolean last) {
+    private void handleInstallSnapshotResponse(InstallSnapshotResponse response, Throwable exception, boolean last, long snapshotIndex) {
         if (null != exception) {
             logger.warn("Install snapshot execution exception, from {} to {}, cause: {}.", state.getLocalUri(), uri, null == exception.getCause()? exception.getMessage() : exception.getCause().getMessage());
-            if (last) {
-                installSnapshotInProgress = false;
-            }
+            installSnapshotInProgress = false;
         } else {
             if (!response.success()) {
                 logger.warn("Install snapshot to {} failed! Cause: {}.", this.getUri(), response.errorString());
+                installSnapshotInProgress = false;
+            } else {
                 if (last) {
-                    installSnapshotInProgress = false;
+                    nextIndex = snapshotIndex;
+                    logger.info("Install snapshot to {} success.", this.getUri());
                 }
             }
+        }
+        if (last) {
+            installSnapshotInProgress = false;
         }
     }
 

@@ -529,6 +529,13 @@ class Voter extends AbstractServer implements CheckTermInterceptor {
                         voterInfo());
                 String rejectMsg;
                 int currentTerm = this.currentTerm.get();
+
+                if (!request.isPreVote()) {
+                    if (checkTerm(request.getTerm())) {
+                        currentTerm = this.currentTerm.get();
+                    }
+                }
+
                 // 来自推荐Leader的投票请求例外
                 if (!request.isFromPreferredLeader()) {
                     // 如果当前是LEADER那直接拒绝投票
@@ -549,10 +556,7 @@ class Voter extends AbstractServer implements CheckTermInterceptor {
                             request.getTerm(), currentTerm);
                     return rejectAndResponse(currentTerm, request.getCandidate(), rejectMsg);
                 }
-                if (!request.isPreVote()) {
-                    checkTerm(request.getTerm());
-                    currentTerm = this.currentTerm.get();
-                }
+
                 // 如果已经投票给其它候选人，拒绝投票
                 if (votedFor != null && currentTerm == request.getTerm() && !votedFor.equals(request.getCandidate())) {
                     rejectMsg = "Already vote to " + votedFor.toString();

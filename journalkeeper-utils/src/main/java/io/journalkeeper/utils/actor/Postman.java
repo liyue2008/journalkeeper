@@ -1,10 +1,14 @@
 package io.journalkeeper.utils.actor;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
 public class Postman implements Runnable {
+    private static final Logger logger = LoggerFactory.getLogger( Postman.class );
     private final PostOffice postOffice;
 
     private final Object ring = new Object();
@@ -47,13 +51,14 @@ public class Postman implements Runnable {
             if (!hasMessage) {
                 synchronized (ring) {
                     try {
-                        ring.wait(100);
+                        ring.wait(10);
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
                     }
                 }
             }
         }
+        logger.info("{} stopped.", Thread.currentThread().getName());
     }
 
 

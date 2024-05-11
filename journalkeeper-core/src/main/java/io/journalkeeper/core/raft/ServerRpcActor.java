@@ -196,7 +196,7 @@ public class ServerRpcActor implements ServerRpc {
 
     @Override
     public CompletableFuture<AsyncAppendEntriesResponse> asyncAppendEntries(AsyncAppendEntriesRequest request) {
-        return forwardRequest(request, "Follower");
+        return forwardRequest(request, "Voter");
 
     }
 
@@ -226,7 +226,7 @@ public class ServerRpcActor implements ServerRpc {
 
     @Override
     public CompletableFuture<InstallSnapshotResponse> installSnapshot(InstallSnapshotRequest request) {
-        return forwardRequest(request);
+        return forwardRequest(request, "State");
     }
 
     @ActorSubscriber(topic = "onStart")

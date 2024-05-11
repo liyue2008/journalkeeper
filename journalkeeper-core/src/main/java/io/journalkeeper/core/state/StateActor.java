@@ -13,6 +13,9 @@ import io.journalkeeper.persistence.ServerMetadata;
 import io.journalkeeper.rpc.client.*;
 import io.journalkeeper.rpc.server.GetServerStateRequest;
 import io.journalkeeper.rpc.server.GetServerStateResponse;
+import io.journalkeeper.rpc.server.InstallSnapshotRequest;
+import io.journalkeeper.rpc.server.InstallSnapshotResponse;
+import io.journalkeeper.utils.ThreadSafeFormat;
 import io.journalkeeper.utils.actor.*;
 import io.journalkeeper.utils.actor.annotation.*;
 import io.journalkeeper.utils.config.Config;
@@ -150,6 +153,86 @@ public class StateActor implements RaftState{
 //        }
 //    }
 
+
+    //Receiver implementation:
+    //1. Reply immediately if term < currentTerm
+    //2. Create new snapshot file if first chunk (offset is 0)
+    //3. Write data into snapshot file at given offset
+    //4. Reply and wait for more data chunks if done is false
+    //5. Save snapshot file, discard any existing or partial snapshot
+    //with a smaller index
+    //6. If existing log entry has same index and term as snapshot’s
+    //last included entry, retain log entries following it and reply
+    //7. Discard the entire log
+    //8. Reset state machine using snapshot contents (and load
+    //snapshot’s cluster configuration)
+    @ResponseManually
+    @ActorListener
+    private void installSnapshot(@ActorMessage ActorMsg msg) {
+        InstallSnapshotRequest request = msg.getPayload();
+        long offset = request.getOffset();
+        long lastIncludedIndex = request.getLastIncludedIndex();
+        int lastIncludedTerm = request.getLastIncludedTerm();
+        byte[] data = request.getData();
+        boolean isDone = request.isDone();
+        actor.<Integer>sendThen("Voter", "onAppendEntries", request.getTerm(), request.getLeaderId())
+                .thenAccept(term -> {
+                    if (term > request.getTerm()) {
+                        actor.reply(msg, new InstallSnapshotResponse(term));
+                        return ;
+                    }
+                    logger.info("Install snapshot, offset: {}, lastIncludedIndex: {}, lastIncludedTerm: {}, data length: {}, isDone: {}... " +
+                                    "journal minIndex: {}, maxIndex: {}, commitIndex: {}...",
+                            ThreadSafeFormat.formatWithComma(offset),
+                            ThreadSafeFormat.formatWithComma(lastIncludedIndex),
+                            lastIncludedTerm,
+                            data.length,
+                            isDone,
+                            ThreadSafeFormat.formatWithComma(journal.minIndex()),
+                            ThreadSafeFormat.formatWithComma(journal.maxIndex()),
+                            ThreadSafeFormat.formatWithComma(journal.commitIndex())
+                    );
+                    long lastApplied = lastIncludedIndex + 1;
+                    Path snapshotPath = snapshotsPath().resolve(String.valueOf(lastApplied));
+                    try {
+                        partialSnapshot.installTrunk(offset, data, snapshotPath);
+
+                        if (isDone) {
+                            Snapshot snapshot;
+                            logger.info("All snapshot files received, discard any existing snapshot with a same or smaller index...");
+                            // discard any existing snapshot with a same or smaller index
+                            NavigableMap<Long, Snapshot> headMap = snapshots.headMap(lastApplied, true);
+                            while (!headMap.isEmpty()) {
+                                snapshot = headMap.remove(headMap.firstKey());
+                                logger.info("Discard snapshot: {}.", snapshot.getPath());
+                                snapshot.close();
+                                snapshot.clear();
+                            }
+                            partialSnapshot.finish();
+                            logger.info("add the installed snapshot to snapshots: {}...", snapshotPath);
+                            // add the installed snapshot to snapshots.
+                            snapshot = new Snapshot(stateFactory, metadataPersistence);
+                            snapshot.recover(snapshotPath, properties);
+                            snapshots.put(lastApplied, snapshot);
+
+                            logger.info("New installed snapshot: {}.", snapshot.getJournalSnapshot());
+
+                            actor.send("Journal", "compact", snapshot.getJournalSnapshot(), lastIncludedIndex, lastIncludedTerm);
+
+                            state.close();
+                            state.clear();
+                            snapshot.dump(statePath());
+                            state.recover(statePath(), properties);
+                            logger.info("Install snapshot successfully!");
+                        }
+
+                    } catch (IOException e) {
+                        logger.warn("Install snapshot exception: ", e);
+                        actor.reply(msg, new InstallSnapshotResponse(e));
+                    }
+                    actor.reply(msg, new InstallSnapshotResponse(term));
+                });
+    }
 
     private void createFistSnapshot(List<URI> voters, Set<Integer> partitions, URI preferredLeader) throws IOException {
         Snapshot snapshot = new Snapshot(stateFactory, metadataPersistence);
@@ -370,36 +453,6 @@ public class StateActor implements RaftState{
     @ActorListener
     private List<URI> getVoters() {
         return state.voters();
-    }
-    @ActorListener
-    private Snapshot installSnapshot(Path snapshotPath, long lastApplied) throws IOException {
-        Snapshot snapshot;
-        logger.info("All snapshot files received, discard any existing snapshot with a same or smaller index...");
-        // discard any existing snapshot with a same or smaller index
-        NavigableMap<Long, Snapshot> headMap = snapshots.headMap(lastApplied, true);
-        while (!headMap.isEmpty()) {
-            snapshot = headMap.remove(headMap.firstKey());
-            logger.info("Discard snapshot: {}.", snapshot.getPath());
-            snapshot.close();
-            snapshot.clear();
-        }
-        logger.info("add the installed snapshot to snapshots: {}...", snapshotPath);
-        partialSnapshot.finish();
-        // add the installed snapshot to snapshots.
-        snapshot = new Snapshot(stateFactory, metadataPersistence);
-        snapshot.recover(snapshotPath, properties);
-        snapshots.put(lastApplied, snapshot);
-
-        logger.info("New installed snapshot: {}.", snapshot.getJournalSnapshot());
-        return snapshot;
-    }
-
-    @ActorListener
-    private void recoverFromSnapshot(Snapshot snapshot) throws IOException {
-        state.close();
-        state.clear();
-        snapshot.dump(statePath());
-        state.recover(statePath(), properties);
     }
 
     @ActorListener

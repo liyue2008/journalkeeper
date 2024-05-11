@@ -62,7 +62,6 @@ public class RaftServerActor implements  RaftServer {
         this.serverRpc = serverRpcActor;
         RpcActor rpcActor = new RpcActor(properties);
         EventBusActor eventBusActor = new EventBusActor();
-        FollowerActor followerActor = new FollowerActor(stateActor.getState(), journalActor.getRaftJournal(), config);
 
         PostOffice postOffice = PostOffice.builder()
                 .addActor(actor)
@@ -74,7 +73,6 @@ public class RaftServerActor implements  RaftServer {
                 .addActor(serverRpcActor.getActor())
                 .addActor(rpcActor.getActor())
                 .addActor(eventBusActor.getActor())
-                .addActor(followerActor.getActor())
                 .build();
         return new ServerContext(properties, config, stateActor.getState(), journalActor.getRaftJournal(), voterActor.getRaftVoter(),eventBusActor.getEventBus(), postOffice);
 
@@ -242,11 +240,6 @@ public class RaftServerActor implements  RaftServer {
         return null;
     }
 
-    @ActorListener
-    private InstallSnapshotResponse installSnapshot(InstallSnapshotRequest request) {
-        // TODO
-        return null;
-    }
 
     public ServerRpc getServerRpc() {
         return serverRpc;

@@ -19,6 +19,7 @@ public class PostOffice{
     private final ScheduleActor scheduleActor;
     private final List<Actor> actorList;
     private final String name;
+    private boolean stopped = false;
 
     private PostOffice(int threadCount, List<Actor> actorList, String name) {
         this.name = null == name ? "" : name;
@@ -97,11 +98,18 @@ public class PostOffice{
     }
 
     public void stop() {
+        if (stopped) {
+            return;
+        }
+        stopped = true;
         try {
             // 停止接收新的定时任务
             // 取消所有定时任务
-            scheduleActor.getActor().sendThen("Scheduler","stop");
-
+            scheduleActor.getActor().send("Scheduler","stop");
+            while (!(scheduleActor.getActor().outboxCleared() && scheduleActor.getActor().inboxCleared())) {
+                //noinspection BusyWait
+                Thread.sleep(10);
+            }
             // 停止并等待pubsubActor
             this.pubSubActor.stop();
             while (!(pubSubActor.outboxCleared() && pubSubActor.inboxCleared())) {

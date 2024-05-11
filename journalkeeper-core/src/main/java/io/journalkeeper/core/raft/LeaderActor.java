@@ -427,7 +427,7 @@ public class LeaderActor {
     private void onStateRecovered() {
         this.replicationDestinations.addAll(state.getConfigState().voters().stream()
                 .filter(uri -> !uri.equals(state.getLocalUri()))
-                .map(uri -> new ReplicationDestination(uri, journal.maxIndex(), actor, state, journal, config.get("heartbeat_interval_ms")))
+                .map(uri -> new ReplicationDestination(uri, journal.maxIndex(), actor, state, journal, config.get("heartbeat_interval_ms"), config.get("replication_batch_size")))
                 .collect(Collectors.toList()));
     }
 
