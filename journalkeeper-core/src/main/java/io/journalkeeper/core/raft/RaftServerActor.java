@@ -56,8 +56,7 @@ public class RaftServerActor implements  RaftServer {
     private ServerContext buildServerContext(Roll roll, StateFactory stateFactory, JournalEntryParser journalEntryParser, Properties properties, Config config) {
         JournalActor journalActor = new JournalActor(journalEntryParser, config, properties);
         StateActor stateActor = new StateActor(roll, stateFactory, journalEntryParser, journalActor.getRaftJournal(),config, properties);
-        VoterActor voterActor = new VoterActor(journalActor.getRaftJournal(),stateActor.getState(), config);
-        LeaderActor leaderActor = new LeaderActor(journalEntryParser, journalActor.getRaftJournal(), stateActor.getState(), config);
+        VoterActor voterActor = new VoterActor(journalEntryParser, null, journalActor.getRaftJournal(),stateActor.getState(), config);
         ServerRpcActor serverRpcActor = new ServerRpcActor();
         this.serverRpc = serverRpcActor;
         RpcActor rpcActor = new RpcActor(properties);
@@ -69,7 +68,6 @@ public class RaftServerActor implements  RaftServer {
                 .addActor(journalActor.getActor())
                 .addActor(stateActor.getActor())
                 .addActor(voterActor.getActor())
-                .addActor(leaderActor.getActor())
                 .addActor(serverRpcActor.getActor())
                 .addActor(rpcActor.getActor())
                 .addActor(eventBusActor.getActor())
