@@ -44,12 +44,12 @@ public class ServerRpcActor implements ServerRpc {
 
     @Override
     public CompletableFuture<UpdateClusterStateResponse> updateClusterState(UpdateClusterStateRequest request) {
-        return forwardRequest(request, "Leader");
+        return forwardRequest(request, "Voter");
     }
 
     @Override
     public CompletableFuture<QueryStateResponse> queryClusterState(QueryStateRequest request) {
-        return forwardRequest(request, "Leader", "queryClusterState");
+        return forwardRequest(request, "Voter", "queryClusterState");
     }
 
     @Override
@@ -156,19 +156,19 @@ public class ServerRpcActor implements ServerRpc {
 
     @Override
     public CompletableFuture<CreateTransactionResponse> createTransaction(CreateTransactionRequest request) {
-        return forwardRequest(request, "Leader");
+        return forwardRequest(request, "Voter");
 
     }
 
     @Override
     public CompletableFuture<CompleteTransactionResponse> completeTransaction(CompleteTransactionRequest request) {
-        return forwardRequest(request, "Leader");
+        return forwardRequest(request, "Voter");
 
     }
 
     @Override
     public CompletableFuture<GetOpeningTransactionsResponse> getOpeningTransactions() {
-        return forwardRequest(null, "Leader");
+        return forwardRequest(null, "Voter");
 
     }
 
@@ -180,7 +180,7 @@ public class ServerRpcActor implements ServerRpc {
 
     @Override
     public CompletableFuture<CheckLeadershipResponse> checkLeadership() {
-        return forwardRequest("Leader", "checkLeadership");
+        return forwardRequest("Voter", "checkLeadership");
 
     }
 
@@ -220,7 +220,7 @@ public class ServerRpcActor implements ServerRpc {
 
     @Override
     public CompletableFuture<DisableLeaderWriteResponse> disableLeaderWrite(DisableLeaderWriteRequest request) {
-        return forwardRequest(request, "Leader");
+        return forwardRequest(request, "Voter");
 
     }
 

@@ -14,10 +14,7 @@
 package io.journalkeeper.core.server;
 
 import io.journalkeeper.core.BootStrap;
-import io.journalkeeper.core.api.AdminClient;
-import io.journalkeeper.core.api.RaftServer;
-import io.journalkeeper.core.api.ServerStatus;
-import io.journalkeeper.core.api.VoterState;
+import io.journalkeeper.core.api.*;
 import io.journalkeeper.core.easy.JkClient;
 import io.journalkeeper.core.monitor.SimpleMonitorCollector;
 import io.journalkeeper.core.state.KvStateFactory;
@@ -252,13 +249,13 @@ public class KvTest {
 
             Assert.assertNull(client.update("SET", "key1 hello!").get());
             Assert.assertNull(client.update("SET", "key2 world!").get());
-            Assert.assertEquals("hello!", client.query("GET", "key1").get());
+            Assert.assertEquals("hello!", client.query("GET", "key1", QueryConsistency.STRICT).get());
             Assert.assertEquals(new HashSet<>(Arrays.asList("key1", "key2")),
-                    new HashSet<>(Arrays.stream(client.<String>query("KEYS").get().split(",")).map(String::trim).collect(Collectors.toList())));
+                    new HashSet<>(Arrays.stream(client.<String>query("KEYS", QueryConsistency.STRICT).get().split(",")).map(String::trim).collect(Collectors.toList())));
 
             Assert.assertNull(client.update("DEL", "key2").get());
-            Assert.assertNull(client.query("GET", "key2").get());
-            Assert.assertEquals("key1", client.query("KEYS").get());
+            Assert.assertNull(client.query("GET", "key2", QueryConsistency.STRICT).get());
+            Assert.assertEquals("key1", client.query("KEYS", QueryConsistency.STRICT).get());
         } finally {
             stopServers(kvServers);
             TestPathUtils.destroyBaseDir(path.toFile());

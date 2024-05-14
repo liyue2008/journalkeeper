@@ -21,14 +21,12 @@ public class ServerContext {
 
     private final RaftJournal journal;
 
-    private final RaftVoter voter;
 
-    public ServerContext(Properties properties, Config config, RaftState state, RaftJournal journal, RaftVoter voter, EventBus eventBus, PostOffice postOffice) {
+    public ServerContext(Properties properties, Config config, RaftState state, RaftJournal journal, EventBus eventBus, PostOffice postOffice) {
         this.properties = properties;
         this.config = config;
         this.state = state;
         this.journal = journal;
-        this.voter = voter;
 
         this.eventBus = eventBus;
         this.postOffice = postOffice;
@@ -54,10 +52,6 @@ public class ServerContext {
 
     public RaftJournal getJournal() {
         return journal;
-    }
-
-    public RaftVoter getVoter() {
-        return voter;
     }
 
     public EventBus getEventBus() {

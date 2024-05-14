@@ -1,5 +1,6 @@
 package io.journalkeeper.core.raft;
 
+import io.journalkeeper.base.ReplicableIterator;
 import io.journalkeeper.core.api.*;
 import io.journalkeeper.core.entry.internal.InternalEntriesSerializeSupport;
 import io.journalkeeper.core.entry.internal.InternalEntryType;
@@ -22,7 +23,9 @@ import io.journalkeeper.utils.event.EventType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.net.URI;
+import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
@@ -35,7 +38,7 @@ import static io.journalkeeper.core.api.RaftJournal.INTERNAL_PARTITION;
 import static io.journalkeeper.core.entry.internal.InternalEntryType.TYPE_UPDATE_VOTERS_S1;
 import static io.journalkeeper.core.entry.internal.InternalEntryType.TYPE_UPDATE_VOTERS_S2;
 
-public class VoterActor implements RaftVoter{
+public class VoterActor {
     public final static float RAND_INTERVAL_RANGE = 0.5F;
     private static final Logger logger = LoggerFactory.getLogger( VoterActor.class);
     private final Actor actor = Actor.builder("Voter").setHandlerInstance(this).build();
@@ -44,27 +47,27 @@ public class VoterActor implements RaftVoter{
     private final RaftState state;
     private final Config config;
     
-    // Election 
-    private long lastHeartbeat;
-    private long electionTimeoutMs;
-    private long nextElectionTime;
-    private URI votedFor = null;
+    // Election Only
+    private long lastHeartbeat;  // 上一次从Leader收到的心跳时间
+    private long electionTimeoutMs; // 选举超时时长
+    private long nextElectionTime; // 下一次发起选举的时间
+    private URI votedFor = null; // 投票给谁
     private int term = 0;
-    private URI leaderUri = null;
+    private URI leaderUri = null; // 当前Leader
     
-    // Follower
+    // Follower Only
     private long leaderMaxIndex = -1L;  // Leader 日志当前的最大位置
     
-    // Leader
+    // Leader Only
     private final JournalEntryParser journalEntryParser;
     private final JournalTransactionManager journalTransactionManager;
     private boolean isWritable = true; // Leader 是否可写
-    private long disableWriteTimeout = 0L;
+    private long disableWriteTimeout = 0L; // 禁用写操作的超时时间
     private boolean isAnnounced = false; // 发布Leader announcement 被多数确认，正式行使leader职权。
     private final ApplyInternalEntryInterceptor leaderAnnouncementInterceptor;
 
-    private final List<WaitingResponse> waitingResponses = new LinkedList<>();
-    private final List<ReplicationDestination> replicationDestinations = new ArrayList<>();
+    private final List<WaitingResponse> waitingResponses = new LinkedList<>(); // 处理中的待响应的update请求
+    private final List<ReplicationDestination> replicationDestinations = new ArrayList<>(); // Followers
 
     VoterActor(JournalEntryParser journalEntryParser, JournalTransactionManager journalTransactionManager, RaftJournal journal, RaftState state, Config config) {
         this.journalEntryParser = journalEntryParser;
@@ -73,6 +76,7 @@ public class VoterActor implements RaftVoter{
         this.state = state;
         this.config = config;
 
+        // TODO: 将 Interceptor 改为Actor Message
         this.leaderAnnouncementInterceptor = (type, internalEntry) -> {
             if (type == InternalEntryType.TYPE_LEADER_ANNOUNCEMENT) {
                 LeaderAnnouncementEntry leaderAnnouncementEntry = InternalEntriesSerializeSupport.parse(internalEntry);
@@ -164,9 +168,12 @@ public class VoterActor implements RaftVoter{
 
 
     private void setLeaderUri(URI leaderUri) {
-        this.leaderUri = leaderUri;
-        actor.pub("onLeaderChange", leaderUri);
+        if (!Objects.equals(this.leaderUri, leaderUri)) {
+            this.leaderUri = leaderUri;
+            actor.pub("onLeaderChange", leaderUri);        }
+
     }
+
     @ActorListener
     private URI getLeaderUri() {
         return leaderUri;
@@ -197,33 +204,12 @@ public class VoterActor implements RaftVoter{
         return new RequestVoteResponse(term, false);
     }
 
-    @Override
-    public VoterState getVoterState() {
-        return voterState.getState();
-    }
-
-    public RaftVoter getRaftVoter() {
-        return this;
-    }
-
-
     @ActorListener
     private void convertToFollower() {
-            VoterState oldState = voterState.getState();
-
-            if (oldState == VoterState.LEADER) {
-                leaderUri = null;
-                actor.sendThen("Leader", "setActive", false, term)
-                        .thenRun(voterState::convertToFollower)
-                        .thenRun(() -> {
-                            this.electionTimeoutMs = config.<Long>get("election_timeout_ms") + randomInterval(config.get("election_timeout_ms"));
-                            logger.info("Convert voter state from {} to FOLLOWER, electionTimeout: {}.", oldState, electionTimeoutMs);
-                        });
-            } else {
-                voterState.convertToFollower();
-                this.electionTimeoutMs = config.<Long>get("election_timeout_ms") + randomInterval(config.get("election_timeout_ms"));
-                logger.info("Convert voter state from {} to FOLLOWER, electionTimeout: {}.", oldState, electionTimeoutMs);
-            }
+        VoterState oldState = voterState.getState();
+        voterState.convertToFollower();
+        this.electionTimeoutMs = config.<Long>get("election_timeout_ms") + randomInterval(config.get("election_timeout_ms"));
+        logger.info("Convert voter state from {} to FOLLOWER, electionTimeout: {}.", oldState, electionTimeoutMs);
     }
 
     private void convertToCandidate() {
@@ -237,21 +223,13 @@ public class VoterActor implements RaftVoter{
 
 
     private void convertToPreVoting() {
-            VoterState oldState = voterState.getState();
-            this.leaderUri = null;
-            if (oldState == VoterState.FOLLOWER) {
-                voterState.convertToPreVoting();
-                logger.info("Convert voter state from {} to PRE_VOTING, electionTimeout: {}, {}.", oldState, electionTimeoutMs, voterInfo());
-                if(isSingleNodeCluster()){
-                    convertToCandidate();
-                }
-            } else {
-                voterState.convertToPreVoting();
-                logger.info("Convert voter state from {} to PRE_VOTING, electionTimeout: {}, {}.", oldState, electionTimeoutMs, voterInfo());
-            }
-
+        VoterState oldState = voterState.getState();
+        voterState.convertToPreVoting();
+        logger.info("Convert voter state from {} to PRE_VOTING, electionTimeout: {}, {}.", oldState, electionTimeoutMs, voterInfo());
+        if(isSingleNodeCluster()){
+            convertToCandidate();
+        }
     }
-
 
     /**
      * 将状态转换为Leader
@@ -260,8 +238,11 @@ public class VoterActor implements RaftVoter{
         VoterState oldState = voterState.getState();
         voterState.convertToLeader();
         leaderUri = state.getLocalUri();
-        actor.send("Leader", "setActive", true, term);
+        this.replicationDestinations.forEach(ReplicationDestination::reset);
+        announceLeader();
+
         logger.info("Convert voter state from {} to LEADER, {}.", oldState, voterInfo());
+
     }
 
     private long randomInterval(long interval) {
@@ -305,6 +286,7 @@ public class VoterActor implements RaftVoter{
 
     }
 
+    // Scheduler function
     private void checkElectionTimeout() {
         try {
             if (voterState.getState() == VoterState.FOLLOWER && System.currentTimeMillis() - lastHeartbeat > electionTimeoutMs) {
@@ -450,19 +432,22 @@ public class VoterActor implements RaftVoter{
     }
 
 
+    // Follower
     @ActorListener
     @ResponseManually
     public void asyncAppendEntries(@ActorMessage ActorMsg msg) {
         AsyncAppendEntriesRequest request = msg.getPayload();
 
+//        If RPC request or response contains term T > currentTerm:
+//        set currentTerm = T, convert to follower
         if (request.getTerm() > term) {
             logger.info("Set current term from {} to {}, {}.", this.term, term, voterInfo());
             this.term = request.getTerm();
             this.votedFor = null;
-            setLeaderUri(request.getLeader());
             convertToFollower();
+            setLeaderUri(request.getLeader());
         }
-
+        // Reply false if term < currentTerm
         if (request.getTerm() < term) {
             actor.reply(msg, new AsyncAppendEntriesResponse(false, request.getPrevLogIndex() + 1,
                     term, request.getEntries().size()));
@@ -471,8 +456,8 @@ public class VoterActor implements RaftVoter{
 
         if (voterState.getState() != VoterState.FOLLOWER && request.getLeader().equals(this.votedFor) && this.term == request.getTerm()) {
             this.votedFor = null;
-            setLeaderUri(request.getLeader());
             convertToFollower();
+            setLeaderUri(request.getLeader());
         }
 
         lastHeartbeat = System.currentTimeMillis();
@@ -491,10 +476,18 @@ public class VoterActor implements RaftVoter{
                     request.getTerm(), request.getEntries().size()));
             return;
         }
+
+
+
         // 如果要删除部分未提交的日志，并且待删除的这部分存在配置变更日志，则需要回滚配置
         actor.sendThen("State", "maybeRollbackConfig", startIndex)
+                // 3. If an existing entry conflicts with a new one (same index
+                // but different terms), delete the existing entry and all that
+                // follow it (§5.3)
+                //4. Append any new entries not already in the log
                 .thenCompose(ignored -> actor.sendThen("Journal","compareOrAppendRaw", entries, request.getPrevLogIndex() + 1))
                 .thenCompose(ignored -> actor.sendThen("State", "maybeUpdateNonLeaderConfig", entries))
+                //5. If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry)
                 .thenCompose(ignored -> actor.sendThen("Journal", "commit", request.getLeaderCommit()))
                 .thenRun(() -> {
                     if (leaderMaxIndex < request.getMaxIndex()) {
@@ -510,6 +503,8 @@ public class VoterActor implements RaftVoter{
 
     }
 
+    // Leader Only
+    
     @ActorListener
     @ResponseManually
     private void updateClusterState(@ActorMessage ActorMsg msg) {
@@ -525,7 +520,7 @@ public class VoterActor implements RaftVoter{
         // 7. Leader.callback
         UpdateClusterStateRequest request = msg.getPayload();
         if (!(voterState.getState() == VoterState.LEADER && isAnnounced)) {
-            actor.reply(msg, new UpdateClusterStateResponse(new NotLeaderException(getClusterLeader())));
+            actor.reply(msg, new UpdateClusterStateResponse(new NotLeaderException(this.leaderUri)));
         }
         if (!checkWriteable()) {
             actor.reply(msg, new UpdateClusterStateResponse(new IllegalStateException("Server disabled temporarily.")));
@@ -557,11 +552,11 @@ public class VoterActor implements RaftVoter{
                 actor.send("Journal", "flush");
                 break;
             case REPLICATION:
-                actor.send("Leader", "replication");
+                this.replication();
                 break;
             case ALL:
                 actor.send("Journal", "flush");
-                actor.send("Leader", "replication");
+                this.replication();
                 break;
             default:
                 // nothing to do.
@@ -766,7 +761,7 @@ public class VoterActor implements RaftVoter{
     @ActorListener
     private DisableLeaderWriteResponse disableLeaderWrite(DisableLeaderWriteRequest request) {
         if (voterState.getState() != VoterState.LEADER) {
-            return new DisableLeaderWriteResponse(new NotLeaderException(getClusterLeader()));
+            return new DisableLeaderWriteResponse(new NotLeaderException(this.leaderUri));
         }
         long timeoutMs = request.getTimeoutMs();
         int term = request.getTerm();
@@ -792,24 +787,25 @@ public class VoterActor implements RaftVoter{
                 .sorted().toArray();
 
         long leaderShipDeadLineMs =
-                (sortedHeartbeatResponseTimes[sortedHeartbeatResponseTimes.length / 2]) + config.<Long>get("heartbeat_interval_ms");
-
-        if (leaderShipDeadLineMs > 0 && System.currentTimeMillis() > leaderShipDeadLineMs) {
+                (sortedHeartbeatResponseTimes[sortedHeartbeatResponseTimes.length / 2]) + config.<Long>get("check_quorum_timeout_ms");
+        long now = System.currentTimeMillis();
+        if (leaderShipDeadLineMs > 0 && now > leaderShipDeadLineMs) {
+//            logger.info("leaderShipDeadLineMs: {}, now: {}, diff: {}.", formatTimestamp(leaderShipDeadLineMs), formatTimestamp(now), now - leaderShipDeadLineMs);
             logger.info("Leader check quorum failed, convert myself to follower, {}.", voterInfo());
-            actor.send("Voter", "convertToFollower");
+            convertToFollower();
         }
     }
 
+//    private String formatTimestamp(long timestamp) {
+//        return new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS").format(new Date(timestamp));
+//    }
+
     private void announceLeader() {
-        if (voterState.getState() != VoterState.LEADER || isAnnounced) {
-            return;
-        }
+        isAnnounced = false;
         byte[] payload = InternalEntriesSerializeSupport.serialize(new LeaderAnnouncementEntry(this.term, state.getLocalUri()));
-        UpdateClusterStateRequest request = new UpdateClusterStateRequest(new UpdateRequest(payload));
         JournalEntry journalEntry = journalEntryParser.createJournalEntry(payload);
         journalEntry.setTerm(this.term);
         journalEntry.setPartition(INTERNAL_PARTITION);
-
         actor.send("Journal", "append", ActorMsg.Response.IGNORE, Collections.singletonList(journalEntry));
     }
 
@@ -818,7 +814,7 @@ public class VoterActor implements RaftVoter{
         if (voterState.getState() == VoterState.LEADER && isAnnounced) {
             return new CheckLeadershipResponse();
         } else {
-            return new CheckLeadershipResponse(new NotLeaderException(getClusterLeader()));
+            return new CheckLeadershipResponse(new NotLeaderException(this.leaderUri));
         }
     }
 
@@ -829,17 +825,7 @@ public class VoterActor implements RaftVoter{
             logger.info("Leader announcement applied! Leader: {}, term: {}.", state.getLocalUri(), term);
         }
     }
-    @ActorListener
-    private void setActive(boolean active, int term) {
-        this.term = term;
 
-        if (!active) {
-            isAnnounced = false;
-        } else {
-            this.replicationDestinations.forEach(r -> r.reset(term));
-            announceLeader();
-        }
-    }
 
 
 
@@ -848,7 +834,7 @@ public class VoterActor implements RaftVoter{
     private void onStateRecovered() {
         this.replicationDestinations.addAll(state.getConfigState().voters().stream()
                 .filter(uri -> !uri.equals(state.getLocalUri()))
-                .map(uri -> new ReplicationDestination(uri, journal.maxIndex(), actor, state, journal, config.get("heartbeat_interval_ms"), config.get("replication_batch_size")))
+                .map(uri -> new ReplicationDestination(uri, journal.maxIndex(), config.get("heartbeat_interval_ms"), config.get("replication_batch_size")))
                 .collect(Collectors.toList()));
     }
 
@@ -861,7 +847,7 @@ public class VoterActor implements RaftVoter{
             actor.sendThen("State", "queryServerState", request)
                     .thenAccept(resp -> actor.reply(msg, resp));
         } else {
-            actor.reply(msg, new QueryStateResponse(new NotLeaderException(getClusterLeader())));
+            actor.reply(msg, new QueryStateResponse(new NotLeaderException(this.leaderUri)));
         }
     }
 
@@ -881,7 +867,7 @@ public class VoterActor implements RaftVoter{
             this.rpcTimeoutMs = rpcTimeoutMs;
             this.actor = actor;
             UpdateClusterStateRequest request = requestMsg.getPayload();
-            this.requestMsg = new ActorMsg(requestMsg.getSequentialId(), requestMsg.getSender(), requestMsg.getReceiver(), requestMsg.getTopic(), null);
+            this.requestMsg = new ActorMsg(requestMsg.getSequentialId(), requestMsg.getSender(), requestMsg.getReceiver(), requestMsg.getTopic());
             this.responseConfig = request.getResponseConfig();
             this.fromPosition = fromPosition;
             this.toPosition = toPosition;
@@ -981,9 +967,224 @@ public class VoterActor implements RaftVoter{
         this.leaderUri = leaderUri;
     }
 
-    private URI getClusterLeader() {
-        return leaderUri;
+    private class ReplicationDestination {
+
+        private final URI uri;
+
+
+        private final int replicationBatchSize;
+        private boolean installSnapshotInProgress = false;
+
+        /**
+         * 需要发给它的下一个日志条目的索引（初始化为领导人上一条日志的索引值 +1）
+         */
+        private long nextIndex;
+        /**
+         * 已经复制到该服务器的日志的最高索引值（从 0 开始递增）
+         */
+        private long matchIndex = 0L;
+
+        /**
+         * 上次从FOLLOWER收到心跳（asyncAppendEntries）成功响应的时间戳
+         */
+        private long lastHeartbeatResponseTime;
+        private long lastHeartbeatRequestTime = 0L;
+        private final long heartbeatIntervalMs;
+        private boolean committed = true;
+        private boolean waitingForResponse = false;
+
+        void reset() {
+            lastHeartbeatResponseTime = System.currentTimeMillis();
+            lastHeartbeatRequestTime = lastHeartbeatResponseTime;
+            committed = true;
+            waitingForResponse = false;
+            installSnapshotInProgress = false;
+        }
+
+        ReplicationDestination(URI uri, long nextIndex, long heartbeatIntervalMs, int replicationBatchSize) {
+            this.uri = uri;
+            this.nextIndex = nextIndex;
+            this.heartbeatIntervalMs = heartbeatIntervalMs;
+            this.lastHeartbeatResponseTime = 0L;
+            this.replicationBatchSize = replicationBatchSize;
+        }
+
+
+        void replication() {
+            long maxIndex;
+
+            if (waitingForResponse || (nextIndex >= (maxIndex = journal.maxIndex()) // NOT 还有需要复制的数据
+                    &&
+                    System.currentTimeMillis() - lastHeartbeatRequestTime < heartbeatIntervalMs // NOT 距离上次复制/心跳已经超过一个心跳超时了
+            )) {
+                return;
+            }
+
+            if (installSnapshotInProgress) {
+                return;
+            }
+
+
+            // 如果有必要，先安装第一个快照
+            Map.Entry<Long, Snapshot> fistSnapShotEntry = state.getSnapshots().firstEntry();
+            if (installSnapshot(fistSnapShotEntry)) {
+                return;
+            }
+
+            // 读取需要复制的Entry
+            List<byte[]> entries;
+            if (nextIndex < maxIndex) { // 复制
+                entries = journal.readRaw(nextIndex, this.replicationBatchSize);
+            } else { // 心跳
+                entries = Collections.emptyList();
+            }
+
+            // 构建请求并发送
+            AsyncAppendEntriesRequest request =
+                    new AsyncAppendEntriesRequest(term, state.getLocalUri(),
+                            nextIndex - 1, this.getPreLogTerm(nextIndex),
+                            entries, state.commitIndex(), maxIndex);
+
+            waitingForResponse = true;
+            actor.<AsyncAppendEntriesResponse>sendThen("Rpc", "asyncAppendEntries", new RpcMsg<>(this.uri, request))
+                    .thenAccept(resp -> handleAppendEntriesResponse(resp, entries.size(), fistSnapShotEntry.getKey()))
+                    .exceptionally(e -> {
+                        logger.warn("Replication execution exception, from {} to {}, cause: {}.", state.getLocalUri(), uri, null == e.getCause() ? e.getMessage() : e.getCause().getMessage());
+                        return null;
+                    })
+                    .whenComplete((c, r) -> {
+                        waitingForResponse = false;
+                    });
+            lastHeartbeatRequestTime = System.currentTimeMillis();
+        }
+
+
+        private void handleAppendEntriesResponse(AsyncAppendEntriesResponse response, int entrySize, long startIndex) {
+            if (checkTerm(response.getTerm())) {
+                return;
+            }
+
+            if(!response.success()) {
+                return;
+            }
+            // 成功收到响应响应
+            lastHeartbeatResponseTime = System.currentTimeMillis();
+            if (response.isSuccess()) { // 复制成功
+                if (entrySize > 0) {
+                    nextIndex += entrySize;
+                    matchIndex = nextIndex;
+                    committed = false;
+                    actor.send("Voter","commit");
+                }
+            } else {
+                // 不匹配，回退
+                int rollbackSize = (int) Math.min(replicationBatchSize, nextIndex - startIndex);
+                nextIndex -= rollbackSize;
+            }
+        }
+
+        private boolean installSnapshot(Map.Entry<Long, Snapshot> snapShotEntry) {
+            long snapshotIndex = snapShotEntry.getKey();
+            Snapshot snapshot = snapShotEntry.getValue();
+            if (nextIndex >= snapshotIndex) {
+                return false;
+            }
+            installSnapshotInProgress = true;
+
+            try {
+                logger.info("Install snapshot to {} ...", this.getUri());
+
+                int offset = 0;
+                ReplicableIterator iterator = snapshot.iterator();
+                while (iterator.hasMoreTrunks()) {
+                    byte[] trunk = iterator.nextTrunk();
+                    InstallSnapshotRequest request = new InstallSnapshotRequest(
+                            term, state.getLocalUri(), snapshot.lastIncludedIndex(), snapshot.lastIncludedTerm(),
+                            offset, trunk, !iterator.hasMoreTrunks()
+                    );
+                    boolean lastRequest = !iterator.hasMoreTrunks();
+                    actor.<InstallSnapshotResponse>sendThen("Rpc", "installSnapshot", new RpcMsg<>(this.uri, request))
+                            .whenComplete((response, exception) -> handleInstallSnapshotResponse(response, exception, lastRequest, snapshotIndex));
+                    offset += trunk.length;
+                }
+            } catch (IOException t) {
+                logger.warn("Install snapshot to {} failed!", this.getUri(), t);
+                installSnapshotInProgress = false;
+            }
+            return true;
+        }
+
+        private void handleInstallSnapshotResponse(InstallSnapshotResponse response, Throwable exception, boolean last, long snapshotIndex) {
+            if (null != exception) {
+                logger.warn("Install snapshot execution exception, from {} to {}, cause: {}.", state.getLocalUri(), uri, null == exception.getCause()? exception.getMessage() : exception.getCause().getMessage());
+                installSnapshotInProgress = false;
+            } else {
+                if (!response.success()) {
+                    logger.warn("Install snapshot to {} failed! Cause: {}.", this.getUri(), response.errorString());
+                    installSnapshotInProgress = false;
+                } else {
+                    if (last) {
+                        nextIndex = snapshotIndex;
+                        logger.info("Install snapshot to {} success.", this.getUri());
+                    }
+                }
+            }
+            if (last) {
+                installSnapshotInProgress = false;
+            }
+        }
+
+
+        private int getPreLogTerm(long currentLogIndex) {
+            if (currentLogIndex > journal.minIndex()) {
+                return journal.getTerm(currentLogIndex - 1);
+            } else if (currentLogIndex == journal.minIndex() && state.getSnapshots().containsKey(currentLogIndex)) {
+                return state.getSnapshots().get(currentLogIndex).lastIncludedTerm();
+            } else if (currentLogIndex == 0) {
+                return -1;
+            } else {
+                throw new IndexUnderflowException();
+            }
+        }
+
+        URI getUri() {
+            return uri;
+        }
+
+        long getNextIndex() {
+            return nextIndex;
+        }
+
+        long getMatchIndex() {
+            return matchIndex;
+        }
+
+        long getLastHeartbeatResponseTime() {
+            return lastHeartbeatResponseTime;
+        }
+
+        long getLastHeartbeatRequestTime() {
+            return lastHeartbeatRequestTime;
+        }
+
+        public boolean isCommitted() {
+            return committed;
+        }
+
+        @Override
+        public String toString() {
+            return "{" +
+                    "uri=" + uri +
+                    ", nextIndex=" + nextIndex +
+                    ", matchIndex=" + matchIndex +
+                    '}';
+        }
+
+        public void onJournalCommit() {
+            this.committed = journal.commitIndex() >= matchIndex;
+        }
     }
+
     
 
 }

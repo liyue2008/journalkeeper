@@ -72,7 +72,7 @@ public class RaftServerActor implements  RaftServer {
                 .addActor(rpcActor.getActor())
                 .addActor(eventBusActor.getActor())
                 .build();
-        return new ServerContext(properties, config, stateActor.getState(), journalActor.getRaftJournal(), voterActor.getRaftVoter(),eventBusActor.getEventBus(), postOffice);
+        return new ServerContext(properties, config, stateActor.getState(), journalActor.getRaftJournal(), eventBusActor.getEventBus(), postOffice);
 
     }
 
