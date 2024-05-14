@@ -2,11 +2,8 @@ package io.journalkeeper.core.raft;
 
 import io.journalkeeper.base.ReplicableIterator;
 import io.journalkeeper.core.api.*;
-import io.journalkeeper.core.entry.internal.InternalEntriesSerializeSupport;
-import io.journalkeeper.core.entry.internal.InternalEntryType;
-import io.journalkeeper.core.entry.internal.LeaderAnnouncementEntry;
-import io.journalkeeper.core.entry.internal.OnStateChangeEvent;
-import io.journalkeeper.core.state.ApplyInternalEntryInterceptor;
+import io.journalkeeper.core.entry.internal.*;
+import io.journalkeeper.core.server.VoterConfigManager;
 import io.journalkeeper.core.state.ConfigState;
 import io.journalkeeper.core.state.Snapshot;
 import io.journalkeeper.core.transaction.JournalTransactionManager;
@@ -25,7 +22,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.URI;
-import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
@@ -64,25 +60,18 @@ public class VoterActor {
     private boolean isWritable = true; // Leader 是否可写
     private long disableWriteTimeout = 0L; // 禁用写操作的超时时间
     private boolean isAnnounced = false; // 发布Leader announcement 被多数确认，正式行使leader职权。
-    private final ApplyInternalEntryInterceptor leaderAnnouncementInterceptor;
 
     private final List<WaitingResponse> waitingResponses = new LinkedList<>(); // 处理中的待响应的update请求
     private final List<ReplicationDestination> replicationDestinations = new ArrayList<>(); // Followers
-
+    private final VoterConfigManager voterConfigManager;
     VoterActor(JournalEntryParser journalEntryParser, JournalTransactionManager journalTransactionManager, RaftJournal journal, RaftState state, Config config) {
         this.journalEntryParser = journalEntryParser;
         this.journalTransactionManager = journalTransactionManager;
         this.journal = journal;
         this.state = state;
         this.config = config;
+        this.voterConfigManager = new VoterConfigManager(journalEntryParser);
 
-        // TODO: 将 Interceptor 改为Actor Message
-        this.leaderAnnouncementInterceptor = (type, internalEntry) -> {
-            if (type == InternalEntryType.TYPE_LEADER_ANNOUNCEMENT) {
-                LeaderAnnouncementEntry leaderAnnouncementEntry = InternalEntriesSerializeSupport.parse(internalEntry);
-                actor.send("Voter", "onLeaderAnnouncementEntryApplied", leaderAnnouncementEntry);
-            }
-        };
     }
 
     @ActorListener
@@ -428,7 +417,6 @@ public class VoterActor {
         }
         actor.addScheduler(config.get("heartbeat_interval_ms"), TimeUnit.MILLISECONDS, "replication", this::replication);
         actor.addScheduler(config.get("heartbeat_interval_ms"), TimeUnit.MILLISECONDS, "commit", this::commit);
-        actor.send("State", "addInterceptor",InternalEntryType.TYPE_LEADER_ANNOUNCEMENT, this.leaderAnnouncementInterceptor);
     }
 
 
@@ -529,10 +517,7 @@ public class VoterActor {
             actor.reply(msg, new UpdateClusterStateResponse());
         }
 
-        if (isUpdateVoterRequest(request)) {
-            // TODO
-            // return;
-        }
+        updateVoterConfig(request);
 
         List<JournalEntry> journalEntries = requestToJournalEntries(request);
 
@@ -541,6 +526,26 @@ public class VoterActor {
                 .thenAccept(this.waitingResponses::add)
                 .thenRun(() -> onJournalAppend(request.getResponseConfig()));
 
+    }
+
+    private void updateVoterConfig(UpdateClusterStateRequest request) {
+        UpdateRequest updateRequest;
+        if (request.getRequests().size() == 1 && (updateRequest = request.getRequests().get(0)).getPartition() == INTERNAL_PARTITION) {
+            InternalEntryType entryType = InternalEntriesSerializeSupport.parseEntryType(updateRequest.getEntry());
+            if (entryType == TYPE_UPDATE_VOTERS_S1) {
+                UpdateVotersS1Entry updateVotersS1Entry = InternalEntriesSerializeSupport.parse(updateRequest.getEntry());
+                actor.send("State", "toJointConsensus", updateVotersS1Entry.getConfigOld(), updateVotersS1Entry.getConfigNew());
+                for (URI uri : updateVotersS1Entry.getConfigNew()) {
+                    if (! uri.equals(state.getLocalUri()) && // uri was not me
+                            replicationDestinations.stream().noneMatch(r -> r.getUri().equals(uri))) { // and not included in the old followers collection
+                        replicationDestinations.add(new ReplicationDestination(uri, journal.maxIndex(), config.get("heartbeat_interval_ms"), config.get("replication_batch_size")));
+                    }
+                }
+            } else if(entryType == TYPE_UPDATE_VOTERS_S2) {
+                actor.<List<URI>>sendThen("State", "toNewConfig")
+                        .thenAccept(voters -> this.replicationDestinations.removeIf(r -> !voters.contains(r.getUri())));
+            }
+        }
     }
 
     private void onJournalAppend(ResponseConfig responseConfig) {
@@ -790,15 +795,10 @@ public class VoterActor {
                 (sortedHeartbeatResponseTimes[sortedHeartbeatResponseTimes.length / 2]) + config.<Long>get("check_quorum_timeout_ms");
         long now = System.currentTimeMillis();
         if (leaderShipDeadLineMs > 0 && now > leaderShipDeadLineMs) {
-//            logger.info("leaderShipDeadLineMs: {}, now: {}, diff: {}.", formatTimestamp(leaderShipDeadLineMs), formatTimestamp(now), now - leaderShipDeadLineMs);
             logger.info("Leader check quorum failed, convert myself to follower, {}.", voterInfo());
             convertToFollower();
         }
     }
-
-//    private String formatTimestamp(long timestamp) {
-//        return new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS").format(new Date(timestamp));
-//    }
 
     private void announceLeader() {
         isAnnounced = false;
@@ -818,11 +818,15 @@ public class VoterActor {
         }
     }
 
-    @ActorListener
-    private void onLeaderAnnouncementEntryApplied(LeaderAnnouncementEntry leaderAnnouncementEntry) {
-        if (voterState.getState() == VoterState.LEADER && !isAnnounced && leaderAnnouncementEntry.getTerm() == this.term) {
-            this.isAnnounced = true;
-            logger.info("Leader announcement applied! Leader: {}, term: {}.", state.getLocalUri(), term);
+    @ActorSubscriber(topic = "onInternalEntryApply")
+    private void onLeaderAnnouncementEntryApplied(InternalEntryType type, byte [] internalEntry) {
+        if (type == InternalEntryType.TYPE_LEADER_ANNOUNCEMENT) {
+            LeaderAnnouncementEntry leaderAnnouncementEntry = InternalEntriesSerializeSupport.parse(internalEntry);
+
+            if (voterState.getState() == VoterState.LEADER && !isAnnounced && leaderAnnouncementEntry.getTerm() == this.term) {
+                this.isAnnounced = true;
+                logger.info("Leader announcement applied! Leader: {}, term: {}.", state.getLocalUri(), term);
+            }
         }
     }
 
@@ -1183,6 +1187,8 @@ public class VoterActor {
         public void onJournalCommit() {
             this.committed = journal.commitIndex() >= matchIndex;
         }
+
+
     }
 
     

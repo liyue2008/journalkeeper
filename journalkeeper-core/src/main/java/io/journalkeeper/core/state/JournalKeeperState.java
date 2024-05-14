@@ -53,6 +53,7 @@ import io.journalkeeper.core.entry.internal.SetPreferredLeaderEntry;
 import io.journalkeeper.core.journal.JournalSnapshot;
 import io.journalkeeper.exceptions.StateRecoverException;
 import io.journalkeeper.persistence.MetadataPersistence;
+import io.journalkeeper.utils.actor.Actor;
 import io.journalkeeper.utils.files.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -95,6 +96,7 @@ public class JournalKeeperState implements Flushable {
     private final List<ApplyReservedEntryInterceptor> reservedEntryInterceptors = new CopyOnWriteArrayList<>();
     private final StateFactory userStateFactory;
     private final MetadataPersistence metadataPersistence;
+    private final Actor actor;
     /**
      * State文件读写锁
      */
@@ -110,8 +112,13 @@ public class JournalKeeperState implements Flushable {
     private Properties properties;
 
     public JournalKeeperState(StateFactory userStateFactory, MetadataPersistence metadataPersistence) {
+        this(userStateFactory, metadataPersistence, null);
+    }
+
+    public JournalKeeperState(StateFactory userStateFactory, MetadataPersistence metadataPersistence, Actor actor) {
         this.userStateFactory = userStateFactory;
         this.metadataPersistence = metadataPersistence;
+        this.actor = actor;
     }
 
     public void init(Path path, List<URI> voters, Set<Integer> partitions, URI preferredLeader) throws IOException {
@@ -254,7 +261,11 @@ public class JournalKeeperState implements Flushable {
             }
             internalState.setLastIncludedTerm(entryHeader.getTerm());
             internalState.next();
+            flushInternalState();
+
             result.setLastApplied(lastApplied());
+        } catch (IOException e) {
+            logger.warn("Flush internal state exception! Path: {}.", path, e);
         }
         finally {
             stateLock.unlockWrite(stamp);
@@ -262,10 +273,11 @@ public class JournalKeeperState implements Flushable {
         return result;
     }
 
-    // TODO: 改成actor 事件方式时间
+    // TODO: 改成actor 事件方式
     private void applyInternalEntry(byte[] internalEntry) {
         InternalEntryType type = InternalEntriesSerializeSupport.parseEntryType(internalEntry);
         logger.info("Apply internal entry, type: {}", type);
+
         switch (type) {
             case TYPE_SCALE_PARTITIONS:
                 internalState.setPartitions(InternalEntriesSerializeSupport.parse(internalEntry, ScalePartitionsEntry.class).getPartitions());
@@ -285,11 +297,8 @@ public class JournalKeeperState implements Flushable {
                 interceptor.applyInternalEntry(type, internalEntry);
             }
         }
-
-        try {
-            flushInternalState();
-        } catch (IOException e) {
-            logger.warn("Flush internal state exception! Path: {}.", path, e);
+        if (null != actor) {
+            actor.pub("onInternalEntryApply", type, internalEntry);
         }
     }
 

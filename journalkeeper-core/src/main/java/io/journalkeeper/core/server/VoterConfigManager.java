@@ -48,7 +48,7 @@ public class VoterConfigManager {
 
     private final JournalEntryParser journalEntryParser;
 
-    VoterConfigManager(JournalEntryParser journalEntryParser) {
+    public VoterConfigManager(JournalEntryParser journalEntryParser) {
         this.journalEntryParser = journalEntryParser;
     }
 

@@ -99,7 +99,7 @@ public class StateActor implements RaftState{
 
         metadataPersistence = persistenceFactory.createMetadataPersistenceInstance();
 
-        this.state = new JournalKeeperState(stateFactory, metadataPersistence);
+        this.state = new JournalKeeperState(stateFactory, metadataPersistence, actor);
 
         this.partialSnapshot = new PartialSnapshot(partialSnapshotPath());
 
@@ -561,15 +561,6 @@ public class StateActor implements RaftState{
         JournalEntry entryHeader = journal.readEntryHeaderByOffset(offset);
         StateResult stateResult = state.applyEntry(entryHeader, new EntryFutureImpl(journal, offset), journal);
         actor.pub("onStateChange", stateResult);
-    }
-    @ActorListener
-    private void addInterceptor(InternalEntryType type, ApplyInternalEntryInterceptor internalEntryInterceptor) {
-        state.addInterceptor(type, internalEntryInterceptor);
-    }
-    @ActorListener
-    private void removeInterceptor(InternalEntryType type, ApplyInternalEntryInterceptor internalEntryInterceptor) {
-        state.removeInterceptor(type, internalEntryInterceptor);
-
     }
 
 }

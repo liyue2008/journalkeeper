@@ -705,7 +705,7 @@ class Leader extends ServerStateMachine implements StateServer {
         return writeEnabled.get();
     }
 
-    List<Leader.ReplicationDestination> getFollowers() {
+    List<Leader.ReplicationDestination> zgetFollowers() {
         return Collections.unmodifiableList(followers);
     }
 
