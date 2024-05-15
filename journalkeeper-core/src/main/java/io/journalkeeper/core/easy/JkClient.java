@@ -35,6 +35,9 @@ public class JkClient implements ClusterReadyAware, ServerConfigAware {
 
         return update(command, null);
     }
+    public <P,R> CompletableFuture<R> update (String command, P parameter) {
+        return update(command, parameter, ResponseConfig.REPLICATION);
+    }
     /**
      * 写入操作命令变更状态。集群保证按照提供的顺序写入，保证原子性，服务是线性的，任一时间只能有一个update操作被执行。
      * 日志在集群中复制到大多数节点，并在状态机执行后返回。
@@ -45,8 +48,8 @@ public class JkClient implements ClusterReadyAware, ServerConfigAware {
      * @param <P> 命令参数类型
      * @param <R> 返回结果类型
      */
-    public <P,R> CompletableFuture<R> update (String command, P parameter) {
-        return this.raftClient.update(serializer.serialize(new JkRequest(command, parameter)))
+    public <P,R> CompletableFuture<R> update (String command, P parameter, ResponseConfig responseConfig) {
+        return this.raftClient.update(serializer.serialize(new JkRequest(command, parameter)),responseConfig)
                 .thenApply(serializer::<JkResponse>parse)
                 .thenApply(response -> {
                     if (response.isSuccess()) {

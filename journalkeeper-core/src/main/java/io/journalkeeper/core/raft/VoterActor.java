@@ -3,7 +3,6 @@ package io.journalkeeper.core.raft;
 import io.journalkeeper.base.ReplicableIterator;
 import io.journalkeeper.core.api.*;
 import io.journalkeeper.core.entry.internal.*;
-import io.journalkeeper.core.server.VoterConfigManager;
 import io.journalkeeper.core.state.ConfigState;
 import io.journalkeeper.core.state.Snapshot;
 import io.journalkeeper.core.transaction.JournalTransactionManager;
@@ -63,15 +62,14 @@ public class VoterActor {
 
     private final List<WaitingResponse> waitingResponses = new LinkedList<>(); // 处理中的待响应的update请求
     private final List<ReplicationDestination> replicationDestinations = new ArrayList<>(); // Followers
-    private final VoterConfigManager voterConfigManager;
+
+
     VoterActor(JournalEntryParser journalEntryParser, JournalTransactionManager journalTransactionManager, RaftJournal journal, RaftState state, Config config) {
         this.journalEntryParser = journalEntryParser;
         this.journalTransactionManager = journalTransactionManager;
         this.journal = journal;
         this.state = state;
         this.config = config;
-        this.voterConfigManager = new VoterConfigManager(journalEntryParser);
-
     }
 
     @ActorListener
@@ -404,11 +402,6 @@ public class VoterActor {
     @ActorSubscriber
     private void onStart(ServerContext context) {
 
-        if (isSingleNodeCluster()) {
-            convertToPreVoting();
-        } else {
-            convertToFollower();
-        }
         actor.addScheduler(config.<Long>get("heartbeat_interval_ms"), TimeUnit.MILLISECONDS, "checkElectionTimeout", this::checkElectionTimeout);
         
         // Leader
@@ -458,6 +451,7 @@ public class VoterActor {
         if (notHeartBeat &&
                 (request.getPrevLogIndex() < journal.minIndex() - 1 ||
                         request.getPrevLogIndex() >= journal.maxIndex() ||
+
                         journal.getTerm(request.getPrevLogIndex()) != request.getPrevLogTerm())
         ) {
             actor.reply(msg, new AsyncAppendEntriesResponse(false, startIndex,
@@ -517,35 +511,29 @@ public class VoterActor {
             actor.reply(msg, new UpdateClusterStateResponse());
         }
 
-        updateVoterConfig(request);
+        actor.send("State", "maybeUpdateLeaderConfig", request);
 
         List<JournalEntry> journalEntries = requestToJournalEntries(request);
 
         actor.<Long>sendThen("Journal", "append", journalEntries)
-                .thenApply(position -> new WaitingResponse(msg, position - journalEntries.size() + 1, position + 1, config.get("rpc_timeout_ms"), actor))
+                .thenApply(position -> new WaitingResponse(msg, position - journalEntries.size(), position, config.get("rpc_timeout_ms"), actor))
                 .thenAccept(this.waitingResponses::add)
                 .thenRun(() -> onJournalAppend(request.getResponseConfig()));
 
     }
 
-    private void updateVoterConfig(UpdateClusterStateRequest request) {
-        UpdateRequest updateRequest;
-        if (request.getRequests().size() == 1 && (updateRequest = request.getRequests().get(0)).getPartition() == INTERNAL_PARTITION) {
-            InternalEntryType entryType = InternalEntriesSerializeSupport.parseEntryType(updateRequest.getEntry());
-            if (entryType == TYPE_UPDATE_VOTERS_S1) {
-                UpdateVotersS1Entry updateVotersS1Entry = InternalEntriesSerializeSupport.parse(updateRequest.getEntry());
-                actor.send("State", "toJointConsensus", updateVotersS1Entry.getConfigOld(), updateVotersS1Entry.getConfigNew());
-                for (URI uri : updateVotersS1Entry.getConfigNew()) {
-                    if (! uri.equals(state.getLocalUri()) && // uri was not me
-                            replicationDestinations.stream().noneMatch(r -> r.getUri().equals(uri))) { // and not included in the old followers collection
-                        replicationDestinations.add(new ReplicationDestination(uri, journal.maxIndex(), config.get("heartbeat_interval_ms"), config.get("replication_batch_size")));
-                    }
-                }
-            } else if(entryType == TYPE_UPDATE_VOTERS_S2) {
-                actor.<List<URI>>sendThen("State", "toNewConfig")
-                        .thenAccept(voters -> this.replicationDestinations.removeIf(r -> !voters.contains(r.getUri())));
+    @ActorSubscriber
+    private void onConfigToJointConsensus(List<URI> voters) {
+        for (URI uri : voters) {
+            if (!uri.equals(state.getLocalUri()) && // uri was not me
+                    replicationDestinations.stream().noneMatch(r -> r.getUri().equals(uri))) { // and not included in the old followers collection
+                replicationDestinations.add(new ReplicationDestination(uri, journal.maxIndex(), config.get("heartbeat_interval_ms"), config.get("replication_batch_size")));
             }
         }
+    }
+    @ActorSubscriber
+    private void onConfigToNewConfig(List<URI> voters) {
+        this.replicationDestinations.removeIf(r -> !voters.contains(r.getUri()));
     }
 
     private void onJournalAppend(ResponseConfig responseConfig) {
@@ -671,14 +659,15 @@ public class VoterActor {
             WaitingResponse waitingResponse = iterator.next();
             if (waitingResponse.positionMatch(stateResult.getLastApplied())) {
                 waitingResponse.putResult(stateResult.getUserResult());
-                waitingResponse.countdownReplication();
-                iterator.remove();
+                if (waitingResponse.countdownReplication()) {
+                    iterator.remove();
+                }
                 break;
             }
         }
     }
 
-    @ActorListener
+    @ActorSubscriber
     private void onJournalFlush(long journalFlushIndex) {
         if (voterState.getState() != VoterState.LEADER) {
             return;
@@ -720,16 +709,6 @@ public class VoterActor {
             journalEntries.add(entry);
         }
         return journalEntries;
-    }
-
-    private boolean isUpdateVoterRequest(UpdateClusterStateRequest request) {
-        UpdateRequest updateRequest;
-
-        if (request.getRequests().size() == 1 && (updateRequest = request.getRequests().get(0)).getPartition() == INTERNAL_PARTITION) {
-            InternalEntryType entryType = InternalEntriesSerializeSupport.parseEntryType(updateRequest.getEntry());
-            return entryType == TYPE_UPDATE_VOTERS_S1 | entryType == TYPE_UPDATE_VOTERS_S2;
-        }
-        return false;
     }
 
     @ActorListener
@@ -930,15 +909,15 @@ public class VoterActor {
         private boolean shouldReply () {
             switch (responseConfig) {
                 case PERSISTENCE:
-                    if (flushCountDown == 0) {
+                    if (flushCountDown <= 0) {
                         return true;
                     }
                 case REPLICATION:
-                    if (replicationCountDown == 0) {
+                    if (replicationCountDown <= 0) {
                         return true;
                     }
                 case ALL:
-                    if (flushCountDown == 0 && replicationCountDown == 0) {
+                    if (flushCountDown <= 0 && replicationCountDown <= 0) {
                         return true;
                     }
                 default:
@@ -1190,7 +1169,5 @@ public class VoterActor {
 
 
     }
-
-    
 
 }

@@ -68,7 +68,8 @@ public class KvTest {
         Path path = TestPathUtils.prepareBaseDir("singleNodeTest");
         BootStrap kvServer = createServers(1, path).get(0);
         JkClient kvClient = new JkClient(kvServer.getRaftClient());
-        Assert.assertNull(kvClient.update("SET","key value").get());
+        Assert.assertNull(kvClient.update("SET","key value", ResponseConfig.ALL).get());
+        Assert.assertEquals("value", kvClient.query("GET", "key").get());
         kvServer.shutdown();
 
         kvServer = recoverServer("server0", path);

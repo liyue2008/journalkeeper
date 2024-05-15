@@ -247,10 +247,12 @@ public class JournalKeeperState implements Flushable {
         int batchSize = entryHeader.getBatchSize();
 
         StateResult result = new StateResult(null);
+
         long stamp = stateLock.writeLock();
         try {
             if (partition < RESERVED_PARTITIONS_START) {
                 result = userState.execute(entryFuture, partition, lastApplied(), batchSize, journal);
+                result.setLastApplied(lastApplied());
             } else if (partition == INTERNAL_PARTITION) {
                 applyInternalEntry(entryFuture.get());
             } else {
@@ -263,7 +265,6 @@ public class JournalKeeperState implements Flushable {
             internalState.next();
             flushInternalState();
 
-            result.setLastApplied(lastApplied());
         } catch (IOException e) {
             logger.warn("Flush internal state exception! Path: {}.", path, e);
         }
@@ -273,7 +274,7 @@ public class JournalKeeperState implements Flushable {
         return result;
     }
 
-    // TODO: 改成actor 事件方式
+    // TODO: 将Interceptor改成actor 事件方式
     private void applyInternalEntry(byte[] internalEntry) {
         InternalEntryType type = InternalEntriesSerializeSupport.parseEntryType(internalEntry);
         logger.info("Apply internal entry, type: {}", type);

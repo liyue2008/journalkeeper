@@ -101,7 +101,7 @@ public class RaftServerActor implements  RaftServer {
         actor.<JournalActor.RecoverJournalRequest>sendThen("State", "recover")
                 .thenCompose(request -> actor.sendThen("Journal", "recover", request))
                 .thenCompose(r -> CompletableFuture.allOf(
-                        actor.sendThen("RaftServer", "recoverVoterConfig"),
+                        actor.sendThen("State", "recoverVoterConfig"),
                         actor.sendThen("Voter", "maybeUpdateTermOnRecovery")
                 )).whenComplete((r, e) -> {
                     if (e != null) {
@@ -113,43 +113,6 @@ public class RaftServerActor implements  RaftServer {
                 });
     }
 
-    /**
-     * Check reserved entries to ensure the last UpdateVotersConfig entry is applied to the current voter config.
-     */
-    @ActorListener
-    @ResponseManually
-    private void recoverVoterConfig(@ActorMessage ActorMsg msg) {
-        boolean isRecoveredFromJournal = false;
-        List<CompletableFuture<?>> futures = new ArrayList<>();
-        for (long index = context.getJournal().maxIndex(INTERNAL_PARTITION) - 1;
-             index >= context.getJournal().minIndex(INTERNAL_PARTITION);
-             index--) {
-            JournalEntry entry = context.getJournal().readByPartition(INTERNAL_PARTITION, index);
-            InternalEntryType type = InternalEntriesSerializeSupport.parseEntryType(entry.getPayload().getBytes());
-
-            if (type == InternalEntryType.TYPE_UPDATE_VOTERS_S1) {
-                UpdateVotersS1Entry updateVotersS1Entry = InternalEntriesSerializeSupport.parse(entry.getPayload().getBytes());
-                futures.add(actor.sendThen("State","setConfigState", new ConfigState(
-                        updateVotersS1Entry.getConfigOld(), updateVotersS1Entry.getConfigNew())));
-                isRecoveredFromJournal = true;
-                break;
-            } else if (type == InternalEntryType.TYPE_UPDATE_VOTERS_S2) {
-                UpdateVotersS2Entry updateVotersS2Entry = InternalEntriesSerializeSupport.parse(entry.getPayload().getBytes());
-                futures.add(actor.sendThen("State","setConfigState", new ConfigState(updateVotersS2Entry.getConfigNew())));
-                isRecoveredFromJournal = true;
-                break;
-            }
-        }
-
-        if (isRecoveredFromJournal) {
-            logger.info("Voters config is recovered from journal.");
-        } else {
-            logger.info("No voters config entry found in journal, Using config in the metadata.");
-        }
-
-        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-                .thenRun(() -> actor.reply(msg, null));
-    }
 
     @Override
     public URI serverUri() {

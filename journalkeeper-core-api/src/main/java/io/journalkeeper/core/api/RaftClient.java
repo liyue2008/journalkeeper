@@ -60,6 +60,17 @@ public interface RaftClient extends Watchable, ClusterReadyAware, ServerConfigAw
 
     /**
      * 写入操作命令变更状态。集群保证按照提供的顺序写入，保证原子性，服务是线性的，任一时间只能有一个update操作被执行。
+     * 日志在集群中复制到大多数节点，并在状态机执行后返回。
+     * @param entry 操作命令数组
+     * @param responseConfig 响应级别。See {@link ResponseConfig}
+     * @return 操作命令在状态机的执行结果
+     */
+    default CompletableFuture<byte[]> update(byte[] entry, ResponseConfig responseConfig) {
+        return update(entry, RaftJournal.DEFAULT_PARTITION, 1, false, responseConfig);
+    }
+
+    /**
+     * 写入操作命令变更状态。集群保证按照提供的顺序写入，保证原子性，服务是线性的，任一时间只能有一个update操作被执行。
      * @param entry 操作命令数组
      * @param partition 分区
      * @param batchSize 批量大小

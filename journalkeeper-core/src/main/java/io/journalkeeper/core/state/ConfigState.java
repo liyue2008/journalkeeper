@@ -146,7 +146,9 @@ public class ConfigState {
                 throw new IllegalStateException("Invalid joint consensus state! expected: jointConsensus == true, actual: false.");
             }
             logger.info("Config changed from joint consensus to new, ({}, {}) -> {}.", configOld, configNew, configNew);
-            appendEntryCallable.call();
+            if (null != appendEntryCallable) {
+                appendEntryCallable.call();
+            }
             jointConsensus = false;
             configOld.clear();
             buildAllVoters();
@@ -163,7 +165,9 @@ public class ConfigState {
                 throw new IllegalStateException("Invalid joint consensus state! expected: jointConsensus == false, actual: true.");
             }
             logger.info("Config changed to joint consensus, {} -> ({}, {}).", this.configNew, configOld, configNew);
-            appendEntryCallable.call();
+            if (null != appendEntryCallable) {
+                appendEntryCallable.call();
+            }
             jointConsensus = true;
             this.configOld.addAll(configOld);
             this.configNew.clear();

@@ -17,21 +17,32 @@ public class Postman implements Runnable {
 
     private final List<ActorOutbox> outboxList;
 
-    private Postman(PostOffice postOffice, List<ActorInbox> inboxList, List<ActorOutbox> outboxList) {
+
+    private final Thread thread;
+
+    private Postman(PostOffice postOffice, List<ActorInbox> inboxList, List<ActorOutbox> outboxList, String name) {
         this.postOffice = postOffice;
         this.inboxList = Collections.unmodifiableList(inboxList);
         this.outboxList = Collections.unmodifiableList(outboxList);
         inboxList.forEach(inbox -> inbox.setRing(ring));
         outboxList.forEach(outbox -> outbox.setRing(ring));
+        this.thread = new Thread(this, name);
+        thread.setDaemon(true);
+
+    }
+
+    public void start() {
+        thread.start();
     }
 
     private boolean stopFlag = false;
 
-    public void stop() {
+    public void stop() throws InterruptedException {
         stopFlag = true;
         synchronized (ring) {
             ring.notify();
         }
+        thread.join();
     }
     @Override
     public void run() {
@@ -67,7 +78,7 @@ public class Postman implements Runnable {
         return new Builder();
     }
     static class Builder {
-
+        private String name = "Postman";
         private final List<ActorInbox> inboxList = new ArrayList<>();
 
         private final List<ActorOutbox> outboxList = new ArrayList<>();
@@ -77,7 +88,10 @@ public class Postman implements Runnable {
             this.postOffice = postOffice;
             return this;
         }
-
+        Builder name(String name) {
+            this.name = name;
+            return this;
+        }
         void addInbox(ActorInbox inbox) {
             inboxList.add(inbox);
         }
@@ -86,7 +100,7 @@ public class Postman implements Runnable {
             outboxList.add(outbox);
         }
         Postman build() {
-            return new Postman(postOffice, inboxList, outboxList);
+            return new Postman(postOffice, inboxList, outboxList, name);
         }
     }
 }

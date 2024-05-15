@@ -29,7 +29,9 @@ import java.nio.channels.ClosedByInterruptException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.StreamSupport;
@@ -102,6 +104,8 @@ public class StateActor implements RaftState{
         this.state = new JournalKeeperState(stateFactory, metadataPersistence, actor);
 
         this.partialSnapshot = new PartialSnapshot(partialSnapshotPath());
+
+        this.actor.addScheduler(config.<Long>get("flush_interval_ms"), TimeUnit.MILLISECONDS, "flush", this::flush);
 
 //        TODO: 设计这部分拦截器的实现
 //        state.addInterceptor(InternalEntryType.TYPE_SCALE_PARTITIONS, this::scalePartitions);
@@ -393,12 +397,7 @@ public class StateActor implements RaftState{
         this.localUri = metadata.getThisServer();
     }
 
-    @ActorListener
-    private void setConfigState(ActorMsg msg) {
-        ConfigState configState = msg.getPayload();
-        this.state.setConfigState(configState);
-        actor.reply(msg, null);
-    }
+
     @ActorListener
     public QueryStateResponse queryServerState(QueryStateRequest request) {
         StateQueryResult result = state.query(request.getQuery(), journal);
@@ -477,6 +476,57 @@ public class StateActor implements RaftState{
         this.roll = request.getRoll();
         return new ConvertRollResponse();
     }
+
+    /**
+     * Check reserved entries to ensure the last UpdateVotersConfig entry is applied to the current voter config.
+     */
+    @ActorListener
+    private void recoverVoterConfig() {
+        boolean isRecoveredFromJournal = false;
+        List<CompletableFuture<?>> futures = new ArrayList<>();
+        for (long index = journal.maxIndex(INTERNAL_PARTITION) - 1;
+             index >= journal.minIndex(INTERNAL_PARTITION);
+             index--) {
+            JournalEntry entry = journal.readByPartition(INTERNAL_PARTITION, index);
+            InternalEntryType type = InternalEntriesSerializeSupport.parseEntryType(entry.getPayload().getBytes());
+
+            if (type == InternalEntryType.TYPE_UPDATE_VOTERS_S1) {
+                UpdateVotersS1Entry updateVotersS1Entry = InternalEntriesSerializeSupport.parse(entry.getPayload().getBytes());
+                state.setConfigState(new ConfigState(
+                        updateVotersS1Entry.getConfigOld(), updateVotersS1Entry.getConfigNew()));
+                isRecoveredFromJournal = true;
+                break;
+            } else if (type == InternalEntryType.TYPE_UPDATE_VOTERS_S2) {
+                UpdateVotersS2Entry updateVotersS2Entry = InternalEntriesSerializeSupport.parse(entry.getPayload().getBytes());
+                state.setConfigState(new ConfigState(updateVotersS2Entry.getConfigNew()));
+                isRecoveredFromJournal = true;
+                break;
+            }
+        }
+
+        if (isRecoveredFromJournal) {
+            logger.info("Voters config is recovered from journal.");
+        } else {
+            logger.info("No voters config entry found in journal, Using config in the metadata.");
+        }
+    }
+
+    @ActorListener
+    private void maybeUpdateLeaderConfig(UpdateClusterStateRequest request) throws Exception {
+        UpdateRequest updateRequest;
+        if (request.getRequests().size() == 1 && (updateRequest = request.getRequests().get(0)).getPartition() == INTERNAL_PARTITION) {
+            InternalEntryType entryType = InternalEntriesSerializeSupport.parseEntryType(updateRequest.getEntry());
+            if (entryType == TYPE_UPDATE_VOTERS_S1) {
+                UpdateVotersS1Entry updateVotersS1Entry = InternalEntriesSerializeSupport.parse(updateRequest.getEntry());
+                state.getConfigState().toJointConsensus(updateVotersS1Entry.getConfigOld(), updateVotersS1Entry.getConfigNew(), null);
+                actor.pub("onConfigToJointConsensus", state.getConfigState().voters());
+
+            } else if(entryType == TYPE_UPDATE_VOTERS_S2) {
+                state.getConfigState().toNewConfig(null);
+                actor.pub("onConfigToNewConfig", state.getConfigState().voters());
+            }
+        }
+    }
     @ActorListener
     private void maybeRollbackConfig(long startIndex) {
         ConfigState voterStateMachine = state.getConfigState();
@@ -521,7 +571,6 @@ public class StateActor implements RaftState{
 
     }
 
-    @ActorScheduler(interval = 100L) // TODO: flush interval 需要从配置中读取
     private void flush() {
         if(!isRecovered){
             return;

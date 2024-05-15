@@ -48,7 +48,8 @@ public class PostOffice{
 
         this.postmanList = new ArrayList<>(threadCount);
         for (int i = 0; i < threadCount; i++) {
-            Postman.Builder builder = Postman.builder().postOffice(this);
+            Postman.Builder builder = Postman.builder().postOffice(this)
+                    .name("Postman-" + (name.isEmpty() ? "" : (name + "-")) + i);
             threadInboxList.get(i).forEach(builder::addInbox);
             threadOutboxList.get(i).forEach(builder::addOutbox);
             this.postmanList.add(builder.build());
@@ -90,11 +91,11 @@ public class PostOffice{
     }
 
     private void start() {
-        for (Postman postman : postmanList) {
-            Thread thread = new Thread(postman, "Postman-" + (name.isEmpty() ? "" : (name + "-")) + postmanList.indexOf(postman));
-            thread.setDaemon(true);
-            thread.start();
-        }
+        postmanList.forEach(Postman::start);
+    }
+
+    private boolean hasMessages() {
+        return !actorList.stream().allMatch(actor -> actor.outboxCleared()  && actor.inboxCleared());
     }
 
     public void stop() {
@@ -110,28 +111,28 @@ public class PostOffice{
                 //noinspection BusyWait
                 Thread.sleep(10);
             }
-            // 停止并等待pubsubActor
-            this.pubSubActor.stop();
-            while (!(pubSubActor.outboxCleared() && pubSubActor.inboxCleared())) {
-                //noinspection BusyWait
-                Thread.sleep(10);
-            }
-            // 停止接收新的消息
-            actorList.forEach(Actor::stop);
-            // 处理所有发件箱的消息
-            while (actorList.stream().anyMatch(actor -> !actor.outboxCleared())) {
-                //noinspection BusyWait
-                Thread.sleep(10);
-            }
-            // 处理所有收件箱的消息
-            while (actorList.stream().anyMatch(actor -> !actor.inboxCleared())) {
-                //noinspection BusyWait
-                Thread.sleep(10);
-            }
+
             // 停止所有Postman线程
             for (Postman postman : postmanList) {
                 postman.stop();
             }
+
+            // 处理所有剩余的消息，直到全部消息都处理完成。
+            while (hasMessages()) {
+                actorList.stream().map(Actor::getOutbox).forEach(outbox -> {
+                   boolean hasMessages = true;
+                   while (hasMessages) {
+                       hasMessages = outbox.consumeOneMsg(this::send);
+                   }
+                });
+                actorList.stream().map(Actor::getInbox).forEach(inbox -> {
+                    boolean hasMessages = true;
+                    while (hasMessages) {
+                        hasMessages = inbox.processOneMsg();
+                    }
+                });
+            }
+
         } catch (InterruptedException e) {
             logger.warn("Stop post office exception!", e);
         }
