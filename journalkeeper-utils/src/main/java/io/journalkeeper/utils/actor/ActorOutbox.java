@@ -19,7 +19,6 @@ class ActorOutbox {
 
     final static int DEFAULT_CAPACITY = 1000;
 
-    private boolean stopped = false;
 
     ActorOutbox(String myAddr) {
         this(DEFAULT_CAPACITY, myAddr);
@@ -39,10 +38,8 @@ class ActorOutbox {
     }
     ActorMsg send(String addr, String topic, ActorMsg.Response response, Object... payloads){
         ActorMsg actorMsg = new ActorMsg(msgId.getAndIncrement(), myAddr, addr, topic,response, payloads);
-        if (stopped) {
-            logger.info("Actor stopped, ignore message: {}.", actorMsg);
-        }
         msgQueue.add(actorMsg);
+
         ring();
         return actorMsg;
     }
@@ -71,10 +68,6 @@ class ActorOutbox {
                 ring.notify();
             }
         }
-    }
-
-    void stop() {
-        stopped = true;
     }
 
     boolean cleared() {

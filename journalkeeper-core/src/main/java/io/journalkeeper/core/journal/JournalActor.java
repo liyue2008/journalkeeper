@@ -9,6 +9,7 @@ import io.journalkeeper.persistence.PersistenceFactory;
 import io.journalkeeper.utils.actor.Actor;
 import io.journalkeeper.utils.actor.annotation.ActorListener;
 import io.journalkeeper.utils.actor.annotation.ActorScheduler;
+import io.journalkeeper.utils.actor.annotation.ActorSubscriber;
 import io.journalkeeper.utils.config.Config;
 import io.journalkeeper.utils.spi.ServiceSupport;
 import org.slf4j.Logger;
@@ -132,6 +133,10 @@ private static final Logger logger = LoggerFactory.getLogger( JournalActor.class
             journal.clear(journalSnapshot);
         }
         logger.info("Compact journal finished, journal: {}.", journal);
+    }
+    @ActorSubscriber
+    private void onStop() {
+        flush();
     }
 
     public Actor getActor() {

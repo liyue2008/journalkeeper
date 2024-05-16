@@ -14,23 +14,20 @@ public class PostOffice{
     private final List<Postman> postmanList;
     private final static int DEFAULT_POSTMAN_COUNT = 1;
     public final static String PUB_ADDR = "PUB";
-    private final Actor pubSubActor;
     private final Map<String, Set<ActorInbox>> pubSubMap = new ConcurrentHashMap<>();
     private final ScheduleActor scheduleActor;
     private final List<Actor> actorList;
     private final String name;
-    private boolean stopped = false;
 
     private PostOffice(int threadCount, List<Actor> actorList, String name) {
         this.name = null == name ? "" : name;
         this.scheduleActor = new ScheduleActor(this.name);
-        this.actorList = Collections.unmodifiableList(actorList);
-        pubSubActor = Actor.builder(PUB_ADDR).setDefaultHandlerFunction(this::pubMsg).build();
-        List<Actor> allActors = new ArrayList<>(actorList.size() + 2);
-        allActors.add(pubSubActor);
-        allActors.add(scheduleActor.getActor());
-        allActors.addAll(actorList);
-        allActors.forEach(this::addActor);
+        this.actorList = new ArrayList<>(actorList.size() + 2);
+        Actor pubSubActor = Actor.builder(PUB_ADDR).setDefaultHandlerFunction(this::pubMsg).build();
+        this.actorList.add(pubSubActor);
+        this.actorList.add(scheduleActor.getActor());
+        this.actorList.addAll(actorList);
+        this.actorList.forEach(this::addActor);
 
         List<List<ActorInbox>> threadInboxList = new ArrayList<>(threadCount);
         for (int i = 0; i < threadCount; i++) {
@@ -41,7 +38,7 @@ public class PostOffice{
             threadOutboxList.add(new ArrayList<>());
         }
         int threadIndex = 0;
-        for (Actor actor: allActors) {
+        for (Actor actor: this.actorList) {
             threadInboxList.get(threadIndex++ % threadCount).add(actor.getInbox());
             threadOutboxList.get(threadIndex++ % threadCount).add(actor.getOutbox());
         }
@@ -49,7 +46,7 @@ public class PostOffice{
         this.postmanList = new ArrayList<>(threadCount);
         for (int i = 0; i < threadCount; i++) {
             Postman.Builder builder = Postman.builder().postOffice(this)
-                    .name("Postman-" + (name.isEmpty() ? "" : (name + "-")) + i);
+                    .name("Postman-" + (this.name.isEmpty() ? "" : (this.name + "-")) + i);
             threadInboxList.get(i).forEach(builder::addInbox);
             threadOutboxList.get(i).forEach(builder::addOutbox);
             this.postmanList.add(builder.build());
@@ -59,6 +56,9 @@ public class PostOffice{
         Runtime.getRuntime().addShutdownHook(new Thread(this::stop));
     }
 
+    private String name() {
+        return "Post office " + this.name;
+    }
 
     private void addActor(Actor actor) {
         inboxMap.put(actor.getInbox().getMyAddr(), actor.getInbox());
@@ -99,18 +99,12 @@ public class PostOffice{
     }
 
     public void stop() {
-        if (stopped) {
-            return;
-        }
-        stopped = true;
+
         try {
             // 停止接收新的定时任务
             // 取消所有定时任务
-            scheduleActor.getActor().send("Scheduler","stop");
-            while (!(scheduleActor.getActor().outboxCleared() && scheduleActor.getActor().inboxCleared())) {
-                //noinspection BusyWait
-                Thread.sleep(10);
-            }
+            scheduleActor.stop();
+
 
             // 停止所有Postman线程
             for (Postman postman : postmanList) {
@@ -132,7 +126,7 @@ public class PostOffice{
                     }
                 });
             }
-
+            logger.info("{} stopped.", name());
         } catch (InterruptedException e) {
             logger.warn("Stop post office exception!", e);
         }

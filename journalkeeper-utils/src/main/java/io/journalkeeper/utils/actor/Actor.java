@@ -24,7 +24,6 @@ public class Actor {
     // 对请求/响应模式的封装支持
     private final ActorResponseSupport responseSupport;
 
-    private boolean stopped = false;
     private Actor(String addr) {
         this.addr = addr;
         this.outbox = new ActorOutbox(addr);
@@ -182,11 +181,6 @@ public class Actor {
 
     public static Builder builder(String addr) {
         return new Builder(addr);
-    }
-
-    void stop() {
-        stopped = true;
-        outbox.stop();
     }
 
     boolean outboxCleared() {

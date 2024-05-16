@@ -589,6 +589,10 @@ public class StateActor implements RaftState{
                     journal.commitIndex(), state.lastApplied(), localUri, e);
         }
     }
+    @ActorSubscriber
+    private void onStop() {
+        flush();
+    }
 
     /**
      * 监听属性commitIndex的变化，

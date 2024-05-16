@@ -43,15 +43,15 @@ class ScheduleActor {
         return actor;
     }
 
-    @ActorListener
-    private void stop () {
-        this.stopped = true;
+    void stop () throws InterruptedException {
         runningTasks.values().forEach(f -> f.cancel(false));
         runningTasks.clear();
         if (null != executorService) {
             executorService.shutdown();
+            if (!executorService.awaitTermination(10, TimeUnit.SECONDS)) {
+                executorService.shutdownNow();
+            }
             executorService = null;
         }
-        getActor().stop();
     }
 }
