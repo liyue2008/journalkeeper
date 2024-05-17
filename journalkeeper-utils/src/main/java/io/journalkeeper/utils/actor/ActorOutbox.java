@@ -44,6 +44,17 @@ class ActorOutbox {
         return actorMsg;
     }
 
+    void send(ActorMsg actorMsg) {
+        msgQueue.add(actorMsg);
+        ring();
+    }
+
+    ActorMsg createMsg(String addr, String topic, ActorMsg.Response response, Object... payloads){
+        return new ActorMsg(msgId.getAndIncrement(), myAddr, addr, topic,response, payloads);
+    }
+
+
+
 
     boolean consumeOneMsg(Consumer<ActorMsg> consumer) {
         ActorMsg msg = msgQueue.peek();

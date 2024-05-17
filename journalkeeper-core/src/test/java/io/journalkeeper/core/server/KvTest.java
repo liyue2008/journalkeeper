@@ -109,6 +109,8 @@ public class KvTest {
             properties.setProperty("persistence.journal.file_data_size", String.valueOf(128 * 1024));
             properties.setProperty("persistence.index.file_data_size", String.valueOf(16 * 1024));
             properties.setProperty("disable_logo", "true");
+            properties.setProperty("server_name", String.valueOf(i));
+
             propertiesList.add(properties);
         }
         List<BootStrap> kvServers = createServers(serverURIs, propertiesList, RaftServer.Roll.VOTER, true);
@@ -116,7 +118,7 @@ public class KvTest {
         while (!kvServers.isEmpty()) {
             JkClient kvClient = new JkClient(kvServers.get(0).getRaftClient());
             if (kvServers.size() > nodes / 2) {
-                kvClient.update("SET", "key" + keyNum + " value" + keyNum);
+                kvClient.update("SET", "key" + keyNum + " value" + keyNum, ResponseConfig.ALL).get();
             }
 
 

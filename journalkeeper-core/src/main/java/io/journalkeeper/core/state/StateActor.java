@@ -259,7 +259,7 @@ public class StateActor implements RaftState{
         ServerMetadata serverMetadata = new ServerMetadata();
         serverMetadata.setInitialized(true);
         serverMetadata.setThisServer(localUri);
-        serverMetadata.setCommitIndex(0L);
+        serverMetadata.setCommitIndex(journal.commitIndex());
         return serverMetadata;
     }
 

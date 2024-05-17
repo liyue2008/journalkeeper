@@ -19,4 +19,12 @@ public class RpcMsg <T>{
     public T getRequest() {
         return request;
     }
+
+    @Override
+    public String toString() {
+        return "RpcMsg{" +
+                "uri=" + uri +
+                ", request=" + request +
+                '}';
+    }
 }
