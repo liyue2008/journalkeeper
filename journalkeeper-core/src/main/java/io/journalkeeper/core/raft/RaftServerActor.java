@@ -35,7 +35,7 @@ import static io.journalkeeper.core.api.RaftJournal.INTERNAL_PARTITION;
 
 public class RaftServerActor implements  RaftServer {
     private static final Logger logger = LoggerFactory.getLogger( RaftServerActor.class );
-
+    private Roll roll;
     private final ServerContext context;
     private ServerRpc serverRpc;
     private final Actor actor = Actor.builder("RaftServer").setHandlerInstance(this).build();
@@ -55,8 +55,9 @@ public class RaftServerActor implements  RaftServer {
 
     private ServerContext buildServerContext(Roll roll, StateFactory stateFactory, JournalEntryParser journalEntryParser, Properties properties, Config config) {
         JournalActor journalActor = new JournalActor(journalEntryParser, config, properties);
-        StateActor stateActor = new StateActor(roll, stateFactory, journalEntryParser, journalActor.getRaftJournal(),config, properties);
+        StateActor stateActor = new StateActor(stateFactory, journalEntryParser, journalActor.getRaftJournal(),config, properties);
         VoterActor voterActor = new VoterActor(journalEntryParser, null, journalActor.getRaftJournal(),stateActor.getState(), config);
+        ObserverActor observerActor = new ObserverActor(journalActor.getRaftJournal(),stateActor.getState(), config);
         ServerRpcActor serverRpcActor = new ServerRpcActor();
         this.serverRpc = serverRpcActor;
         RpcActor rpcActor = new RpcActor(properties);
@@ -68,6 +69,7 @@ public class RaftServerActor implements  RaftServer {
                 .addActor(journalActor.getActor())
                 .addActor(stateActor.getActor())
                 .addActor(voterActor.getActor())
+                .addActor(observerActor.getActor())
                 .addActor(serverRpcActor.getActor())
                 .addActor(rpcActor.getActor())
                 .addActor(eventBusActor.getActor())
@@ -76,9 +78,10 @@ public class RaftServerActor implements  RaftServer {
 
     }
 
+    @ActorListener
     @Override
     public Roll roll() {
-        return this.context.getState().getRole();
+        return roll;
     }
 
     @Override
@@ -173,7 +176,7 @@ public class RaftServerActor implements  RaftServer {
 
     @ActorListener
     private List<URI> getObservers() {
-        // TODO
+        // TODO 维护Raft集群和Observer的心跳。
         return Collections.emptyList();
     }
 
@@ -182,17 +185,14 @@ public class RaftServerActor implements  RaftServer {
         // TODO
         return null;
     }
-    @ActorListener
-    private GetServerStatusResponse getServerStatus() {
-        // TODO
-        return null;
-    }
+
 
     @ActorListener
-    private UpdateVotersResponse updateVoters(UpdateVotersRequest request) {
-        // TODO
-        return null;
+    private ConvertRollResponse convertRoll(ConvertRollRequest request) {
+        this.roll = request.getRoll();
+        return new ConvertRollResponse();
     }
+
 
 
     @ActorListener

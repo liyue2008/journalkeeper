@@ -1,5 +1,6 @@
 package io.journalkeeper.core.raft;
 
+import io.journalkeeper.rpc.BaseResponse;
 import io.journalkeeper.rpc.RpcAccessPointFactory;
 import io.journalkeeper.rpc.server.ServerRpc;
 import io.journalkeeper.rpc.server.ServerRpcAccessPoint;
@@ -47,13 +48,11 @@ public class RpcActor {
 
             String topic = actorMsg.getTopic();
             Method method = serverRpc.getClass().getDeclaredMethod(topic, rpcMsg.getRequest().getClass());
-            @SuppressWarnings("rawtypes") CompletableFuture future = (CompletableFuture) method.invoke(serverRpc, rpcMsg.getRequest());
-            //noinspection unchecked
+            @SuppressWarnings("unchecked") CompletableFuture<? extends BaseResponse> future = (CompletableFuture<? extends BaseResponse>) method.invoke(serverRpc, rpcMsg.getRequest());
             future.thenAccept(response -> actor.reply(actorMsg, response));
 
         } catch (Exception e) {
-            actor.reply(actorMsg, e);
-            logger.warn("actorMsg:" + actorMsg, e);
+            actor.replyException(actorMsg, e);
         }
     }
 

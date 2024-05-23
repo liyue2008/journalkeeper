@@ -73,8 +73,6 @@ public class StateActor implements RaftState{
     protected MetadataPersistence metadataPersistence;
 
     private URI localUri;
-    private RaftServer.Roll roll;
-
 
     private final JournalEntryParser journalEntryParser;
     /**
@@ -90,8 +88,7 @@ public class StateActor implements RaftState{
 
     private boolean isRecovered = false;
 
-    public StateActor(RaftServer.Roll roll, StateFactory stateFactory, JournalEntryParser journalEntryParser, RaftJournal journal, Config config, Properties properties) {
-        this.roll = roll;
+    public StateActor(StateFactory stateFactory, JournalEntryParser journalEntryParser, RaftJournal journal, Config config, Properties properties) {
         this.stateFactory = stateFactory;
         this.journalEntryParser = journalEntryParser;
         this.journal = journal;
@@ -328,11 +325,6 @@ public class StateActor implements RaftState{
 
 
     @Override
-    public RaftServer.Roll getRole() {
-        return roll;
-    }
-
-    @Override
     public long commitIndex() {
         return 0;
     }
@@ -471,11 +463,7 @@ public class StateActor implements RaftState{
         return null;
     }
 
-    @ActorListener
-    private ConvertRollResponse convertRoll(ConvertRollRequest request) {
-        this.roll = request.getRoll();
-        return new ConvertRollResponse();
-    }
+
 
     /**
      * Check reserved entries to ensure the last UpdateVotersConfig entry is applied to the current voter config.
@@ -602,18 +590,18 @@ public class StateActor implements RaftState{
      * 2. lastApplied自增，将log[lastApplied]应用到状态机，更新当前状态state；
      *
      */
+    @ActorScheduler(interval = 100L)
     @ActorSubscriber(topic = "onJournalCommit")
     private void applyEntries() {
         if(!isRecovered){
             return;
         }
-        if (state.lastApplied() >= journal.commitIndex()) {
-            return;
+        while (state.lastApplied() < journal.commitIndex()) {
+            long offset = journal.readOffset(state.lastApplied());
+            JournalEntry entryHeader = journal.readEntryHeaderByOffset(offset);
+            StateResult stateResult = state.applyEntry(entryHeader, new EntryFutureImpl(journal, offset), journal);
+            actor.pub("onStateChange", stateResult);
         }
-        long offset = journal.readOffset(state.lastApplied());
-        JournalEntry entryHeader = journal.readEntryHeaderByOffset(offset);
-        StateResult stateResult = state.applyEntry(entryHeader, new EntryFutureImpl(journal, offset), journal);
-        actor.pub("onStateChange", stateResult);
     }
 
 }

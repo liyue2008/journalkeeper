@@ -8,6 +8,7 @@ import io.journalkeeper.core.state.Snapshot;
 import io.journalkeeper.core.transaction.JournalTransactionManager;
 import io.journalkeeper.exceptions.IndexUnderflowException;
 import io.journalkeeper.exceptions.NotLeaderException;
+import io.journalkeeper.exceptions.UpdateConfigurationException;
 import io.journalkeeper.rpc.client.*;
 import io.journalkeeper.rpc.server.*;
 import io.journalkeeper.utils.actor.Actor;
@@ -22,9 +23,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.net.URI;
 import java.util.*;
-import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
@@ -484,6 +483,28 @@ public class VoterActor {
                 });
 
     }
+
+    @ResponseManually
+    @ActorListener
+    private void updateVoters(@ActorMessage ActorMsg msg) {
+        UpdateVotersRequest request = msg.getPayload();
+        UpdateVotersS1Entry updateVotersS1Entry = new UpdateVotersS1Entry(request.getOldConfig(), request.getNewConfig(), state.getConfigState().getEpoch() + 1);
+        byte [] entry = InternalEntriesSerializeSupport.serialize(updateVotersS1Entry);
+        UpdateClusterStateRequest updateClusterStateRequest = new UpdateClusterStateRequest(new UpdateRequest(entry, INTERNAL_PARTITION, 1));
+        actor.<UpdateClusterStateResponse>sendThen("Voter", "updateClusterState", updateClusterStateRequest)
+                .whenComplete((response, exception) -> {
+                   if (null != exception) {
+                       actor.reply(msg, new UpdateVotersResponse(exception));
+                   } else {
+                       if (!response.success()) {
+                           actor.reply(msg, new UpdateVotersResponse((new UpdateConfigurationException("Failed to update voters configuration in step 1. " + response.errorString()))));
+                       } else {
+                           actor.reply(msg, new UpdateVotersResponse());
+                       }
+                   }
+                });
+    }
+
 
     // Leader Only
     
@@ -950,6 +971,19 @@ public class VoterActor {
         this.leaderUri = leaderUri;
     }
 
+
+    @ActorListener
+    private GetServerStatusResponse getServerStatus() {
+
+        return new GetServerStatusResponse(new ServerStatus(
+                RaftServer.Roll.VOTER,
+                journal.minIndex(),
+                journal.maxIndex(),
+                journal.commitIndex(),
+                state.lastApplied(),
+                voterState.getState()));
+    }
+
     private class ReplicationDestination {
 
         private final URI uri;
@@ -1032,12 +1066,11 @@ public class VoterActor {
             actor.<AsyncAppendEntriesResponse>sendThen("Rpc", "asyncAppendEntries", new RpcMsg<>(this.uri, request))
                     .thenAccept(resp -> handleAppendEntriesResponse(resp, entries.size(), fistSnapShotEntry.getKey()))
                     .exceptionally(e -> {
-                        logger.warn("Replication execution exception, from {} to {}, cause: {}.", state.getLocalUri(), uri, null == e.getCause() ? e.getMessage() : e.getCause().getMessage());
+                        // TODO 改回warn
+                        logger.debug("Replication execution exception, from {} to {}, cause: {}.", state.getLocalUri(), uri, null == e.getCause() ? e.getMessage() : e.getCause().getMessage());
                         return null;
                     })
-                    .whenComplete((c, r) -> {
-                        waitingForResponse = false;
-                    });
+                    .whenComplete((c, r) -> waitingForResponse = false);
             lastHeartbeatRequestTime = System.currentTimeMillis();
         }
 

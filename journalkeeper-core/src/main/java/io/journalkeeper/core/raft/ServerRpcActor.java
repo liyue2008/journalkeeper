@@ -1,6 +1,7 @@
 package io.journalkeeper.core.raft;
 
 import io.journalkeeper.core.api.ClusterConfiguration;
+import io.journalkeeper.core.api.RaftServer;
 import io.journalkeeper.rpc.RpcAccessPointFactory;
 import io.journalkeeper.rpc.client.*;
 import io.journalkeeper.rpc.server.*;
@@ -121,7 +122,15 @@ public class ServerRpcActor implements ServerRpc {
 
     @Override
     public CompletableFuture<GetServerStatusResponse> getServerStatus() {
-        return forwardRequest("getServerStatus");
+
+        return actor.<RaftServer.Roll>sendThen("RaftServer", "roll")
+                .thenCompose(roll -> {
+                    if (roll == RaftServer.Roll.VOTER) {
+                        return forwardRequest("Voter", "getServerStatus");
+                    } else {
+                        return forwardRequest("Observer", "getServerStatus");
+                    }
+                });
     }
 
     @Override
@@ -138,7 +147,7 @@ public class ServerRpcActor implements ServerRpc {
 
     @Override
     public CompletableFuture<UpdateVotersResponse> updateVoters(UpdateVotersRequest request) {
-        return forwardRequest(request);
+        return forwardRequest(request,"Voter");
 
     }
 

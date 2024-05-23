@@ -39,7 +39,11 @@ public class LocalRpcBus implements ClientServerRpcAccessPoint, ServerRpcAccessP
 
     @Override
     public ServerRpc getServerRpcAgent(URI uri) {
-        return providers.get(uri);
+        ServerRpc serverRpc = providers.get(uri);
+        if (null == serverRpc) {
+            throw new ServerNotFoundException("No provider for uri: " + uri + "!");
+        }
+        return serverRpc;
     }
 
     @Override

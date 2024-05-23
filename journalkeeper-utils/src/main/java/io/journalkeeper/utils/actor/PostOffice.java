@@ -74,7 +74,8 @@ public class PostOffice{
     void send(ActorMsg msg) {
         ActorInbox inbox = inboxMap.get(msg.getReceiver());
         if (inbox == null) {
-            throw new IllegalArgumentException("Receiver not found!");
+            logger.warn("Receiver not fond! msg: {}", msg);
+            return;
         }
         inbox.receive(msg);
     }
