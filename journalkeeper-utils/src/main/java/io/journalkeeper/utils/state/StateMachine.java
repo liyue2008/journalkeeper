@@ -22,6 +22,12 @@ public class StateMachine {
         this.stats = stats;
     }
 
+    /**
+     * Converts the current state to the specified new state.
+     *
+     * @param  newState  the new state to convert to
+     * @throws IllegalStateException if the current state cannot be converted to the new state
+     */
     public synchronized void convertTo(String newState) {
         String oldState = currentState;
         Set<String> validPreStates = stats.get(newState);

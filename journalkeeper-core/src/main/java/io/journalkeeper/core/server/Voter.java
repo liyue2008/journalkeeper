@@ -54,13 +54,13 @@ import io.journalkeeper.rpc.server.InstallSnapshotResponse;
 import io.journalkeeper.rpc.server.RequestVoteRequest;
 import io.journalkeeper.rpc.server.RequestVoteResponse;
 import io.journalkeeper.rpc.server.ServerRpcAccessPoint;
+import io.journalkeeper.utils.state.StateMachine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 import java.nio.file.Paths;
-import java.util.List;
-import java.util.Properties;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
@@ -103,6 +103,8 @@ class Voter extends AbstractServer implements CheckTermInterceptor {
      * 选民状态，在LEADER、FOLLOWER和CANDIDATE之间转换。初始值为FOLLOWER。
      */
     private final VoterStateMachine voterState = new VoterStateMachine();
+
+    private final StateMachine raftState;
     /**
      * 在当前任期内收到选票的候选人地址（如果没有就为 null）
      */
@@ -137,6 +139,14 @@ class Voter extends AbstractServer implements CheckTermInterceptor {
           ServerRpcAccessPoint serverRpcAccessPoint,
           Properties properties) {
         super(stateFactory, journalEntryParser, scheduledExecutor, asyncExecutor, serverRpcAccessPoint, properties);
+
+        raftState = StateMachine.builder()
+                .initState("FOLLOWER")
+                .addState("LEADER", new HashSet<>(Collections.singletonList("FOLLOWER")))
+                .addState("OBSERVER", new HashSet<>(Arrays.asList("FOLLOWER", "LEADER", "PRE_VOTING", "CANDIDATE")))
+                .addState("CANDIDATE", new HashSet<>(Collections.singletonList("PRE_VOTING")))
+                .addState("PRE_VOTING", new HashSet<>(Collections.singletonList("FOLLOWER")))
+                .build();
         this.config = toConfig(properties);
 
         state.addInterceptor(InternalEntryType.TYPE_UPDATE_VOTERS_S1, this::applyUpdateVotersInternalEntry);
