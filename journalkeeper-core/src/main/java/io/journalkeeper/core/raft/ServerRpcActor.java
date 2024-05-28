@@ -123,14 +123,7 @@ public class ServerRpcActor implements ServerRpc {
     @Override
     public CompletableFuture<GetServerStatusResponse> getServerStatus() {
 
-        return actor.<RaftServer.Roll>sendThen("RaftServer", "roll")
-                .thenCompose(roll -> {
-                    if (roll == RaftServer.Roll.VOTER) {
-                        return forwardRequest("Voter", "getServerStatus");
-                    } else {
-                        return forwardRequest("Observer", "getServerStatus");
-                    }
-                });
+        return forwardRequest("Voter", "getServerStatus");
     }
 
     @Override
@@ -159,7 +152,7 @@ public class ServerRpcActor implements ServerRpc {
 
     @Override
     public CompletableFuture<ConvertRollResponse> convertRoll(ConvertRollRequest request) {
-        return forwardRequest(request, "State");
+        return forwardRequest(request, "Voter");
 
     }
 

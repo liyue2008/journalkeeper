@@ -182,50 +182,8 @@ public class StateActor implements RaftState{
                         actor.reply(msg, new InstallSnapshotResponse(term));
                         return ;
                     }
-                    logger.info("Install snapshot, offset: {}, lastIncludedIndex: {}, lastIncludedTerm: {}, data length: {}, isDone: {}... " +
-                                    "journal minIndex: {}, maxIndex: {}, commitIndex: {}...",
-                            ThreadSafeFormat.formatWithComma(offset),
-                            ThreadSafeFormat.formatWithComma(lastIncludedIndex),
-                            lastIncludedTerm,
-                            data.length,
-                            isDone,
-                            ThreadSafeFormat.formatWithComma(journal.minIndex()),
-                            ThreadSafeFormat.formatWithComma(journal.maxIndex()),
-                            ThreadSafeFormat.formatWithComma(journal.commitIndex())
-                    );
-                    long lastApplied = lastIncludedIndex + 1;
-                    Path snapshotPath = snapshotsPath().resolve(String.valueOf(lastApplied));
                     try {
-                        partialSnapshot.installTrunk(offset, data, snapshotPath);
-
-                        if (isDone) {
-                            Snapshot snapshot;
-                            logger.info("All snapshot files received, discard any existing snapshot with a same or smaller index...");
-                            // discard any existing snapshot with a same or smaller index
-                            NavigableMap<Long, Snapshot> headMap = snapshots.headMap(lastApplied, true);
-                            while (!headMap.isEmpty()) {
-                                snapshot = headMap.remove(headMap.firstKey());
-                                logger.info("Discard snapshot: {}.", snapshot.getPath());
-                                snapshot.close();
-                                snapshot.clear();
-                            }
-                            partialSnapshot.finish();
-                            logger.info("add the installed snapshot to snapshots: {}...", snapshotPath);
-                            // add the installed snapshot to snapshots.
-                            snapshot = new Snapshot(stateFactory, metadataPersistence);
-                            snapshot.recover(snapshotPath, properties);
-                            snapshots.put(lastApplied, snapshot);
-
-                            logger.info("New installed snapshot: {}.", snapshot.getJournalSnapshot());
-
-                            actor.send("Journal", "compact", snapshot.getJournalSnapshot(), lastIncludedIndex, lastIncludedTerm);
-
-                            state.close();
-                            state.clear();
-                            snapshot.dump(statePath());
-                            state.recover(statePath(), properties);
-                            logger.info("Install snapshot successfully!");
-                        }
+                        doInstallSnapshot(offset, lastIncludedIndex, lastIncludedTerm, data, isDone);
 
                     } catch (IOException e) {
                         logger.warn("Install snapshot exception: ", e);
@@ -233,6 +191,53 @@ public class StateActor implements RaftState{
                     }
                     actor.reply(msg, new InstallSnapshotResponse(term));
                 });
+    }
+
+    @ActorListener
+    private void doInstallSnapshot(long offset, long lastIncludedIndex, int lastIncludedTerm, byte[] data, boolean isDone) throws IOException {
+        logger.info("Install snapshot, offset: {}, lastIncludedIndex: {}, lastIncludedTerm: {}, data length: {}, isDone: {}... " +
+                        "journal minIndex: {}, maxIndex: {}, commitIndex: {}...",
+                ThreadSafeFormat.formatWithComma(offset),
+                ThreadSafeFormat.formatWithComma(lastIncludedIndex),
+                lastIncludedTerm,
+                data.length,
+                isDone,
+                ThreadSafeFormat.formatWithComma(journal.minIndex()),
+                ThreadSafeFormat.formatWithComma(journal.maxIndex()),
+                ThreadSafeFormat.formatWithComma(journal.commitIndex())
+        );
+        long lastApplied = lastIncludedIndex + 1;
+        Path snapshotPath = snapshotsPath().resolve(String.valueOf(lastApplied));
+        partialSnapshot.installTrunk(offset, data, snapshotPath);
+
+        if (isDone) {
+            Snapshot snapshot;
+            logger.info("All snapshot files received, discard any existing snapshot with a same or smaller index...");
+            // discard any existing snapshot with a same or smaller index
+            NavigableMap<Long, Snapshot> headMap = snapshots.headMap(lastApplied, true);
+            while (!headMap.isEmpty()) {
+                snapshot = headMap.remove(headMap.firstKey());
+                logger.info("Discard snapshot: {}.", snapshot.getPath());
+                snapshot.close();
+                snapshot.clear();
+            }
+            partialSnapshot.finish();
+            logger.info("add the installed snapshot to snapshots: {}...", snapshotPath);
+            // add the installed snapshot to snapshots.
+            snapshot = new Snapshot(stateFactory, metadataPersistence);
+            snapshot.recover(snapshotPath, properties);
+            snapshots.put(lastApplied, snapshot);
+
+            logger.info("New installed snapshot: {}.", snapshot.getJournalSnapshot());
+
+            actor.send("Journal", "compact", snapshot.getJournalSnapshot(), lastIncludedIndex, lastIncludedTerm);
+
+            state.close();
+            state.clear();
+            snapshot.dump(statePath());
+            state.recover(statePath(), properties);
+            logger.info("Install snapshot successfully!");
+        }
     }
 
     private void createFistSnapshot(List<URI> voters, Set<Integer> partitions, URI preferredLeader) throws IOException {

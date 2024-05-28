@@ -7,8 +7,10 @@ import io.journalkeeper.core.state.ConfigState;
 import io.journalkeeper.core.state.Snapshot;
 import io.journalkeeper.core.transaction.JournalTransactionManager;
 import io.journalkeeper.exceptions.IndexUnderflowException;
+import io.journalkeeper.exceptions.InstallSnapshotException;
 import io.journalkeeper.exceptions.NotLeaderException;
 import io.journalkeeper.exceptions.UpdateConfigurationException;
+import io.journalkeeper.rpc.StatusCode;
 import io.journalkeeper.rpc.client.*;
 import io.journalkeeper.rpc.server.*;
 import io.journalkeeper.utils.actor.Actor;
@@ -17,6 +19,7 @@ import io.journalkeeper.utils.actor.annotation.*;
 import io.journalkeeper.utils.config.Config;
 import io.journalkeeper.utils.event.Event;
 import io.journalkeeper.utils.event.EventType;
+import io.journalkeeper.utils.state.StateMachine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -29,14 +32,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import static io.journalkeeper.core.api.RaftJournal.INTERNAL_PARTITION;
-import static io.journalkeeper.core.entry.internal.InternalEntryType.TYPE_UPDATE_VOTERS_S1;
-import static io.journalkeeper.core.entry.internal.InternalEntryType.TYPE_UPDATE_VOTERS_S2;
 
 public class VoterActor {
     public final static float RAND_INTERVAL_RANGE = 0.5F;
     private static final Logger logger = LoggerFactory.getLogger( VoterActor.class);
     private final Actor actor = Actor.builder("Voter").setHandlerInstance(this).build();
-    private final VoterStateMachine voterState = new VoterStateMachine();
+    private final StateMachine<VoterState> raftState;
     private final RaftJournal journal;
     private final RaftState state;
     private final Config config;
@@ -58,9 +59,14 @@ public class VoterActor {
     private boolean isWritable = true; // Leader 是否可写
     private long disableWriteTimeout = 0L; // 禁用写操作的超时时间
     private boolean isAnnounced = false; // 发布Leader announcement 被多数确认，正式行使leader职权。
-
     private final List<WaitingResponse> waitingResponses = new LinkedList<>(); // 处理中的待响应的update请求
     private final List<ReplicationDestination> replicationDestinations = new ArrayList<>(); // Followers
+
+
+    // Observer Only
+
+    private boolean installSnapshotInProgress = false;
+    // TODO 选择parent节点的逻辑，如果调用失败，更换parent节点；
 
 
     VoterActor(JournalEntryParser journalEntryParser, JournalTransactionManager journalTransactionManager, RaftJournal journal, RaftState state, Config config) {
@@ -69,6 +75,15 @@ public class VoterActor {
         this.journal = journal;
         this.state = state;
         this.config = config;
+
+        this.raftState = StateMachine.<VoterState>builder()
+                .initState(VoterState.FOLLOWER)
+                .addState(VoterState.LEADER, new HashSet<>(Collections.singletonList(VoterState.FOLLOWER)))
+                .addState(VoterState.OBSERVER, new HashSet<>(Arrays.asList(VoterState.FOLLOWER, VoterState.LEADER, VoterState.PRE_VOTING, VoterState.CANDIDATE)))
+                .addState(VoterState.CANDIDATE, new HashSet<>(Collections.singletonList(VoterState.PRE_VOTING)))
+                .addState(VoterState.PRE_VOTING, new HashSet<>(Collections.singletonList(VoterState.FOLLOWER)))
+                .build();
+
     }
 
     @ActorListener
@@ -110,7 +125,7 @@ public class VoterActor {
         if (!request.isFromPreferredLeader()) {
             // 如果当前是LEADER那直接拒绝投票
 
-            if (voterState.getState() == VoterState.LEADER) {
+            if (raftState.current() == VoterState.LEADER) {
                 rejectMsg = "I'm the leader";
                 return rejectAndResponse(currentTerm, request.getCandidate(), rejectMsg);
             }
@@ -184,23 +199,41 @@ public class VoterActor {
         }
         return isTermChanged;
     }
+    @ActorListener
+    private ConvertRollResponse convertRoll(ConvertRollRequest request) {
+        if (request.getRoll() == roll()) {
+            return new ConvertRollResponse();
+        }
+        if (request.getRoll() == RaftServer.Roll.VOTER) {
+            convertToFollower();
+        } else {
+            convertToObserver();
+        }
+        return new ConvertRollResponse();
+    }
 
     private RequestVoteResponse rejectAndResponse(int term, URI candidate, String rejectMessage) {
         logger.info("Reject vote request from candidate {}, cause: [{}], {}.", candidate, rejectMessage, voterInfo());
         return new RequestVoteResponse(term, false);
     }
 
-    @ActorListener
+    private void convertToObserver() {
+        VoterState oldState = raftState.current();
+        raftState.convertTo(VoterState.OBSERVER);
+        logger.info("Convert voter state from {} to OBSERVER.", oldState);
+
+    }
+
     private void convertToFollower() {
-        VoterState oldState = voterState.getState();
-        voterState.convertToFollower();
+        VoterState oldState = raftState.current();
+        raftState.convertTo(VoterState.FOLLOWER);
         this.electionTimeoutMs = config.<Long>get("election_timeout_ms") + randomInterval(config.get("election_timeout_ms"));
         logger.info("Convert voter state from {} to FOLLOWER, electionTimeout: {}.", oldState, electionTimeoutMs);
     }
 
     private void convertToCandidate() {
-        VoterState oldState = voterState.getState();
-        voterState.convertToCandidate();
+        VoterState oldState = raftState.current();
+        raftState.convertTo(VoterState.CANDIDATE);
         logger.info("Convert voter state from {} to CANDIDATE, electionTimeout: {}, {}.", oldState, electionTimeoutMs, voterInfo());
         if(isSingleNodeCluster()) {
             convertToLeader();
@@ -209,8 +242,8 @@ public class VoterActor {
 
 
     private void convertToPreVoting() {
-        VoterState oldState = voterState.getState();
-        voterState.convertToPreVoting();
+        VoterState oldState = raftState.current();
+        raftState.convertTo(VoterState.PRE_VOTING);
         logger.info("Convert voter state from {} to PRE_VOTING, electionTimeout: {}, {}.", oldState, electionTimeoutMs, voterInfo());
         if(isSingleNodeCluster()){
             convertToCandidate();
@@ -221,8 +254,8 @@ public class VoterActor {
      * 将状态转换为Leader
      */
     private void convertToLeader() {
-        VoterState oldState = voterState.getState();
-        voterState.convertToLeader();
+        VoterState oldState = raftState.current();
+        raftState.convertTo(VoterState.LEADER);
         leaderUri = state.getLocalUri();
         this.replicationDestinations.forEach(ReplicationDestination::reset);
         announceLeader();
@@ -235,63 +268,22 @@ public class VoterActor {
         return interval + Math.round(ThreadLocalRandom.current().nextDouble(-1 * RAND_INTERVAL_RANGE, RAND_INTERVAL_RANGE) * interval);
     }
 
-    private static class VoterStateMachine {
-        private VoterState state = VoterState.FOLLOWER;
-
-        private void convertToLeader() {
-            if (state == VoterState.CANDIDATE) {
-                state = VoterState.LEADER;
-            } else {
-                throw new IllegalStateException(String.format("Change voter state from %s to %s is not allowed!", state, VoterState.LEADER));
-            }
-        }
-
-        private void convertToFollower() {
-            state = VoterState.FOLLOWER;
-        }
-
-        private void convertToCandidate() {
-            if (state == VoterState.PRE_VOTING) {
-                state = VoterState.CANDIDATE;
-            } else {
-                throw new IllegalStateException(String.format("Change voter state from %s to %s is not allowed!", state, VoterState.CANDIDATE));
-            }
-        }
-
-        private void convertToPreVoting() {
-            if (state == VoterState.PRE_VOTING || state == VoterState.FOLLOWER) {
-                state = VoterState.PRE_VOTING;
-            } else {
-                throw new IllegalStateException(String.format("Change voter state from %s to %s is not allowed!", state, VoterState.PRE_VOTING));
-            }
-        }
-
-        public VoterState getState() {
-            return state;
-        }
-
-    }
-
     // Scheduler function
     private void checkElectionTimeout() {
-        try {
-            if (voterState.getState() == VoterState.FOLLOWER && System.currentTimeMillis() - lastHeartbeat > electionTimeoutMs) {
-                convertToPreVoting();
-                // 如果不开启PreVote，直接转换成候选人
-                if(!config.<Boolean>get("enable_pre_vote")) {
-                    convertToCandidate();
-                }
-                nextElectionTime = System.currentTimeMillis() + electionTimeoutMs;
+        if (raftState.current() == VoterState.FOLLOWER && System.currentTimeMillis() - lastHeartbeat > electionTimeoutMs) {
+            convertToPreVoting();
+            // 如果不开启PreVote，直接转换成候选人
+            if(!config.<Boolean>get("enable_pre_vote")) {
+                convertToCandidate();
             }
-
-            if ((voterState.getState() == VoterState.PRE_VOTING || voterState.getState() == VoterState.CANDIDATE) && System.currentTimeMillis() > nextElectionTime) {
-
-                startElection(false);
-            }
-
-        } catch (Throwable t) {
-            logger.warn("CheckElectionTimeout Exception, {}: ", voterInfo(), t);
+            nextElectionTime = System.currentTimeMillis() + electionTimeoutMs;
         }
+
+        if ((raftState.current() == VoterState.PRE_VOTING || raftState.current() == VoterState.CANDIDATE) && System.currentTimeMillis() > nextElectionTime) {
+
+            startElection(false);
+        }
+
     }
 
     private boolean isSingleNodeCluster() {
@@ -318,10 +310,10 @@ public class VoterActor {
             win = votesGrantedInNewConfig.get() >= configState.getConfigNew().size() / 2 + 1;
         }
         if (win && isWinTheElection.compareAndSet(false, true)) {
-            if (voterState.getState() == VoterState.PRE_VOTING) {
+            if (raftState.current() == VoterState.PRE_VOTING) {
                 convertToCandidate();
                 startElection(false);
-            } else if (voterState.getState() == VoterState.CANDIDATE) {
+            } else if (raftState.current() == VoterState.CANDIDATE) {
                 convertToLeader();
             }
         }
@@ -342,7 +334,7 @@ public class VoterActor {
 
         nextElectionTime = Long.MAX_VALUE;
         votedFor = state.getLocalUri();
-        boolean isPreVote = voterState.getState() == VoterState.PRE_VOTING;
+        boolean isPreVote = raftState.current() == VoterState.PRE_VOTING;
         long lastLogIndex = journal.maxIndex() - 1;
         int lastLogTerm = journal.getTerm(lastLogIndex);
         int requestTerm = this.term + 1;
@@ -395,7 +387,7 @@ public class VoterActor {
     private String voterInfo() {
         return String.format("voterState: %s, currentTerm: %d, minIndex: %d, " +
                         "maxIndex: %d, commitIndex: %d, lastApplied: %d, uri: %s",
-                voterState.getState(), this.term, journal.minIndex(),
+                raftState.current(), this.term, journal.minIndex(),
                 journal.maxIndex(), journal.commitIndex(), state.lastApplied(), state.getLocalUri().toString());
     }
     @ActorSubscriber
@@ -409,6 +401,10 @@ public class VoterActor {
         }
         actor.addScheduler(config.get("heartbeat_interval_ms"), TimeUnit.MILLISECONDS, "replication", this::replication);
         actor.addScheduler(config.get("heartbeat_interval_ms"), TimeUnit.MILLISECONDS, "commit", this::commit);
+
+        // Observer
+        actor.addScheduler(config.get("observer.pull_interval_ms"), TimeUnit.MILLISECONDS, "pullEntries", this::pullEntries);
+
     }
 
 
@@ -434,7 +430,7 @@ public class VoterActor {
             return;
         }
 
-        if (voterState.getState() != VoterState.FOLLOWER && request.getLeader().equals(this.votedFor) && this.term == request.getTerm()) {
+        if (raftState.current() != VoterState.FOLLOWER && request.getLeader().equals(this.votedFor) && this.term == request.getTerm()) {
             this.votedFor = null;
             convertToFollower();
             setLeaderUri(request.getLeader());
@@ -522,7 +518,7 @@ public class VoterActor {
         // 6. State.applyEntries
         // 7. Leader.callback
         UpdateClusterStateRequest request = msg.getPayload();
-        if (!(voterState.getState() == VoterState.LEADER && isAnnounced)) {
+        if (!(raftState.current() == VoterState.LEADER && isAnnounced)) {
             actor.reply(msg, new UpdateClusterStateResponse(new NotLeaderException(this.leaderUri)));
         }
         if (!checkWriteable()) {
@@ -558,7 +554,7 @@ public class VoterActor {
     }
 
     private void onJournalAppend(ResponseConfig responseConfig) {
-        if (voterState.getState() != VoterState.LEADER) {
+        if (raftState.current() != VoterState.LEADER) {
             return;
         }
         switch (responseConfig) {
@@ -596,7 +592,7 @@ public class VoterActor {
      */
     @ActorListener
     private void commit() {
-        if (voterState.getState() != VoterState.LEADER) {
+        if (raftState.current() != VoterState.LEADER) {
             return;
         }
         boolean isAnyFollowerNextIndexUpdated = false;
@@ -667,7 +663,7 @@ public class VoterActor {
     }
     @ActorSubscriber
     private void onStateChange(StateResult stateResult) {
-        if (voterState.getState() != VoterState.LEADER) {
+        if (raftState.current() != VoterState.LEADER) {
             return;
         }
         if(config.get("enable_events")) {
@@ -690,7 +686,7 @@ public class VoterActor {
 
     @ActorSubscriber
     private void onJournalFlush(long journalFlushIndex) {
-        if (voterState.getState() != VoterState.LEADER) {
+        if (raftState.current() != VoterState.LEADER) {
             return;
         }
         this.waitingResponses.removeIf(waitingResponse -> waitingResponse.getToPosition() <= journalFlushIndex && waitingResponse.countdownFlush());
@@ -698,7 +694,7 @@ public class VoterActor {
 
     @ActorSubscriber(topic = "onJournalCommit")
     private void replication() {
-        if (voterState.getState() != VoterState.LEADER) {
+        if (raftState.current() != VoterState.LEADER) {
             return;
         }
         this.replicationDestinations.forEach(ReplicationDestination::onJournalCommit);
@@ -765,7 +761,7 @@ public class VoterActor {
 
     @ActorListener
     private DisableLeaderWriteResponse disableLeaderWrite(DisableLeaderWriteRequest request) {
-        if (voterState.getState() != VoterState.LEADER) {
+        if (raftState.current() != VoterState.LEADER) {
             return new DisableLeaderWriteResponse(new NotLeaderException(this.leaderUri));
         }
         long timeoutMs = request.getTimeoutMs();
@@ -781,7 +777,7 @@ public class VoterActor {
 
 
     private void checkQuorum() {
-        if (voterState.getState() != VoterState.LEADER) {
+        if (raftState.current() != VoterState.LEADER) {
             return;
         }
 
@@ -811,7 +807,7 @@ public class VoterActor {
 
     @ActorListener(topic = "checkLeadership")
     private CheckLeadershipResponse clientCheckLeadership() {
-        if (voterState.getState() == VoterState.LEADER && isAnnounced) {
+        if (raftState.current() == VoterState.LEADER && isAnnounced) {
             return new CheckLeadershipResponse();
         } else {
             return new CheckLeadershipResponse(new NotLeaderException(this.leaderUri));
@@ -823,7 +819,7 @@ public class VoterActor {
         if (type == InternalEntryType.TYPE_LEADER_ANNOUNCEMENT) {
             LeaderAnnouncementEntry leaderAnnouncementEntry = InternalEntriesSerializeSupport.parse(internalEntry);
 
-            if (voterState.getState() == VoterState.LEADER && !isAnnounced && leaderAnnouncementEntry.getTerm() == this.term) {
+            if (raftState.current() == VoterState.LEADER && !isAnnounced && leaderAnnouncementEntry.getTerm() == this.term) {
                 this.isAnnounced = true;
                 logger.info("Leader announcement applied! Leader: {}, term: {}.", state.getLocalUri(), term);
             }
@@ -847,7 +843,7 @@ public class VoterActor {
     @ActorListener
     public void queryClusterState(@ActorMessage ActorMsg msg) {
         QueryStateRequest request = msg.getPayload();
-        if (voterState.getState() == VoterState.LEADER) {
+        if (raftState.current() == VoterState.LEADER) {
             actor.sendThen("State", "queryServerState", request)
                     .thenAccept(resp -> actor.reply(msg, resp));
         } else {
@@ -972,16 +968,20 @@ public class VoterActor {
     }
 
 
+    private RaftServer.Roll roll() {
+        return raftState.current() == VoterState.OBSERVER ? RaftServer.Roll.OBSERVER : RaftServer.Roll.VOTER;
+    }
+
     @ActorListener
     private GetServerStatusResponse getServerStatus() {
 
         return new GetServerStatusResponse(new ServerStatus(
-                RaftServer.Roll.VOTER,
+                roll(),
                 journal.minIndex(),
                 journal.maxIndex(),
                 journal.commitIndex(),
                 state.lastApplied(),
-                voterState.getState()));
+                raftState.current()));
     }
 
     private class ReplicationDestination {
@@ -1044,7 +1044,7 @@ public class VoterActor {
 
             // 如果有必要，先安装第一个快照
             Map.Entry<Long, Snapshot> fistSnapShotEntry = state.getSnapshots().firstEntry();
-            if (installSnapshot(fistSnapShotEntry)) {
+            if (leaderInstallSnapshotToFollower(fistSnapShotEntry)) {
                 return;
             }
 
@@ -1099,7 +1099,7 @@ public class VoterActor {
             }
         }
 
-        private boolean installSnapshot(Map.Entry<Long, Snapshot> snapShotEntry) {
+        private boolean leaderInstallSnapshotToFollower(Map.Entry<Long, Snapshot> snapShotEntry) {
             long snapshotIndex = snapShotEntry.getKey();
             Snapshot snapshot = snapShotEntry.getValue();
             if (nextIndex >= snapshotIndex) {
@@ -1201,6 +1201,66 @@ public class VoterActor {
         }
 
 
+    }
+
+
+    // Observer methods
+
+    private URI getParentUri() {
+        List<URI> parents = state.getConfigState().voters();
+        // TODO
+        return null;
+    }
+    private void observerInstallSnapshot(long index, int iteratorId)  {
+        // Observer的提交位置已经落后目标节点太多，这时需要安装快照：
+        // 复制远端服务器的最新状态到当前状态
+        long lastIncludedIndex = index - 1;
+        if (iteratorId < 0) {
+            installSnapshotInProgress = true;
+        }
+        GetServerStateRequest request = new GetServerStateRequest(lastIncludedIndex, iteratorId);
+
+        actor.<GetServerStateResponse>sendThen("Rpc", "getServerState", new RpcMsg<>(getParentUri(), request))
+                .thenAccept(r -> {
+                    if (r.success()) {
+                        actor.sendThen("State", "doInstallSnapshot", r.getOffset(), r.getLastIncludedIndex(), r.getLastIncludedTerm(), r.getData(), r.isDone())
+                                        .thenRun(() -> {
+                                            if (!r.isDone()) {
+                                                observerInstallSnapshot(index, r.getIteratorId());
+                                            }
+                                        }).exceptionally(t -> {
+                                            logger.warn("ObserverInstallSnapshot exception {}", t.getMessage());
+                                            throw new InstallSnapshotException(t);
+                                        });
+                    } else {
+                        throw new InstallSnapshotException(r.errorString());
+                    }
+                }).whenComplete((c, r) -> installSnapshotInProgress = false);
+
+    }
+    private void pullEntries() {
+
+        if (raftState.current() != VoterState.OBSERVER || installSnapshotInProgress) {
+            return;
+        }
+
+        if (journal.commitIndex() == 0L) {
+            observerInstallSnapshot(0L, -1);
+            return;
+        }
+        GetServerEntriesRequest request = new GetServerEntriesRequest(journal.commitIndex(), config.<Integer>get("observer.pull_batch_size"));
+        actor.<GetServerEntriesResponse>sendThen("Rpc", "getServerEntries", new RpcMsg<>(getParentUri(), request))
+                .thenAccept(response -> {
+                    if (response.success()) {
+                        actor.sendThen("Journal","appendBatchRaw", response.getEntries())
+                                .thenCompose(ignored -> actor.sendThen("State", "maybeUpdateNonLeaderConfig", response.getEntries()))
+                                .thenCompose(ignored -> actor.sendThen("Journal", "commit", journal.maxIndex()));
+                    } else if (response.getStatusCode() == StatusCode.INDEX_UNDERFLOW) {
+                        observerInstallSnapshot(response.getMinIndex(), -1);
+                    } else if (response.getStatusCode() != StatusCode.INDEX_OVERFLOW) {
+                        logger.warn("Pull entry failed! {}", response.errorString());
+                    }
+                });
     }
 
 }
