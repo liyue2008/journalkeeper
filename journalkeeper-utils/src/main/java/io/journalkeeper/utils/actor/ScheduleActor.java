@@ -31,6 +31,18 @@ class ScheduleActor {
         runningTasks.put(task.getAddr() + "-" + task.getTopic(), scheduledFuture);
     }
 
+
+    @ActorListener
+    void addDelayTask(DelayTask task) {
+        if (stopped) {
+            throw new IllegalStateException("ScheduleActor has been stopped");
+        }
+        if (null == executorService) {
+            executorService = Executors.newScheduledThreadPool(1, new NamedThreadFactory("ActorScheduler-" + (name.isEmpty() ? "" : (name + "-"))));
+        }
+        executorService.schedule(() -> actor.send(task.getAddr(), task.getTopic()), task.getDelay(), task.getTimeUnit());
+    }
+
     @ActorListener
     private void removeTask(String addr, String topic) {
         ScheduledFuture<?> scheduledFuture = runningTasks.remove(addr + "-" + topic);

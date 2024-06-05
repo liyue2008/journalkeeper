@@ -35,7 +35,6 @@ import static io.journalkeeper.core.api.RaftJournal.INTERNAL_PARTITION;
 
 public class RaftServerActor implements  RaftServer {
     private static final Logger logger = LoggerFactory.getLogger( RaftServerActor.class );
-    private Roll roll;
     private final ServerContext context;
     private ServerRpc serverRpc;
     private final Actor actor = Actor.builder("RaftServer").setHandlerInstance(this).build();
@@ -56,7 +55,7 @@ public class RaftServerActor implements  RaftServer {
     private ServerContext buildServerContext(Roll roll, StateFactory stateFactory, JournalEntryParser journalEntryParser, Properties properties, Config config) {
         JournalActor journalActor = new JournalActor(journalEntryParser, config, properties);
         StateActor stateActor = new StateActor(stateFactory, journalEntryParser, journalActor.getRaftJournal(),config, properties);
-        VoterActor voterActor = new VoterActor(journalEntryParser, null, journalActor.getRaftJournal(),stateActor.getState(), config);
+        VoterActor voterActor = new VoterActor(roll, journalEntryParser, null, journalActor.getRaftJournal(),stateActor.getState(), config);
         ObserverActor observerActor = new ObserverActor(journalActor.getRaftJournal(),stateActor.getState(), config);
         ServerRpcActor serverRpcActor = new ServerRpcActor();
         this.serverRpc = serverRpcActor;
@@ -78,10 +77,9 @@ public class RaftServerActor implements  RaftServer {
 
     }
 
-    @ActorListener
     @Override
     public Roll roll() {
-        return roll;
+        throw new UnsupportedOperationException("未实现");
     }
 
     @Override
@@ -186,20 +184,6 @@ public class RaftServerActor implements  RaftServer {
         return null;
     }
 
-
-    @ActorListener
-    private ConvertRollResponse convertRoll(ConvertRollRequest request) {
-        this.roll = request.getRoll();
-        return new ConvertRollResponse();
-    }
-
-
-
-    @ActorListener
-    private GetServerEntriesResponse getServerEntries(GetServerEntriesRequest request) {
-        // TODO
-        return null;
-    }
 
 
     public ServerRpc getServerRpc() {

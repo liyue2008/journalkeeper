@@ -103,6 +103,12 @@ public class Actor {
         send("Scheduler", "addTask", new ScheduleTask(timeUnit, interval, this.addr, topic));
     }
 
+    public void runDelay(long delay, TimeUnit timeUnit,  Runnable runnable) {
+        String topic = runnable.toString();
+        inbox.receive(new ActorMsg(0L, addr,addr,"@addTopicHandlerFunction", topic, runnable));
+        send("Scheduler", "addDelayTask", new DelayTask(timeUnit, delay, this.addr, topic));
+    }
+
     public void removeScheduler(String topic) {
         send("Scheduler", "removeTask", addr, topic);
         inbox.receive(new ActorMsg(0L, addr,addr,"@removeTopicHandlerFunction", topic));

@@ -408,6 +408,18 @@ public class ActorTest {
             Assert.assertTrue(8 < count && count < 12);
 
     }
+    @Test
+    public void testRunDelay () throws InterruptedException {
+        AtomicInteger counter = new AtomicInteger(0);
+        Actor actor = Actor.builder("actor").build();
+        PostOffice.builder()
+                .addActor(actor)
+                .build();
+        actor.runDelay(50, TimeUnit.MILLISECONDS, counter::incrementAndGet);
+        Assert.assertEquals(0, counter.get());
+        Thread.sleep(100);
+        Assert.assertEquals(1, counter.get());
+    }
 
     @Test
     public void testAddScheduler () throws InterruptedException {

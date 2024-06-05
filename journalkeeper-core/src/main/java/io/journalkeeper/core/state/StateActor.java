@@ -1,10 +1,12 @@
 package io.journalkeeper.core.state;
 
+import io.journalkeeper.base.ReplicableIterator;
 import io.journalkeeper.core.api.*;
 import io.journalkeeper.core.entry.internal.*;
 import io.journalkeeper.core.journal.JournalActor;
 import io.journalkeeper.core.raft.RaftState;
 import io.journalkeeper.core.server.PartialSnapshot;
+import io.journalkeeper.exceptions.NoSuchSnapshotException;
 import io.journalkeeper.exceptions.RecoverException;
 import io.journalkeeper.exceptions.StateRecoverException;
 import io.journalkeeper.persistence.MetadataPersistence;
@@ -61,6 +63,9 @@ public class StateActor implements RaftState{
      */
     protected final NavigableMap<Long, Snapshot> snapshots = new ConcurrentSkipListMap<>();
     protected final PartialSnapshot partialSnapshot;
+    // 用于给Observer发送snapshot
+    private int nextSnapshotIteratorId = 0;
+    private final Map<Integer, ReplicableIterator> snapshotIteratorMap = new HashMap<>();
 
     protected final StateFactory stateFactory;
     /**
@@ -331,7 +336,7 @@ public class StateActor implements RaftState{
 
     @Override
     public long commitIndex() {
-        return 0;
+        return journal.commitIndex();
     }
 
     @ActorListener
@@ -464,8 +469,36 @@ public class StateActor implements RaftState{
     }
     @ActorListener
     private GetServerStateResponse getServerState(GetServerStateRequest request) {
-        // TODO
-        return null;
+        try {
+            int iteratorId;
+            if (request.getIteratorId() >= 0) {
+                iteratorId = request.getIteratorId();
+            } else {
+                long snapshotIndex = request.getLastIncludedIndex() + 1;
+                Snapshot snapshot = snapshots.get(snapshotIndex);
+                if (null != snapshot) {
+                    ReplicableIterator iterator = snapshot.iterator();
+                    iteratorId = ++ nextSnapshotIteratorId;
+                    snapshotIteratorMap.put(iteratorId, iterator);
+                    actor.runDelay(1, TimeUnit.MINUTES, () -> snapshotIteratorMap.remove(iteratorId));
+                } else {
+                    throw new NoSuchSnapshotException();
+                }
+            }
+            ReplicableIterator iterator = snapshotIteratorMap.get(iteratorId);
+            if (null != iterator) {
+                return new GetServerStateResponse(
+                        iterator.lastIncludedIndex(), iterator.lastIncludedTerm(),
+                        iterator.offset(), iterator.nextTrunk(), !iterator.hasMoreTrunks(), iteratorId
+                );
+            } else {
+                throw new NoSuchSnapshotException();
+            }
+        } catch (Throwable t) {
+            logger.warn("GetServerState exception!", t);
+            return new GetServerStateResponse(t);
+        }
+
     }
 
 

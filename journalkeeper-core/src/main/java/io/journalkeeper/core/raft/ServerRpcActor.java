@@ -210,7 +210,7 @@ public class ServerRpcActor implements ServerRpc {
 
     @Override
     public CompletableFuture<GetServerEntriesResponse> getServerEntries(GetServerEntriesRequest request) {
-        return forwardRequest(request);
+        return forwardRequest(request, "Voter");
 
     }
 

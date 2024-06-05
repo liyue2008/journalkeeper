@@ -19,6 +19,7 @@ import io.journalkeeper.utils.actor.annotation.*;
 import io.journalkeeper.utils.config.Config;
 import io.journalkeeper.utils.event.Event;
 import io.journalkeeper.utils.event.EventType;
+import io.journalkeeper.utils.net.StickySession;
 import io.journalkeeper.utils.state.StateMachine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -66,10 +67,12 @@ public class VoterActor {
     // Observer Only
 
     private boolean installSnapshotInProgress = false;
+    private boolean firstSnapshotInstallationSucceeded = false;
     // TODO 选择parent节点的逻辑，如果调用失败，更换parent节点；
+    private StickySession<URI> parentSession = null; // 父节点URI
 
 
-    VoterActor(JournalEntryParser journalEntryParser, JournalTransactionManager journalTransactionManager, RaftJournal journal, RaftState state, Config config) {
+    VoterActor(RaftServer.Roll roll, JournalEntryParser journalEntryParser, JournalTransactionManager journalTransactionManager, RaftJournal journal, RaftState state, Config config) {
         this.journalEntryParser = journalEntryParser;
         this.journalTransactionManager = journalTransactionManager;
         this.journal = journal;
@@ -78,12 +81,16 @@ public class VoterActor {
 
         this.raftState = StateMachine.<VoterState>builder()
                 .initState(VoterState.FOLLOWER)
-                .addState(VoterState.LEADER, new HashSet<>(Collections.singletonList(VoterState.FOLLOWER)))
-                .addState(VoterState.OBSERVER, new HashSet<>(Arrays.asList(VoterState.FOLLOWER, VoterState.LEADER, VoterState.PRE_VOTING, VoterState.CANDIDATE)))
+                .addState(VoterState.LEADER, new HashSet<>(Collections.singletonList(VoterState.CANDIDATE)))
+                .addState(VoterState.OBSERVER)
                 .addState(VoterState.CANDIDATE, new HashSet<>(Collections.singletonList(VoterState.PRE_VOTING)))
                 .addState(VoterState.PRE_VOTING, new HashSet<>(Collections.singletonList(VoterState.FOLLOWER)))
                 .build();
-
+        if (roll == RaftServer.Roll.VOTER) {
+            convertToFollower();
+        } else {
+            convertToObserver();
+        }
     }
 
     @ActorListener
@@ -1207,9 +1214,11 @@ public class VoterActor {
     // Observer methods
 
     private URI getParentUri() {
-        List<URI> parents = state.getConfigState().voters();
-        // TODO
-        return null;
+        if (null == parentSession) {
+            parentSession = new StickySession<>(state.getConfigState().voters());
+        }
+
+        return parentSession.getSession();
     }
     private void observerInstallSnapshot(long index, int iteratorId)  {
         // Observer的提交位置已经落后目标节点太多，这时需要安装快照：
@@ -1227,8 +1236,11 @@ public class VoterActor {
                                         .thenRun(() -> {
                                             if (!r.isDone()) {
                                                 observerInstallSnapshot(index, r.getIteratorId());
+                                            } else {
+                                                firstSnapshotInstallationSucceeded = true;
                                             }
                                         }).exceptionally(t -> {
+                                            // TODO: 如果是网络错误更换parent节点。
                                             logger.warn("ObserverInstallSnapshot exception {}", t.getMessage());
                                             throw new InstallSnapshotException(t);
                                         });
@@ -1244,7 +1256,7 @@ public class VoterActor {
             return;
         }
 
-        if (journal.commitIndex() == 0L) {
+        if (journal.commitIndex() == 0L && !firstSnapshotInstallationSucceeded) {
             observerInstallSnapshot(0L, -1);
             return;
         }
@@ -1261,6 +1273,17 @@ public class VoterActor {
                         logger.warn("Pull entry failed! {}", response.errorString());
                     }
                 });
+    }
+
+    @ActorListener
+    private GetServerEntriesResponse getServerEntries(GetServerEntriesRequest request) {
+        try {
+            return new GetServerEntriesResponse(
+                    journal.readRaw(request.getIndex(), (int) Math.min(request.getMaxSize(), state.lastApplied() - request.getIndex())),
+                    journal.minIndex(), state.lastApplied());
+        } catch (Throwable t) {
+            return new GetServerEntriesResponse(t, journal.minIndex(), state.lastApplied());
+        }
     }
 
 }

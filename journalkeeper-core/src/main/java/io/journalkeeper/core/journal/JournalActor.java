@@ -6,6 +6,8 @@ import io.journalkeeper.core.api.RaftJournal;
 import io.journalkeeper.exceptions.StateRecoverException;
 import io.journalkeeper.persistence.BufferPool;
 import io.journalkeeper.persistence.PersistenceFactory;
+import io.journalkeeper.rpc.server.GetServerEntriesRequest;
+import io.journalkeeper.rpc.server.GetServerEntriesResponse;
 import io.journalkeeper.utils.actor.Actor;
 import io.journalkeeper.utils.actor.annotation.ActorListener;
 import io.journalkeeper.utils.actor.annotation.ActorScheduler;
@@ -94,6 +96,11 @@ private static final Logger logger = LoggerFactory.getLogger( JournalActor.class
         }
         actor.pub("onJournalAppend", this.getRaftJournal());
         return position;
+    }
+
+    @ActorListener
+    private long appendBatchRaw(List<byte []> rawEntries) {
+        return journal.appendBatchRaw(rawEntries);
     }
     @ActorListener
     private void compareOrAppendRaw(List<byte[]> entries, long startIndex) {
