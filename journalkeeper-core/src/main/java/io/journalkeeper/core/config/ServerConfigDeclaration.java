@@ -51,5 +51,6 @@ public class ServerConfigDeclaration {
         config.declare("check_quorum_timeout_ms", Long.class, 300L, true, "检查法定人数超时，单位：毫秒");
         config.declare("observer.pull_batch_size", Integer.class, 4 * 1024 * 1024, true, "Observer拉取日志批量大小");
         config.declare("observer.pull_interval_ms", Long.class, 100L, true, "Observer拉取日志批量大小");
+        config.declare("observer.parents", String.class, "",true, "Observer父节点列表");
     }
 }

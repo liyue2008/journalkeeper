@@ -400,6 +400,7 @@ public class VoterActor {
     @ActorSubscriber
     private void onStart(ServerContext context) {
 
+        logger.info("OnStart, {}", voterInfo());
         actor.addScheduler(config.<Long>get("heartbeat_interval_ms"), TimeUnit.MILLISECONDS, "checkElectionTimeout", this::checkElectionTimeout);
         
         // Leader
@@ -1215,7 +1216,18 @@ public class VoterActor {
 
     private URI getParentUri() {
         if (null == parentSession) {
-            parentSession = new StickySession<>(state.getConfigState().voters());
+            String parentsString = config.get("observer.parents");
+            List<URI> parents;
+            if (null != parentsString && !parentsString.isEmpty()) {
+                parents = Arrays.stream(parentsString.split(","))
+                        .map(String::trim)
+                        .map(URI::create).collect(Collectors.toList());
+            } else {
+                logger.warn("Empty config observer.parents, using voter config.");
+                parents = state.getConfigState().voters();
+            }
+
+            parentSession = new StickySession<>(parents);
         }
 
         return parentSession.getSession();
