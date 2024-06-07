@@ -247,6 +247,7 @@ public class JournalKeeperState implements Flushable {
         int batchSize = entryHeader.getBatchSize();
 
         StateResult result = new StateResult(null);
+        result.setLastApplied(lastApplied());
 
         long stamp = stateLock.writeLock();
         try {

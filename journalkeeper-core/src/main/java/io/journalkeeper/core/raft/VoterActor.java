@@ -33,6 +33,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import static io.journalkeeper.core.api.RaftJournal.INTERNAL_PARTITION;
+import static io.journalkeeper.core.entry.internal.InternalEntryType.TYPE_UPDATE_VOTERS_S1;
 
 public class VoterActor {
     public final static float RAND_INTERVAL_RANGE = 0.5F;
@@ -400,7 +401,6 @@ public class VoterActor {
     @ActorSubscriber
     private void onStart(ServerContext context) {
 
-        logger.info("OnStart, {}", voterInfo());
         actor.addScheduler(config.<Long>get("heartbeat_interval_ms"), TimeUnit.MILLISECONDS, "checkElectionTimeout", this::checkElectionTimeout);
         
         // Leader
@@ -446,45 +446,56 @@ public class VoterActor {
 
         lastHeartbeat = System.currentTimeMillis();
 
-        boolean notHeartBeat = null != request.getEntries() && !request.getEntries().isEmpty();
         // Reply false if log does not contain an entry at prevLogIndex
         // whose term matches prevLogTerm
         final long startIndex = request.getPrevLogIndex() + 1;
         final List<byte[]> entries = request.getEntries();
-        if (notHeartBeat &&
-                (request.getPrevLogIndex() < journal.minIndex() - 1 ||
+        if (request.getPrevLogIndex() < journal.minIndex() - 1 ||
                         request.getPrevLogIndex() >= journal.maxIndex() ||
-
-                        journal.getTerm(request.getPrevLogIndex()) != request.getPrevLogTerm())
+                        journal.getTerm(request.getPrevLogIndex()) != request.getPrevLogTerm()
         ) {
             actor.reply(msg, new AsyncAppendEntriesResponse(false, startIndex,
                     request.getTerm(), request.getEntries().size()));
             return;
         }
 
+        if (null == request.getEntries() || request.getEntries().isEmpty()) { // 心跳
+            actor.sendThen("Journal", "commit", request.getLeaderCommit())
+                    .thenRun(() -> {
+                        if (leaderMaxIndex < request.getMaxIndex()) {
+                            leaderMaxIndex = request.getMaxIndex();
+                        }
+                        actor.reply(msg, new AsyncAppendEntriesResponse(true, request.getPrevLogIndex() + 1,
+                                request.getTerm(), request.getEntries().size()));
+                    })
+                    .exceptionally(t -> {
+                        actor.reply(msg, new AsyncAppendEntriesResponse(t));
+                        return null;
+                    });
+        } else {
 
-
-        // 如果要删除部分未提交的日志，并且待删除的这部分存在配置变更日志，则需要回滚配置
-        actor.sendThen("State", "maybeRollbackConfig", startIndex)
-                // 3. If an existing entry conflicts with a new one (same index
-                // but different terms), delete the existing entry and all that
-                // follow it (§5.3)
-                //4. Append any new entries not already in the log
-                .thenCompose(ignored -> actor.sendThen("Journal","compareOrAppendRaw", entries, request.getPrevLogIndex() + 1))
-                .thenCompose(ignored -> actor.sendThen("State", "maybeUpdateNonLeaderConfig", entries))
-                //5. If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry)
-                .thenCompose(ignored -> actor.sendThen("Journal", "commit", request.getLeaderCommit()))
-                .thenRun(() -> {
-                    if (leaderMaxIndex < request.getMaxIndex()) {
-                        leaderMaxIndex = request.getMaxIndex();
-                    }
-                    actor.reply(msg, new AsyncAppendEntriesResponse(true, request.getPrevLogIndex() + 1,
-                            request.getTerm(), request.getEntries().size()));
-                })
-                .exceptionally(t -> {
-                    actor.reply(msg, new AsyncAppendEntriesResponse(t));
-                    return null;
-                });
+            // 如果要删除部分未提交的日志，并且待删除的这部分存在配置变更日志，则需要回滚配置
+            actor.sendThen("State", "maybeRollbackConfig", startIndex)
+                    // 3. If an existing entry conflicts with a new one (same index
+                    // but different terms), delete the existing entry and all that
+                    // follow it (§5.3)
+                    //4. Append any new entries not already in the log
+                    .thenCompose(ignored -> actor.sendThen("Journal", "compareOrAppendRaw", entries, request.getPrevLogIndex() + 1))
+                    .thenCompose(ignored -> actor.sendThen("State", "maybeUpdateNonLeaderConfig", entries))
+                    //5. If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry)
+                    .thenCompose(ignored -> actor.sendThen("Journal", "commit", request.getLeaderCommit()))
+                    .thenRun(() -> {
+                        if (leaderMaxIndex < request.getMaxIndex()) {
+                            leaderMaxIndex = request.getMaxIndex();
+                        }
+                        actor.reply(msg, new AsyncAppendEntriesResponse(true, request.getPrevLogIndex() + 1,
+                                request.getTerm(), request.getEntries().size()));
+                    })
+                    .exceptionally(t -> {
+                        actor.reply(msg, new AsyncAppendEntriesResponse(t));
+                        return null;
+                    });
+        }
 
     }
 
@@ -552,6 +563,7 @@ public class VoterActor {
         for (URI uri : voters) {
             if (!uri.equals(state.getLocalUri()) && // uri was not me
                     replicationDestinations.stream().noneMatch(r -> r.getUri().equals(uri))) { // and not included in the old followers collection
+                logger.info("Add replication destination: {}", uri);
                 replicationDestinations.add(new ReplicationDestination(uri, journal.maxIndex(), config.get("heartbeat_interval_ms"), config.get("replication_batch_size")));
             }
         }
@@ -736,6 +748,47 @@ public class VoterActor {
         return journalEntries;
     }
 
+    @ActorSubscriber
+    private void onInternalEntryApply(InternalEntryType type, byte [] internalEntry) {
+        if (raftState.current() != VoterState.LEADER) {
+            return;
+        }
+        if (type == InternalEntryType.TYPE_LEADER_ANNOUNCEMENT) {
+            LeaderAnnouncementEntry leaderAnnouncementEntry = InternalEntriesSerializeSupport.parse(internalEntry);
+
+            if (raftState.current() == VoterState.LEADER && !isAnnounced && leaderAnnouncementEntry.getTerm() == this.term) {
+                this.isAnnounced = true;
+                logger.info("Leader announcement applied! Leader: {}, term: {}.", state.getLocalUri(), term);
+            }
+        } else
+        if (type == TYPE_UPDATE_VOTERS_S1) {
+            ConfigState votersConfigStateMachine = state.getConfigState();
+            byte[] s2Entry = InternalEntriesSerializeSupport.serialize(new UpdateVotersS2Entry(votersConfigStateMachine.getConfigOld(), votersConfigStateMachine.getConfigNew(), votersConfigStateMachine.getEpoch() + 1));
+            try {
+                if (votersConfigStateMachine.isJointConsensus()) {
+                    actor.send("Voter", "updateClusterState",
+                    new UpdateClusterStateRequest(
+                            Collections.singletonList(
+                                    new UpdateRequest(
+                                            s2Entry, INTERNAL_PARTITION, 1
+                                    )
+                            )
+                            , false, ResponseConfig.ONE_WAY));
+                } else {
+                    throw new IllegalStateException();
+                }
+            } catch (Exception e) {
+                UpdateVotersS1Entry updateVotersS1Entry = InternalEntriesSerializeSupport.parse(internalEntry);
+                logger.warn("Failed to update voter config in step 1! Config in the first step entry from: {} To: {}, " +
+                                "voter config old: {}, new: {}.",
+                        updateVotersS1Entry.getConfigOld(), updateVotersS1Entry.getConfigNew(),
+                        votersConfigStateMachine.getConfigOld(), votersConfigStateMachine.getConfigNew(), e);
+            }
+        }
+    }
+
+
+
     @ActorListener
     private CreateTransactionResponse createTransaction(CreateTransactionRequest request) {
         // TODO
@@ -821,22 +874,6 @@ public class VoterActor {
             return new CheckLeadershipResponse(new NotLeaderException(this.leaderUri));
         }
     }
-
-    @ActorSubscriber(topic = "onInternalEntryApply")
-    private void onLeaderAnnouncementEntryApplied(InternalEntryType type, byte [] internalEntry) {
-        if (type == InternalEntryType.TYPE_LEADER_ANNOUNCEMENT) {
-            LeaderAnnouncementEntry leaderAnnouncementEntry = InternalEntriesSerializeSupport.parse(internalEntry);
-
-            if (raftState.current() == VoterState.LEADER && !isAnnounced && leaderAnnouncementEntry.getTerm() == this.term) {
-                this.isAnnounced = true;
-                logger.info("Leader announcement applied! Leader: {}, term: {}.", state.getLocalUri(), term);
-            }
-        }
-    }
-
-
-
-
 
     @ActorSubscriber
     private void onStateRecovered() {
@@ -959,6 +996,7 @@ public class VoterActor {
             long deadline = System.currentTimeMillis() - this.rpcTimeoutMs;
 
             if (timestamp < deadline) {
+                logger.info("UpdateClusterStateRequest timeout, request: {}", requestMsg);
                 actor.reply(requestMsg, new UpdateClusterStateResponse(new TimeoutException()));
                 return true;
             }
@@ -1055,7 +1093,6 @@ public class VoterActor {
             if (leaderInstallSnapshotToFollower(fistSnapShotEntry)) {
                 return;
             }
-
             // 读取需要复制的Entry
             List<byte[]> entries;
             if (nextIndex < maxIndex) { // 复制
@@ -1074,8 +1111,7 @@ public class VoterActor {
             actor.<AsyncAppendEntriesResponse>sendThen("Rpc", "asyncAppendEntries", new RpcMsg<>(this.uri, request))
                     .thenAccept(resp -> handleAppendEntriesResponse(resp, entries.size(), fistSnapShotEntry.getKey()))
                     .exceptionally(e -> {
-                        // TODO 改回warn
-                        logger.debug("Replication execution exception, from {} to {}, cause: {}.", state.getLocalUri(), uri, null == e.getCause() ? e.getMessage() : e.getCause().getMessage());
+                        logger.warn("Replication execution exception, from {} to {}, cause: {}.", state.getLocalUri(), uri, null == e.getCause() ? e.getMessage() : e.getCause().getMessage());
                         return null;
                     })
                     .whenComplete((c, r) -> waitingForResponse = false);
