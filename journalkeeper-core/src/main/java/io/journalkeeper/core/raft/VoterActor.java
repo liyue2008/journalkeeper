@@ -539,9 +539,11 @@ public class VoterActor {
         UpdateClusterStateRequest request = msg.getPayload();
         if (!(raftState.current() == VoterState.LEADER && isAnnounced)) {
             actor.reply(msg, new UpdateClusterStateResponse(new NotLeaderException(this.leaderUri)));
+            return;
         }
         if (!checkWriteable()) {
             actor.reply(msg, new UpdateClusterStateResponse(new IllegalStateException("Server disabled temporarily.")));
+            return;
         }
         if (request.getResponseConfig() == ResponseConfig.RECEIVE) {
             actor.reply(msg, new UpdateClusterStateResponse());
