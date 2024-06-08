@@ -33,6 +33,8 @@ import java.net.URI;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
@@ -861,13 +863,13 @@ public class KvTest {
     }
 
     private void stopServers(List<BootStrap> kvServers) {
-        for (BootStrap serverBootStraps : kvServers) {
+        kvServers.parallelStream().forEach(s -> {
             try {
-                serverBootStraps.shutdown();
+                s.shutdown();
             } catch (Throwable t) {
-                logger.warn("Stop server {} exception:", serverBootStraps.getServer().serverUri(), t);
+                logger.warn("Stop server {} exception:", s.getServer().serverUri(), t);
             }
-        }
+        });
     }
 
     private List<BootStrap> createServers(int nodes, Path path) throws IOException, ExecutionException, InterruptedException, TimeoutException {
