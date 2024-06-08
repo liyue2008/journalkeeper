@@ -1,7 +1,6 @@
 package io.journalkeeper.core.raft;
 
 import io.journalkeeper.core.api.ClusterConfiguration;
-import io.journalkeeper.core.api.RaftServer;
 import io.journalkeeper.rpc.RpcAccessPointFactory;
 import io.journalkeeper.rpc.client.*;
 import io.journalkeeper.rpc.server.*;
@@ -78,7 +77,11 @@ public class ServerRpcActor implements ServerRpc {
         return forwardRequest(request, addr, null);
     }
     private <T> CompletableFuture<T> forwardRequest(Object request, String addr, String topic) {
-
+        if (serverState != StateServer.ServerState.RUNNING) {
+            CompletableFuture<T> future = new CompletableFuture<>();
+            future.completeExceptionally(new IllegalStateException("Server is not running"));
+            return future;
+        }
         if (addr == null) {
             addr = "RaftServer";
         }
@@ -112,6 +115,11 @@ public class ServerRpcActor implements ServerRpc {
 
     @Override
     public CompletableFuture<GetServersResponse> getServers() {
+        if (serverState != StateServer.ServerState.RUNNING) {
+            CompletableFuture<GetServersResponse> future = new CompletableFuture<>();
+            future.completeExceptionally(new IllegalStateException("Server is not running"));
+            return future;
+        }
         final ClusterConfiguration clusterConfiguration = new ClusterConfiguration();
         return CompletableFuture.allOf(
                 actor.<URI>sendThen("Voter", "getLeaderUri").thenAccept(clusterConfiguration::setLeader),
