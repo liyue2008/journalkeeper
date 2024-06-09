@@ -829,6 +829,8 @@ public class KvTest {
         URI newLeaderUri = adminClient.getClusterConfiguration().get().getLeader();
         leader = servers.stream().filter(s -> s.getServer().serverUri().equals(newLeaderUri)).findAny().orElse(null);
         Assert.assertNotNull(leader);
+
+        leader.getAdminClient().getServerStatus(newLeaderUri).get()
         int newTerm = ((Voter )((Server)leader.getServer()).getServer()).getTerm();
         // 检查term是否只增加了1
         Assert.assertEquals(term + 1, newTerm);

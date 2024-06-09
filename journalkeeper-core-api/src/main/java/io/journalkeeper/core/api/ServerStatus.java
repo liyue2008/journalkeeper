@@ -26,17 +26,20 @@ public class ServerStatus {
     private long maxIndex;
     private long commitIndex;
     private long lastApplied;
+    private long term;
     private VoterState voterState;
+
 
     public ServerStatus() {
     }
 
-    public ServerStatus(RaftServer.Roll roll, long minIndex, long maxIndex, long commitIndex, long lastApplied, VoterState voterState) {
+    public ServerStatus(RaftServer.Roll roll, long minIndex, long maxIndex, long commitIndex, long lastApplied, long term, VoterState voterState) {
         this.roll = roll;
         this.minIndex = minIndex;
         this.maxIndex = maxIndex;
         this.commitIndex = commitIndex;
         this.lastApplied = lastApplied;
+        this.term = term;
         this.voterState = voterState;
     }
 
@@ -88,22 +91,27 @@ public class ServerStatus {
         this.voterState = voterState;
     }
 
+
+
+    public long getTerm() {
+        return term;
+    }
+
+    public void setTerm(long term) {
+        this.term = term;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         ServerStatus that = (ServerStatus) o;
-        return minIndex == that.minIndex &&
-                maxIndex == that.maxIndex &&
-                commitIndex == that.commitIndex &&
-                lastApplied == that.lastApplied &&
-                roll == that.roll &&
-                voterState == that.voterState;
+        return minIndex == that.minIndex && maxIndex == that.maxIndex && commitIndex == that.commitIndex && lastApplied == that.lastApplied && term == that.term && roll == that.roll && voterState == that.voterState;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(roll, minIndex, maxIndex, commitIndex, lastApplied, voterState);
+        return Objects.hash(roll, minIndex, maxIndex, commitIndex, lastApplied, term, voterState);
     }
 
     @Override
@@ -114,6 +122,7 @@ public class ServerStatus {
                 ", maxIndex=" + maxIndex +
                 ", commitIndex=" + commitIndex +
                 ", lastApplied=" + lastApplied +
+                ", term=" + term +
                 ", voterState=" + voterState +
                 '}';
     }
