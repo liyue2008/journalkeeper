@@ -53,6 +53,11 @@ public class VoterActor {
     private URI leaderUri = null; // 当前Leader
     
     // Follower Only
+    /**
+     * 触发切换指定Leader的门限值
+     */
+    private static final long PREFERRED_LEADER_IN_SYNC_THRESHOLD = 128L;
+    private boolean readyForStartPreferredLeaderElection = false;
     private long leaderMaxIndex = -1L;  // Leader 日志当前的最大位置
     
     // Leader Only
@@ -237,6 +242,8 @@ public class VoterActor {
         raftState.convertTo(VoterState.FOLLOWER);
         this.electionTimeoutMs = config.<Long>get("election_timeout_ms") + randomInterval(config.get("election_timeout_ms"));
         logger.info("Convert voter state from {} to FOLLOWER, electionTimeout: {}.", oldState, electionTimeoutMs);
+        this.leaderMaxIndex = -1L;
+        this.readyForStartPreferredLeaderElection = false;
     }
 
     private void convertToCandidate() {
@@ -276,6 +283,36 @@ public class VoterActor {
         return interval + Math.round(ThreadLocalRandom.current().nextDouble(-1 * RAND_INTERVAL_RANGE, RAND_INTERVAL_RANGE) * interval);
     }
 
+
+    private boolean checkPreferredLeader() {
+        if (raftState.current().equals(VoterState.FOLLOWER) && state.getLocalUri().equals(state.getPreferredLeader())  &&
+                leaderMaxIndex - journal.maxIndex() < PREFERRED_LEADER_IN_SYNC_THRESHOLD && leaderMaxIndex > 0) {
+            // 给当前LEADER发RPC，停服。
+            logger.info("Send DisableLeaderWriteRequest to {}, {}", leaderUri, voterInfo());
+            actor.<DisableLeaderWriteResponse>sendThen("Rpc","disableLeaderWrite", new RpcMsg<>(leaderUri, new DisableLeaderWriteRequest(10 * config.<Long>get("election_timeout_ms"), term)))
+                    .thenAccept(response -> {
+                        if (response.success() && response.getTerm() == term &&
+                                raftState.current() == VoterState.FOLLOWER ) {
+                            logger.info("Received DisableLeaderWriteResponse code: SUCCESS, {}",
+                                    voterInfo());
+                            this.readyForStartPreferredLeaderElection = true;
+                        } else {
+                            logger.info("Ignore DisableLeaderWriteResponse code: {}, term: {}, errString: {}, {}",
+                                    response.getStatusCode(), response.getTerm(), response.errorString(), voterInfo());
+                        }
+                    });
+        }
+
+        // 等待数据完全同步
+        // 发起选举，等待赢得足够的选票，成功新的LEADER
+
+        return (raftState.current().equals(VoterState.FOLLOWER) && state.getLocalUri().equals(state.getPreferredLeader()) &&
+                this.readyForStartPreferredLeaderElection && leaderMaxIndex == journal.maxIndex());
+
+    }
+
+
+
     // Scheduler function
     private void checkElectionTimeout() {
         if (raftState.current() == VoterState.FOLLOWER && System.currentTimeMillis() - lastHeartbeat > electionTimeoutMs) {
@@ -290,6 +327,12 @@ public class VoterActor {
         if ((raftState.current() == VoterState.PRE_VOTING || raftState.current() == VoterState.CANDIDATE) && System.currentTimeMillis() > nextElectionTime) {
 
             startElection(false);
+        }
+
+        if (checkPreferredLeader()) {
+            convertToPreVoting();
+            convertToCandidate();
+            startElection(true);
         }
 
     }
@@ -429,7 +472,6 @@ public class VoterActor {
             this.term = request.getTerm();
             this.votedFor = null;
             convertToFollower();
-            setLeaderUri(request.getLeader());
         }
         // Reply false if term < currentTerm
         if (request.getTerm() < term) {
@@ -441,10 +483,10 @@ public class VoterActor {
         if (raftState.current() != VoterState.FOLLOWER && request.getLeader().equals(this.votedFor) && this.term == request.getTerm()) {
             this.votedFor = null;
             convertToFollower();
-            setLeaderUri(request.getLeader());
         }
-
+        setLeaderUri(request.getLeader());
         lastHeartbeat = System.currentTimeMillis();
+
 
         // Reply false if log does not contain an entry at prevLogIndex
         // whose term matches prevLogTerm
@@ -835,6 +877,7 @@ public class VoterActor {
         }
         this.isWritable = false;
         this.disableWriteTimeout = System.currentTimeMillis() + timeoutMs;
+
         return new DisableLeaderWriteResponse(this.term);
     }
 
