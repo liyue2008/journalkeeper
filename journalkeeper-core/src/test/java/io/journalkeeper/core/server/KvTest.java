@@ -806,7 +806,7 @@ public class KvTest {
         // 记录leader的term，然后停掉leader
         BootStrap leader = servers.stream().filter(s -> s.getServer().serverUri().equals(leaderUri)).findAny().orElse(null);
         Assert.assertNotNull(leader);
-        int term = ((Voter )((Server)leader.getServer()).getServer()).getTerm();
+        int term = leader.getAdminClient().getServerStatus(leaderUri).get().getTerm();
         logger.info("Shutdown leader: {}, term: {}...", leader.getServer().serverUri(), term);
         leader.shutdown();
         servers.remove(leader);
@@ -830,8 +830,7 @@ public class KvTest {
         leader = servers.stream().filter(s -> s.getServer().serverUri().equals(newLeaderUri)).findAny().orElse(null);
         Assert.assertNotNull(leader);
 
-        leader.getAdminClient().getServerStatus(newLeaderUri).get()
-        int newTerm = ((Voter )((Server)leader.getServer()).getServer()).getTerm();
+        int newTerm = leader.getAdminClient().getServerStatus(newLeaderUri).get().getTerm();
         // 检查term是否只增加了1
         Assert.assertEquals(term + 1, newTerm);
 

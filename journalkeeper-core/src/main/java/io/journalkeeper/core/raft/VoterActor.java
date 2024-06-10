@@ -1072,7 +1072,9 @@ public class VoterActor {
                 journal.maxIndex(),
                 journal.commitIndex(),
                 state.lastApplied(),
-                raftState.current()));
+                term,
+                raftState.current()
+        ));
     }
 
     private class ReplicationDestination {

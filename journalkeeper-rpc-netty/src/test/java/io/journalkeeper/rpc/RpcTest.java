@@ -819,6 +819,7 @@ public class RpcTest {
                 1024L,
                 1000L,
                 1020L,
+                0,
                 VoterState.LEADER
         ));
         // Test success response

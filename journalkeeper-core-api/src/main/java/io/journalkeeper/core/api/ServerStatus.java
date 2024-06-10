@@ -26,14 +26,14 @@ public class ServerStatus {
     private long maxIndex;
     private long commitIndex;
     private long lastApplied;
-    private long term;
+    private int term;
     private VoterState voterState;
 
 
     public ServerStatus() {
     }
 
-    public ServerStatus(RaftServer.Roll roll, long minIndex, long maxIndex, long commitIndex, long lastApplied, long term, VoterState voterState) {
+    public ServerStatus(RaftServer.Roll roll, long minIndex, long maxIndex, long commitIndex, long lastApplied, int term, VoterState voterState) {
         this.roll = roll;
         this.minIndex = minIndex;
         this.maxIndex = maxIndex;
@@ -93,11 +93,11 @@ public class ServerStatus {
 
 
 
-    public long getTerm() {
+    public int getTerm() {
         return term;
     }
 
-    public void setTerm(long term) {
+    public void setTerm(int term) {
         this.term = term;
     }
 

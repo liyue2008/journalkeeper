@@ -719,6 +719,7 @@ class Voter extends AbstractServer implements CheckTermInterceptor {
                 journal.maxIndex(),
                 journal.commitIndex(),
                 state.lastApplied(),
+                currentTerm.get(),
                 voterState()), asyncExecutor)
                 .thenApply(GetServerStatusResponse::new);
     }

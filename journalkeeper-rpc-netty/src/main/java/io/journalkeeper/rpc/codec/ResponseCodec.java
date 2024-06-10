@@ -25,6 +25,7 @@ import io.netty.buffer.ByteBuf;
 public abstract class ResponseCodec<R extends BaseResponse> extends GenericPayloadCodec<R> {
     @Override
     public final R decodePayload(JournalKeeperHeader header, ByteBuf buffer) throws Exception {
+
         R response = decodeResponse(header, buffer);
         response.setStatusCode(StatusCode.valueOf(header.getStatus()));
         response.setError(header.getError());

@@ -243,6 +243,7 @@ class Observer extends AbstractServer {
                 journal.maxIndex(),
                 journal.commitIndex(),
                 state.lastApplied(),
+                -1,
                 null), asyncExecutor)
                 .thenApply(GetServerStatusResponse::new);
     }

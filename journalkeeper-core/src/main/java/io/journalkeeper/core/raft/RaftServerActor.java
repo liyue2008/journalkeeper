@@ -2,12 +2,7 @@ package io.journalkeeper.core.raft;
 
 import io.journalkeeper.core.api.*;
 import io.journalkeeper.core.config.ServerConfigDeclaration;
-import io.journalkeeper.core.entry.internal.InternalEntriesSerializeSupport;
-import io.journalkeeper.core.entry.internal.InternalEntryType;
-import io.journalkeeper.core.entry.internal.UpdateVotersS1Entry;
-import io.journalkeeper.core.entry.internal.UpdateVotersS2Entry;
 import io.journalkeeper.core.journal.JournalActor;
-import io.journalkeeper.core.state.ConfigState;
 import io.journalkeeper.core.state.StateActor;
 import io.journalkeeper.exceptions.JournalException;
 import io.journalkeeper.persistence.LockablePersistence;
@@ -16,8 +11,6 @@ import io.journalkeeper.rpc.client.*;
 import io.journalkeeper.rpc.server.*;
 import io.journalkeeper.utils.actor.*;
 import io.journalkeeper.utils.actor.annotation.ActorListener;
-import io.journalkeeper.utils.actor.annotation.ActorMessage;
-import io.journalkeeper.utils.actor.annotation.ResponseManually;
 import io.journalkeeper.utils.config.Config;
 import io.journalkeeper.utils.config.PropertiesConfigProvider;
 import io.journalkeeper.utils.spi.ServiceSupport;
@@ -56,7 +49,6 @@ public class RaftServerActor implements  RaftServer {
         JournalActor journalActor = new JournalActor(journalEntryParser, config, properties);
         StateActor stateActor = new StateActor(stateFactory, journalEntryParser, journalActor.getRaftJournal(),config, properties);
         VoterActor voterActor = new VoterActor(roll, journalEntryParser, null, journalActor.getRaftJournal(),stateActor.getState(), config);
-        ObserverActor observerActor = new ObserverActor(journalActor.getRaftJournal(),stateActor.getState(), config);
         ServerRpcActor serverRpcActor = new ServerRpcActor();
         this.serverRpc = serverRpcActor;
         RpcActor rpcActor = new RpcActor(properties);
@@ -68,7 +60,6 @@ public class RaftServerActor implements  RaftServer {
                 .addActor(journalActor.getActor())
                 .addActor(stateActor.getActor())
                 .addActor(voterActor.getActor())
-                .addActor(observerActor.getActor())
                 .addActor(serverRpcActor.getActor())
                 .addActor(rpcActor.getActor())
                 .addActor(eventBusActor.getActor())

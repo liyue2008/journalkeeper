@@ -38,6 +38,7 @@ public class GetServerStatusResponseCodec extends ResponseCodec<GetServerStatusR
         CodecSupport.encodeLong(buffer, serverStatus.getMaxIndex());
         CodecSupport.encodeLong(buffer, serverStatus.getCommitIndex());
         CodecSupport.encodeLong(buffer, serverStatus.getLastApplied());
+        CodecSupport.encodeInt(buffer, serverStatus.getTerm());
     }
 
     @Override
@@ -53,6 +54,7 @@ public class GetServerStatusResponseCodec extends ResponseCodec<GetServerStatusR
                 CodecSupport.decodeLong(buffer),
                 CodecSupport.decodeLong(buffer),
                 CodecSupport.decodeLong(buffer),
+                CodecSupport.decodeInt(buffer),
                 voterState
         ));
     }
@@ -61,4 +63,5 @@ public class GetServerStatusResponseCodec extends ResponseCodec<GetServerStatusR
     public int type() {
         return RpcTypes.GET_SERVER_STATUS_RESPONSE;
     }
+
 }
