@@ -113,13 +113,30 @@ public class RaftServerActor implements  RaftServer {
 
     @Override
     public void start() {
-        actor.pub("onStart", context);
+        try {
+            startAsync().get();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Override
+    public CompletableFuture<Void> startAsync() {
+        return actor.pubThen("onStart", context);
     }
 
     @Override
     public void stop() {
-        actor.pub("onStop");
-        context.getPostOffice().stop();
+        try {
+            stopAsync().get();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Override
+    public CompletableFuture<Void> stopAsync() {
+        return actor.pubThen("onStop").thenRunAsync(() -> context.getPostOffice().stop());
     }
 
     @Override

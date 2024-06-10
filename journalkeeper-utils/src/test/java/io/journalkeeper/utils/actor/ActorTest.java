@@ -376,8 +376,26 @@ public class ActorTest {
 
             sender.pub("onEvent", "Hello subscriber!");
             Assert.assertTrue(latch.await(10, TimeUnit.SECONDS));
+    }
 
 
+    @Test
+    public void testPubSubThen() throws InterruptedException, ExecutionException {
+        CountDownLatch latch = new CountDownLatch(2);
+        Sub sub1 = new Sub(latch);
+        Actor receiver1 = Actor.builder("receiver1").setHandlerInstance(sub1).build();
+        Sub sub2 = new Sub(latch);
+        Actor receiver2 = Actor.builder("receiver2").setHandlerInstance(sub2).build();
+        Actor sender = Actor.builder("sender").build();
+        PostOffice.builder()
+                .addActor(sender)
+                .addActor(receiver1)
+                .addActor(receiver2)
+                .build();
+
+
+        sender.pubThen("onEvent", "Hello subscriber!").get();
+        Assert.assertEquals(0, latch.getCount());
     }
 
 

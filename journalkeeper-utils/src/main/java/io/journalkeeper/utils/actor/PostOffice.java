@@ -13,21 +13,21 @@ public class PostOffice{
     private final Map<String, ActorInbox> inboxMap = new HashMap<>();
     private final List<Postman> postmanList;
     private final static int DEFAULT_POSTMAN_COUNT = 1;
-    public final static String PUB_ADDR = "PUB";
     private final Map<String, Set<ActorInbox>> pubSubMap = new ConcurrentHashMap<>();
     private final ScheduleActor scheduleActor;
     private final List<Actor> actorList;
     private final String name;
+    private final PubSubActor pubSubActor = new PubSubActor();
 
     private PostOffice(int threadCount, List<Actor> actorList, String name) {
         this.name = null == name ? "" : name;
         this.scheduleActor = new ScheduleActor(this.name);
         this.actorList = new ArrayList<>(actorList.size() + 2);
-        Actor pubSubActor = Actor.builder(PUB_ADDR).setDefaultHandlerFunction(this::pubMsg).build();
-        this.actorList.add(pubSubActor);
+        this.actorList.add(pubSubActor.getActor());
         this.actorList.add(scheduleActor.getActor());
         this.actorList.addAll(actorList);
         this.actorList.forEach(this::addActor);
+
 
         List<List<ActorInbox>> threadInboxList = new ArrayList<>(threadCount);
         for (int i = 0; i < threadCount; i++) {
@@ -62,12 +62,8 @@ public class PostOffice{
 
     private void addActor(Actor actor) {
         inboxMap.put(actor.getInbox().getMyAddr(), actor.getInbox());
-        actor.getInbox().getSubscribedTopics().forEach(topic -> this.subTopic(topic, actor));
+        actor.getInbox().getSubscribedTopics().forEach(topic -> pubSubActor.subTopic(topic, actor));
         actor.getInbox().getSchedulers().forEach(scheduleActor::addTask);
-    }
-
-    private void subTopic(String topic, Actor actor) {
-        pubSubMap.computeIfAbsent(topic, k -> new HashSet<>()).add(actor.getInbox());
     }
 
 
@@ -78,17 +74,6 @@ public class PostOffice{
             return;
         }
         inbox.receive(msg);
-    }
-
-    private void pubMsg(@ActorMessage ActorMsg msg) {
-        Set<ActorInbox> subscribers = pubSubMap.get(msg.getTopic());
-        if (subscribers == null) {
-            return;
-        }
-        for (ActorInbox inbox : subscribers) {
-            ActorMsg newMsg = new ActorMsg(msg.getSequentialId(), msg.getSender(), inbox.getMyAddr(), msg.getTopic(), msg.getPayloads());
-            inbox.receive(newMsg);
-        }
     }
 
     private void start() {

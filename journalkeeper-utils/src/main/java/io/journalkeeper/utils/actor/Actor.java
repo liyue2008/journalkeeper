@@ -127,13 +127,20 @@ public class Actor {
     }
 
     public ActorMsg pub(String topic, Object payload) {
-        return send(PostOffice.PUB_ADDR, topic, payload);
+        return send(PubSubActor.ADDR, topic, payload);
     }
     public ActorMsg pub(String topic) {
-        return send(PostOffice.PUB_ADDR, topic);
+        return send(PubSubActor.ADDR, topic);
     }
     public ActorMsg pub(String topic, Object... payloads) {
-        return send(PostOffice.PUB_ADDR, topic, payloads);
+        return send(PubSubActor.ADDR, topic, payloads);
+    }
+
+    public CompletableFuture<Void> pubThen(String topic) {
+        return this.<CompletableFuture<Void>>sendThen(PubSubActor.ADDR, topic).thenCompose(f -> f);
+    }
+    public CompletableFuture<Void> pubThen(String topic, Object... payloads) {
+        return this.<CompletableFuture<Void>>sendThen(PubSubActor.ADDR, topic, payloads).thenCompose(f -> f);
     }
 
     public ActorMsg send(String addr, String topic) {
