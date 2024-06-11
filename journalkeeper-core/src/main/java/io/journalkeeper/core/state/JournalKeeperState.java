@@ -75,6 +75,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.concurrent.locks.StampedLock;
@@ -247,13 +248,11 @@ public class JournalKeeperState implements Flushable {
         int batchSize = entryHeader.getBatchSize();
 
         StateResult result = new StateResult(null);
-        result.setLastApplied(lastApplied());
 
         long stamp = stateLock.writeLock();
         try {
             if (partition < RESERVED_PARTITIONS_START) {
                 result = userState.execute(entryFuture, partition, lastApplied(), batchSize, journal);
-                result.setLastApplied(lastApplied());
             } else if (partition == INTERNAL_PARTITION) {
                 applyInternalEntry(entryFuture.get());
             } else {
@@ -264,6 +263,7 @@ public class JournalKeeperState implements Flushable {
             }
             internalState.setLastIncludedTerm(entryHeader.getTerm());
             internalState.next();
+            result.setLastApplied(lastApplied());
             flushInternalState();
 
         } catch (IOException e) {
@@ -278,29 +278,34 @@ public class JournalKeeperState implements Flushable {
     // TODO: 将Interceptor改成actor 事件方式
     private void applyInternalEntry(byte[] internalEntry) {
         InternalEntryType type = InternalEntriesSerializeSupport.parseEntryType(internalEntry);
-        logger.info("Apply internal entry, type: {}", type);
+        logger.debug("Apply internal entry, type: {}", type);
 
-        switch (type) {
-            case TYPE_SCALE_PARTITIONS:
-                internalState.setPartitions(InternalEntriesSerializeSupport.parse(internalEntry, ScalePartitionsEntry.class).getPartitions());
-                break;
-            case TYPE_SET_PREFERRED_LEADER:
-                SetPreferredLeaderEntry setPreferredLeaderEntry = InternalEntriesSerializeSupport.parse(internalEntry);
-                URI old = internalState.getPreferredLeader();
-                internalState.setPreferredLeader(setPreferredLeaderEntry.getPreferredLeader());
-                logger.info("Set preferred leader from {} to {}.", old, internalState.getPreferredLeader());
-                break;
-            default:
-        }
+        try {
 
-        List<ApplyInternalEntryInterceptor> interceptors = internalEntryInterceptors.get(type);
-        if (null != interceptors) {
-            for (ApplyInternalEntryInterceptor interceptor : interceptors) {
-                interceptor.applyInternalEntry(type, internalEntry);
+            switch (type) {
+                case TYPE_SCALE_PARTITIONS:
+                    internalState.setPartitions(InternalEntriesSerializeSupport.parse(internalEntry, ScalePartitionsEntry.class).getPartitions());
+                    break;
+                case TYPE_SET_PREFERRED_LEADER:
+                    SetPreferredLeaderEntry setPreferredLeaderEntry = InternalEntriesSerializeSupport.parse(internalEntry);
+                    URI old = internalState.getPreferredLeader();
+                    internalState.setPreferredLeader(setPreferredLeaderEntry.getPreferredLeader());
+                    logger.info("Set preferred leader from {} to {}.", old, internalState.getPreferredLeader());
+                    break;
+                default:
             }
-        }
-        if (null != actor) {
-            actor.pub("onInternalEntryApply", type, internalEntry);
+
+            List<ApplyInternalEntryInterceptor> interceptors = internalEntryInterceptors.get(type);
+            if (null != interceptors) {
+                for (ApplyInternalEntryInterceptor interceptor : interceptors) {
+                    interceptor.applyInternalEntry(type, internalEntry);
+                }
+            }
+            if (null != actor) {
+                actor.pub("onInternalEntryApply", type, internalEntry);
+            }
+        } catch (Throwable t) {
+            logger.warn("Apply internal entry exception, type: {}, exception: ", type, t);
         }
     }
 

@@ -5,6 +5,8 @@ import io.journalkeeper.core.config.ServerConfigDeclaration;
 import io.journalkeeper.core.journal.JournalActor;
 import io.journalkeeper.core.state.StateActor;
 import io.journalkeeper.exceptions.JournalException;
+import io.journalkeeper.exceptions.RecoverException;
+import io.journalkeeper.monitor.MonitorCollector;
 import io.journalkeeper.persistence.LockablePersistence;
 import io.journalkeeper.persistence.PersistenceFactory;
 import io.journalkeeper.rpc.client.*;
@@ -31,7 +33,8 @@ public class RaftServerActor implements  RaftServer {
     private final ServerContext context;
     private ServerRpc serverRpc;
     private final Actor actor = Actor.builder("RaftServer").setHandlerInstance(this).build();
-
+    private final Collection<MonitorCollector> monitorCollectors;
+    private final RaftServerMonitorInfoProvider monitorInfoProvider;
 
     public RaftServerActor(Roll roll, StateFactory stateFactory, JournalEntryParser journalEntryParser, Properties properties) {
         this.persistenceFactory = ServiceSupport.load(PersistenceFactory.class);
@@ -42,7 +45,8 @@ public class RaftServerActor implements  RaftServer {
         config.load(new PropertiesConfigProvider(properties));
 
         this.context = buildServerContext(roll, stateFactory, journalEntryParser, properties, config);
-
+        this.monitorCollectors = ServiceSupport.loadAll(MonitorCollector.class);
+        this.monitorInfoProvider = new RaftServerMonitorInfoProvider(context);
     }
 
     private ServerContext buildServerContext(Roll roll, StateFactory stateFactory, JournalEntryParser journalEntryParser, Properties properties, Config config) {
@@ -64,7 +68,10 @@ public class RaftServerActor implements  RaftServer {
                 .addActor(rpcActor.getActor())
                 .addActor(eventBusActor.getActor())
                 .build();
-        return new ServerContext(properties, config, stateActor.getState(), journalActor.getRaftJournal(), eventBusActor.getEventBus(), postOffice);
+        return new ServerContext(properties, config, stateActor.getState(),
+                journalActor.getRaftJournal(), voterActor.getMonitoredVoter(),
+                journalActor.getMonitoredJournal(), eventBusActor.getEventBus(),
+                postOffice, this);
 
     }
 
@@ -90,25 +97,46 @@ public class RaftServerActor implements  RaftServer {
     @Override
     public void recover() throws IOException {
         acquireFileLock();
-        actor.<JournalActor.RecoverJournalRequest>sendThen("State", "recover")
-                .thenCompose(request -> actor.sendThen("Journal", "recover", request))
-                .thenCompose(r -> CompletableFuture.allOf(
-                        actor.sendThen("State", "recoverVoterConfig"),
-                        actor.sendThen("Voter", "maybeUpdateTermOnRecovery")
-                )).whenComplete((r, e) -> {
-                    if (e != null) {
-                        logger.warn("Recover failed!", e);
-                    } else {
-                        logger.info("Recover ends!");
-                    }
-                    releaseFileLock();
-                });
+        try {
+            actor.<JournalActor.RecoverJournalRequest>sendThen("State", "recover")
+                    .thenCompose(request -> actor.sendThen("Journal", "recover", request))
+                    .thenCompose(r -> CompletableFuture.allOf(
+                            actor.sendThen("State", "recoverVoterConfig"),
+                            actor.sendThen("Voter", "maybeUpdateTermOnRecovery")
+                    )).whenComplete((r, e) -> {
+                        if (e != null) {
+                            logger.warn("Recover failed!", e);
+                        } else {
+                            logger.info("Recover success!");
+                        }
+                        releaseFileLock();
+                    }).get();
+        } catch (Throwable e) {
+            throw new RecoverException(e);
+        }
     }
 
 
     @Override
     public URI serverUri() {
         return context.getState().getLocalUri();
+    }
+
+
+    private void addMonitorProviderToCollectors() {
+        if (null != monitorCollectors) {
+            for (MonitorCollector monitorCollector : monitorCollectors) {
+                monitorCollector.addServer(monitorInfoProvider);
+            }
+        }
+    }
+
+    private void removeMonitorProviderToCollectors() {
+        if (null != monitorCollectors) {
+            for (MonitorCollector monitorCollector : monitorCollectors) {
+                monitorCollector.removeServer(monitorInfoProvider);
+            }
+        }
     }
 
     @Override
@@ -122,6 +150,8 @@ public class RaftServerActor implements  RaftServer {
 
     @Override
     public CompletableFuture<Void> startAsync() {
+        addMonitorProviderToCollectors();
+
         return actor.pubThen("onStart", context);
     }
 
@@ -136,7 +166,10 @@ public class RaftServerActor implements  RaftServer {
 
     @Override
     public CompletableFuture<Void> stopAsync() {
-        return actor.pubThen("onStop").thenRunAsync(() -> context.getPostOffice().stop());
+        return actor.pubThen("onStop").thenRunAsync(() -> {
+            context.getPostOffice().stop();
+            removeMonitorProviderToCollectors();
+        });
     }
 
     @Override

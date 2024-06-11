@@ -31,6 +31,10 @@ public class Actor {
         this.responseSupport = new ActorResponseSupport(inbox, outbox);
     }
 
+    public int getInboxQueueSize() {
+        return inbox.getQueueSize();
+    }
+
     /**
      * 获取Actor地址
      * @return 地址

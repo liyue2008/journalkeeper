@@ -296,4 +296,8 @@ class ActorInbox {
     boolean cleared() {
         return msgQueue.isEmpty();
     }
+
+    public int getQueueSize() {
+        return msgQueue.size();
+    }
 }

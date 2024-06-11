@@ -104,7 +104,7 @@ public class PreloadBufferPool implements MemoryCacheManager {
         threads.createThread(buildEvictThread());
         threads.start();
 
-        logger.info("JournalKeeper PreloadBufferPool loaded, max direct memory: {}, core direct memory: {}, evict direct memory: {}.",
+        logger.debug("JournalKeeper PreloadBufferPool loaded, max direct memory: {}, core direct memory: {}, evict direct memory: {}.",
                 Format.formatSize(maxMemorySize),
                 Format.formatSize(coreMemorySize),
                 Format.formatSize(evictMemorySize));

@@ -3,8 +3,19 @@ package io.journalkeeper.core.journal;
 import io.journalkeeper.core.api.JournalEntry;
 import io.journalkeeper.core.api.JournalEntryParser;
 import io.journalkeeper.core.api.RaftJournal;
+import io.journalkeeper.core.entry.internal.InternalEntriesSerializeSupport;
+import io.journalkeeper.core.entry.internal.InternalEntryType;
+import io.journalkeeper.core.entry.internal.ScalePartitionsEntry;
+import io.journalkeeper.core.monitor.MonitoredJournal;
+import io.journalkeeper.core.state.JournalKeeperState;
+import io.journalkeeper.exceptions.JournalException;
 import io.journalkeeper.exceptions.StateRecoverException;
+import io.journalkeeper.monitor.DiskMonitorInfo;
+import io.journalkeeper.monitor.JournalMonitorInfo;
+import io.journalkeeper.monitor.JournalPartitionMonitorInfo;
 import io.journalkeeper.persistence.BufferPool;
+import io.journalkeeper.persistence.JournalPersistence;
+import io.journalkeeper.persistence.MonitoredPersistence;
 import io.journalkeeper.persistence.PersistenceFactory;
 import io.journalkeeper.rpc.server.GetServerEntriesRequest;
 import io.journalkeeper.rpc.server.GetServerEntriesResponse;
@@ -18,9 +29,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.util.List;
-import java.util.Properties;
-import java.util.Set;
+import java.util.*;
+
+import static io.journalkeeper.core.api.RaftJournal.RESERVED_PARTITIONS_START;
+import static io.journalkeeper.core.journal.Journal.INDEX_STORAGE_SIZE;
 
 
 public class JournalActor {
@@ -36,12 +48,15 @@ private static final Logger logger = LoggerFactory.getLogger( JournalActor.class
 
     private final Actor actor = Actor.builder("Journal").setHandlerInstance(this).build();
 
+    private final MonitoredJournal monitoredJournal;
+
     public JournalActor(JournalEntryParser journalEntryParser, Config config, Properties properties) {
         this.config = config;
         this.properties = properties;
         persistenceFactory = ServiceSupport.load(PersistenceFactory.class);
         bufferPool = ServiceSupport.load(BufferPool.class);
         this.journal = new Journal(persistenceFactory, bufferPool, journalEntryParser);
+        this.monitoredJournal = new MonitoredJournalImpl();
     }
 
     public RaftJournal getRaftJournal() {
@@ -94,7 +109,6 @@ private static final Logger logger = LoggerFactory.getLogger( JournalActor.class
             List<Long> positions = journal.append(journalEntries);
             position = positions.get(positions.size() - 1);
         }
-        actor.pub("onJournalAppend", this.getRaftJournal());
         return position;
     }
 
@@ -148,5 +162,103 @@ private static final Logger logger = LoggerFactory.getLogger( JournalActor.class
 
     public Actor getActor() {
         return actor;
+    }
+
+    public MonitoredJournal getMonitoredJournal() {
+        return monitoredJournal;
+    }
+
+    private class MonitoredJournalImpl implements MonitoredJournal {
+
+        @Override
+        public JournalMonitorInfo collectJournalMonitorInfo() {
+            JournalMonitorInfo journalMonitorInfo = new JournalMonitorInfo();
+                journalMonitorInfo.setMinIndex(journal.minIndex());
+                journalMonitorInfo.setMaxIndex(journal.maxIndex());
+                journalMonitorInfo.setFlushIndex(journal.flushedIndex());
+                journalMonitorInfo.setCommitIndex(journal.commitIndex());
+                JournalPersistence journalPersistence = journal.getJournalPersistence();
+                journalMonitorInfo.setMinOffset(journalPersistence.min());
+                journalMonitorInfo.setMaxOffset(journalPersistence.max());
+                journalMonitorInfo.setFlushOffset(journalPersistence.flushed());
+                JournalPersistence indexPersistence = journal.getIndexPersistence();
+                journalMonitorInfo.setIndexMinOffset(indexPersistence.min());
+                journalMonitorInfo.setIndexMaxOffset(indexPersistence.max());
+                journalMonitorInfo.setIndexFlushOffset(indexPersistence.flushed());
+
+                Map<Integer, JournalPersistence> partitionMap = journal.getPartitionMap();
+                if (null != partitionMap) {
+                    List<JournalPartitionMonitorInfo> partitionMonitorInfoList = new ArrayList<>(partitionMap.size());
+                    partitionMap
+                            .entrySet().stream()
+                            .filter(entry -> entry.getKey() < RESERVED_PARTITIONS_START)
+                            .forEach(entry -> {
+                                int partition = entry.getKey();
+                                JournalPersistence persistence = entry.getValue();
+                                JournalPartitionMonitorInfo partitionMonitorInfo = new JournalPartitionMonitorInfo();
+                                partitionMonitorInfo.setPartition(partition);
+                                partitionMonitorInfo.setMinIndex(persistence.min() / INDEX_STORAGE_SIZE);
+                                partitionMonitorInfo.setMaxIndex(persistence.max() / INDEX_STORAGE_SIZE);
+                                partitionMonitorInfo.setMinOffset(persistence.min());
+                                partitionMonitorInfo.setMaxOffset(persistence.max());
+                                partitionMonitorInfo.setFlushOffset(persistence.flushed());
+                                partitionMonitorInfoList.add(partitionMonitorInfo);
+                            });
+                    journalMonitorInfo.setPartitions(partitionMonitorInfoList);
+                }
+            return journalMonitorInfo;
+        }
+
+        @Override
+        public DiskMonitorInfo collectDistMonitorInfo() {
+            JournalPersistence journalPersistence = journal.getJournalPersistence();
+            DiskMonitorInfo diskMonitorInfo = new DiskMonitorInfo();
+            if (journalPersistence instanceof MonitoredPersistence) {
+                MonitoredPersistence monitoredPersistence = (MonitoredPersistence) journalPersistence;
+
+                diskMonitorInfo.setPath(monitoredPersistence.getPath());
+                diskMonitorInfo.setFree(monitoredPersistence.getFreeSpace());
+                diskMonitorInfo.setTotal(monitoredPersistence.getTotalSpace());
+            }
+            return diskMonitorInfo;
+        }
+
+    }
+    @ActorSubscriber
+    private void onInternalEntryApply(InternalEntryType type, byte [] entry) {
+        if (type == InternalEntryType.TYPE_SCALE_PARTITIONS) {
+            scalePartitions(entry);
+        }
+    }
+
+
+    private void scalePartitions( byte[] internalEntry) {
+        ScalePartitionsEntry scalePartitionsEntry = InternalEntriesSerializeSupport.parse(internalEntry);
+        Set<Integer> partitions = scalePartitionsEntry.getPartitions();
+        try {
+            Set<Integer> currentPartitions = journal.getPartitions();
+            currentPartitions.removeIf(p -> p >= RESERVED_PARTITIONS_START);
+
+            for (int partition : partitions) {
+                if (!currentPartitions.contains(partition)) {
+                    journal.addPartition(partition);
+                }
+            }
+
+            List<Integer> toBeRemoved = new ArrayList<>();
+            for (Integer partition : currentPartitions) {
+                if (!partitions.contains(partition)) {
+                    toBeRemoved.add(partition);
+                }
+            }
+            for (Integer partition : toBeRemoved) {
+                journal.removePartition(partition);
+            }
+
+            logger.info("Journal repartitioned, partitions: {}, path: {}.",
+                    journal.getPartitions(), config.get("working_dir"));
+        } catch (IOException e) {
+            throw new JournalException(e);
+        }
     }
 }

@@ -178,13 +178,13 @@ public class ServerRpcActor implements ServerRpc {
 
     @Override
     public CompletableFuture<GetOpeningTransactionsResponse> getOpeningTransactions() {
-        return forwardRequest(null, "Voter");
+        return forwardRequest("Voter", "getOpeningTransactions");
 
     }
 
     @Override
     public CompletableFuture<GetSnapshotsResponse> getSnapshots() {
-        return forwardRequest(null , "State");
+        return forwardRequest("Voter", "getSnapshots");
 
     }
 

@@ -70,7 +70,7 @@ public class FileUtils {
                                     String.format("Delete failed: %s!", f.getAbsolutePath())
                             );
                         }
-                        logger.info("File: {} deleted.", f.getAbsolutePath());
+                        logger.debug("File: {} deleted.", f.getAbsolutePath());
                     }
                 }
             }
@@ -80,7 +80,7 @@ public class FileUtils {
                     String.format("Delete failed: %s!", folder.getAbsolutePath())
             );
         }
-        logger.info("Directory: {} deleted.", folder.getAbsolutePath());
+        logger.debug("Directory: {} deleted.", folder.getAbsolutePath());
 
     }
 

@@ -6,9 +6,7 @@ import io.journalkeeper.core.entry.internal.*;
 import io.journalkeeper.core.journal.JournalActor;
 import io.journalkeeper.core.raft.RaftState;
 import io.journalkeeper.core.server.PartialSnapshot;
-import io.journalkeeper.exceptions.NoSuchSnapshotException;
-import io.journalkeeper.exceptions.RecoverException;
-import io.journalkeeper.exceptions.StateRecoverException;
+import io.journalkeeper.exceptions.*;
 import io.journalkeeper.persistence.MetadataPersistence;
 import io.journalkeeper.persistence.PersistenceFactory;
 import io.journalkeeper.persistence.ServerMetadata;
@@ -21,6 +19,7 @@ import io.journalkeeper.utils.ThreadSafeFormat;
 import io.journalkeeper.utils.actor.*;
 import io.journalkeeper.utils.actor.annotation.*;
 import io.journalkeeper.utils.config.Config;
+import io.journalkeeper.utils.files.FileUtils;
 import io.journalkeeper.utils.spi.ServiceSupport;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -402,8 +401,14 @@ public class StateActor implements RaftState{
 
     @ActorListener
     public QueryStateResponse queryServerState(QueryStateRequest request) {
-        StateQueryResult result = state.query(request.getQuery(), journal);
-        return new QueryStateResponse(result.getResult(), result.getLastApplied());
+        long lastApplied = state.lastApplied();
+        if (request.getIndex() > 0 && state.lastApplied() < request.getIndex()) {
+            return new QueryStateResponse(new IllegalStateException());
+        } else {
+            StateQueryResult queryResult = state.query(request.getQuery(), journal);
+            logger.info("[QueryServerState] request: {}, server: {}, response: {}.", request.getIndex(), lastApplied, queryResult.getLastApplied());
+            return new QueryStateResponse(queryResult.getResult(), queryResult.getLastApplied());
+        }
     }
 
     @ActorListener(topic = "lastApplied")
@@ -456,17 +461,91 @@ public class StateActor implements RaftState{
         return state.voters();
     }
 
+    /**
+     * 如果请求位置存在对应的快照，直接从快照中读取状态返回；如果请求位置不存在对应的快照，那么需要找到最近快照日志，以这个最近快照日志对应的快照为输入，从最近快照日志开始（不含）直到请求位置（含）依次在状态机中执行这些日志，执行完毕后得到的快照就是请求位置的对应快照，读取这个快照的状态返回给客户端即可。
+     * 实现流程：
+     *
+     * 对比logIndex与在属性snapshots数组的上下界，检查请求位置是否越界，如果越界返回INDEX_OVERFLOW/INDEX_UNDERFLOW错误。
+     * 查询snapshots[logIndex]是否存在，如果存在快照中读取状态返回，否则下一步；
+     * 找到snapshots中距离logIndex最近且小于logIndex的快照位置和快照，记为nearestLogIndex和nearestSnapshot；
+     * 从log中的索引位置nearestLogIndex + 1开始，读取N条日志，N = logIndex - nearestLogIndex获取待执行的日志数组execLogs[]；
+     * 调用以nearestSnapshot为输入，依次在状态机stateMachine中执行execLogs，得到logIndex位置对应的快照，从快照中读取状态返回。
+     */
     @ActorListener
     private QueryStateResponse querySnapshot(QueryStateRequest request) {
-        // TODO
-        return null;
+        try {
+            if (request.getIndex() > state.lastApplied()) {
+                throw new IndexOverflowException();
+            }
+
+            if (request.getIndex() == state.lastApplied()) {
+                StateQueryResult queryResult = state.query(request.getQuery(), journal);
+                if (queryResult.getLastApplied() == request.getIndex()) {
+                    return new QueryStateResponse(queryResult.getResult(), queryResult.getLastApplied());
+                }
+            }
+
+            Snapshot snapshot;
+            Map.Entry<Long, Snapshot> nearestSnapshot = snapshots.floorEntry(request.getIndex());
+            if (null == nearestSnapshot) {
+                throw new IndexUnderflowException();
+            }
+
+            if (request.getIndex() == nearestSnapshot.getKey()) {
+                snapshot = nearestSnapshot.getValue();
+            } else {
+                snapshot = new Snapshot(stateFactory, metadataPersistence);
+                Path tempSnapshotPath = snapshotsPath().resolve(String.valueOf(request.getIndex()));
+                if (Files.exists(tempSnapshotPath)) {
+                    throw new ConcurrentModificationException(String.format("A snapshot of position %d is creating, please retry later.", request.getIndex()));
+                }
+                nearestSnapshot.getValue().dump(tempSnapshotPath);
+                snapshot.recover(tempSnapshotPath, properties);
+
+                while (snapshot.lastApplied() < request.getIndex()) {
+                    long offset = journal.readOffset(snapshot.lastApplied());
+                    JournalEntry header = journal.readEntryHeaderByOffset(offset);
+                    snapshot.applyEntry(header, new EntryFutureImpl(journal, offset), journal);
+                }
+                snapshot.flush();
+
+                snapshots.putIfAbsent(request.getIndex(), snapshot);
+            }
+            return new QueryStateResponse(snapshot.query(request.getQuery(), journal).getResult());
+        } catch (Throwable throwable) {
+            return new QueryStateResponse(throwable);
+        }
+    }
+    private void createSnapshot() {
+        long lastApplied = state.lastApplied();
+        logger.info("Creating snapshot at index: {}...", lastApplied);
+        Path snapshotPath = snapshotsPath().resolve(String.valueOf(lastApplied));
+        try {
+            FileUtils.deleteFolder(snapshotPath);
+            state.dump(snapshotPath);
+            Snapshot.markComplete(snapshotPath);
+            Snapshot snapshot = new Snapshot(stateFactory, metadataPersistence);
+            snapshot.recover(snapshotPath, properties);
+            snapshot.createSnapshot(journal);
+
+            snapshots.put(snapshot.lastApplied(), snapshot);
+            logger.info("Snapshot at index: {} created, {}.", lastApplied, snapshot);
+
+        } catch (IOException e) {
+            logger.warn("Create snapshot exception! Snapshot: {}.", snapshotPath, e);
+        }
     }
 
-    @ActorListener(topic = "getSnapshots")
-    private GetSnapshotsResponse doGetSnapshots() {
-        // TODO
-        return  null;
+
+    @ActorSubscriber
+    private void onInternalEntryApply(InternalEntryType type, byte [] entry) {
+        if (type == InternalEntryType.TYPE_CREATE_SNAPSHOT) {
+            createSnapshot();
+        } else if (type == InternalEntryType.TYPE_RECOVER_SNAPSHOT) {
+            recoverSnapShot(entry);
+        }
     }
+
     @ActorListener
     private GetServerStateResponse getServerState(GetServerStateRequest request) {
         try {
@@ -501,7 +580,29 @@ public class StateActor implements RaftState{
 
     }
 
+    private void recoverSnapShot(byte[] internalEntry) {
+        RecoverSnapshotEntry recoverSnapshotEntry = InternalEntriesSerializeSupport.parse(internalEntry);
+        Snapshot targetSnapshot = snapshots.get(recoverSnapshotEntry.getIndex());
+        if (targetSnapshot == null) {
+            logger.warn("recover snapshot failed, snapshot not exist, index: {}", recoverSnapshotEntry.getIndex());
+            return;
+        }
+        try {
+            createSnapshot();
+            doRecoverSnapshot(targetSnapshot);
+        } catch (Exception e) {
+            logger.info("recover snapshot exception, target snapshot: {}", targetSnapshot.getPath(), e);
+        }
+    }
 
+    private void doRecoverSnapshot(Snapshot targetSnapshot) throws IOException {
+        logger.info("recover snapshot, target snapshot: {}", targetSnapshot.getPath());
+        state.closeUnsafe();
+        state.clearUserState();
+        targetSnapshot.dumpUserState(statePath());
+        state.recoverUserStateUnsafe();
+        logger.info("recover snapshot success, target snapshot: {}", targetSnapshot.getPath());
+    }
 
     /**
      * Check reserved entries to ensure the last UpdateVotersConfig entry is applied to the current voter config.
@@ -531,9 +632,9 @@ public class StateActor implements RaftState{
         }
 
         if (isRecoveredFromJournal) {
-            logger.info("Voters config is recovered from journal.");
+            logger.debug("Voters config is recovered from journal.");
         } else {
-            logger.info("No voters config entry found in journal, Using config in the metadata.");
+            logger.debug("No voters config entry found in journal, Using config in the metadata.");
         }
     }
 

@@ -3,6 +3,7 @@ package io.journalkeeper.core.raft;
 import io.journalkeeper.base.ReplicableIterator;
 import io.journalkeeper.core.api.*;
 import io.journalkeeper.core.entry.internal.*;
+import io.journalkeeper.core.monitor.MonitoredVoter;
 import io.journalkeeper.core.state.ConfigState;
 import io.journalkeeper.core.state.Snapshot;
 import io.journalkeeper.core.transaction.JournalTransactionManager;
@@ -10,6 +11,10 @@ import io.journalkeeper.exceptions.IndexUnderflowException;
 import io.journalkeeper.exceptions.InstallSnapshotException;
 import io.journalkeeper.exceptions.NotLeaderException;
 import io.journalkeeper.exceptions.UpdateConfigurationException;
+import io.journalkeeper.monitor.FollowerMonitorInfo;
+import io.journalkeeper.monitor.LeaderFollowerMonitorInfo;
+import io.journalkeeper.monitor.LeaderMonitorInfo;
+import io.journalkeeper.monitor.VoterMonitorInfo;
 import io.journalkeeper.rpc.StatusCode;
 import io.journalkeeper.rpc.client.*;
 import io.journalkeeper.rpc.server.*;
@@ -21,6 +26,7 @@ import io.journalkeeper.utils.event.Event;
 import io.journalkeeper.utils.event.EventType;
 import io.journalkeeper.utils.net.StickySession;
 import io.journalkeeper.utils.state.StateMachine;
+import io.journalkeeper.utils.state.StateServer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -43,6 +49,8 @@ public class VoterActor {
     private final RaftJournal journal;
     private final RaftState state;
     private final Config config;
+
+    private final MonitoredVoter monitoredVoter= new MonitoredVoterImpl();
     
     // Election Only
     private long lastHeartbeat;  // 上一次从Leader收到的心跳时间
@@ -738,7 +746,7 @@ public class VoterActor {
         Iterator<WaitingResponse> iterator = waitingResponses.iterator();
         while (iterator.hasNext()) {
             WaitingResponse waitingResponse = iterator.next();
-            if (waitingResponse.positionMatch(stateResult.getLastApplied())) {
+            if (waitingResponse.positionMatch(stateResult.getLastApplied() - 1)) {
                 waitingResponse.putResult(stateResult.getUserResult());
                 if (waitingResponse.countdownReplication()) {
                     iterator.remove();
@@ -831,6 +839,18 @@ public class VoterActor {
         }
     }
 
+    @ActorListener(topic = "getSnapshots")
+    private GetSnapshotsResponse doGetSnapshots() {
+        if (raftState.current() != VoterState.LEADER) {
+            return new GetSnapshotsResponse(new NotLeaderException(leaderUri));
+        } else {
+            List<SnapshotEntry> snapshotEntries = state.getSnapshots().values()
+                    .stream()
+                    .map(snapshot -> new SnapshotEntry(snapshot.lastApplied(), snapshot.timestamp()))
+                    .collect(Collectors.toList());
+            return new GetSnapshotsResponse(new SnapshotsEntry(snapshotEntries));
+        }
+}
 
 
     @ActorListener
@@ -908,7 +928,14 @@ public class VoterActor {
         JournalEntry journalEntry = journalEntryParser.createJournalEntry(payload);
         journalEntry.setTerm(this.term);
         journalEntry.setPartition(INTERNAL_PARTITION);
-        actor.send("Journal", "append", ActorMsg.Response.IGNORE, Collections.singletonList(journalEntry));
+        actor.sendThen("Journal", "append", Collections.singletonList(journalEntry))
+                .thenRun(() -> {
+                    if(isSingleNodeCluster()){
+                        commit();
+                    } else {
+                        replication();
+                    }
+                });
     }
 
     @ActorListener(topic = "checkLeadership")
@@ -1381,4 +1408,83 @@ public class VoterActor {
         }
     }
 
+
+    MonitoredVoter getMonitoredVoter() {
+        return this.monitoredVoter;
+    }
+
+    private class MonitoredVoterImpl implements MonitoredVoter {
+        @Override
+        public VoterMonitorInfo collectVoterMonitorInfo() {
+            VoterMonitorInfo voterMonitorInfo = new VoterMonitorInfo();
+            voterMonitorInfo.setState(raftState.current());
+            voterMonitorInfo.setLastVote(votedFor);
+            voterMonitorInfo.setElectionTimeout(electionTimeoutMs);
+            voterMonitorInfo.setNextElectionTime(nextElectionTime);
+            voterMonitorInfo.setLastHeartbeat(lastHeartbeat);
+            voterMonitorInfo.setPreferredLeader(state.getPreferredLeader());
+            if (raftState.current() == VoterState.LEADER) {
+                LeaderMonitorInfo leaderMonitorInfo;
+                leaderMonitorInfo = collectLeaderMonitorInfo();
+                voterMonitorInfo.setLeader(leaderMonitorInfo);
+            } else if (raftState.current() == VoterState.FOLLOWER) {
+                FollowerMonitorInfo followerMonitorInfo;
+                followerMonitorInfo = collectFollowerMonitorInfo();
+                voterMonitorInfo.setFollower(followerMonitorInfo);
+            }
+            return voterMonitorInfo;
+        }
+
+        @Override
+        public RaftServer.Roll roll() {
+            return VoterActor.this.roll();
+        }
+
+        @Override
+        public VoterState voterState() {
+            return raftState.current();
+        }
+
+        @Override
+        public URI leaderUri() {
+            return leaderUri;
+        }
+
+        private FollowerMonitorInfo collectFollowerMonitorInfo() {
+            FollowerMonitorInfo followerMonitorInfo = null;
+            if (raftState.current() == VoterState.FOLLOWER) {
+                followerMonitorInfo = new FollowerMonitorInfo();
+                followerMonitorInfo.setState(StateServer.ServerState.RUNNING);
+                followerMonitorInfo.setLeaderMaxIndex(leaderMaxIndex);
+            }
+            return followerMonitorInfo;
+        }
+
+        private LeaderMonitorInfo collectLeaderMonitorInfo() {
+            LeaderMonitorInfo leaderMonitorInfo = null;
+            if (raftState.current() == VoterState.LEADER) {
+                leaderMonitorInfo = new LeaderMonitorInfo();
+                leaderMonitorInfo.setState(StateServer.ServerState.RUNNING);
+                leaderMonitorInfo.setRequestQueueSize(actor.getInboxQueueSize());
+                leaderMonitorInfo.setWriteEnabled(isWritable);
+
+                List<LeaderFollowerMonitorInfo> leaderFollowerMonitorInfoList = new ArrayList<>(replicationDestinations.size());
+                for (ReplicationDestination destination : replicationDestinations) {
+                    LeaderFollowerMonitorInfo destInfo = collectorLeaderFollowerMonitorInfo(destination);
+                    leaderFollowerMonitorInfoList.add(destInfo);
+                }
+                leaderMonitorInfo.setFollowers(leaderFollowerMonitorInfoList);
+            }
+            return leaderMonitorInfo;
+        }
+
+        public LeaderFollowerMonitorInfo collectorLeaderFollowerMonitorInfo(ReplicationDestination destination) {
+            LeaderFollowerMonitorInfo destInfo = new LeaderFollowerMonitorInfo();
+            destInfo.setUri(destination.getUri());
+            destInfo.setNextIndex(destination.getNextIndex());
+            destInfo.setMatchIndex(destination.getMatchIndex());
+            destInfo.setLastHeartbeatResponseTime(destination.getLastHeartbeatResponseTime());
+            destInfo.setLastHeartbeatRequestTime(destination.getLastHeartbeatRequestTime());
+            return destInfo;        }
+    }
 }

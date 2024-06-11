@@ -429,7 +429,6 @@ public class KvTest {
 
     // 替换节点
 
-    // FIXME： 偶尔会失败，暂未找到原因。
     @Test
     public void replaceVotersTest() throws IOException, InterruptedException, ExecutionException, TimeoutException {
         final int serverCount = 3;

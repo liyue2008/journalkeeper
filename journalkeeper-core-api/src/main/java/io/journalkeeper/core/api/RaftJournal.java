@@ -17,6 +17,7 @@ import io.journalkeeper.exceptions.IndexOverflowException;
 import io.journalkeeper.exceptions.IndexUnderflowException;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -150,4 +151,10 @@ public interface RaftJournal {
     JournalEntry readByOffset(long offset);
 
     long commitIndex();
+
+    long flushedIndex();
+
+    Map<Integer, Long> calcPartitionIndices(long journalOffset);
+
+    long maxOffset();
 }

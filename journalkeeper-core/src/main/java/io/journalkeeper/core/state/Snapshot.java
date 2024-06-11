@@ -51,7 +51,7 @@ private static final Logger logger = LoggerFactory.getLogger(Snapshot.class);
         super.recover(path, properties, false);
     }
 
-    public void createSnapshot(Journal journal) throws IOException {
+    public void createSnapshot(RaftJournal journal) throws IOException {
         internalState.setSnapshotTimestamp(System.currentTimeMillis());
         internalState.setMinOffset(
                 journal.maxIndex() == internalState.minIndex() ? journal.maxOffset() :

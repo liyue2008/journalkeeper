@@ -15,6 +15,8 @@ package io.journalkeeper.core.server;
 
 import io.journalkeeper.core.BootStrap;
 import io.journalkeeper.core.api.RaftServer;
+import io.journalkeeper.core.api.SnapshotEntry;
+import io.journalkeeper.core.api.SnapshotsEntry;
 import io.journalkeeper.core.easy.JkClient;
 import io.journalkeeper.core.state.KvStateFactory;
 import io.journalkeeper.utils.files.FileUtils;
@@ -67,17 +69,21 @@ public class RecoverSnapshotTest {
         Assert.assertEquals("value_1", client.query("GET", "key_1").get());
 
         kvServer.getAdminClient().takeSnapshot().get();
-        Assert.assertEquals(kvServer.getAdminClient().getSnapshots().get().getSnapshots().size(), 2);
+        List<SnapshotEntry> snapshotEntries = kvServer.getAdminClient().getSnapshots().get().getSnapshots();
+        Assert.assertEquals(snapshotEntries.size(), 2);
+        long index = snapshotEntries.get(1).getIndex();
 
         Assert.assertNull(client.update("SET", "key_2 value_2").get());
         Assert.assertEquals("value_2", client.query("GET", "key_2").get());
 
-        kvServer.getAdminClient().recoverSnapshot(2).get();
-        Assert.assertEquals(kvServer.getAdminClient().getSnapshots().get().getSnapshots().size(), 3);
+        kvServer.getAdminClient().recoverSnapshot(index).get();
+        snapshotEntries = kvServer.getAdminClient().getSnapshots().get().getSnapshots();
+        Assert.assertEquals(snapshotEntries.size(), 3);
+        index = snapshotEntries.get(2).getIndex();
         Assert.assertEquals("value_1", client.query("GET", "key_1").get());
         Assert.assertNull(client.query("GET", "key_2").get());
 
-        kvServer.getAdminClient().recoverSnapshot(4).get();
+        kvServer.getAdminClient().recoverSnapshot(index).get();
         Assert.assertEquals(kvServer.getAdminClient().getSnapshots().get().getSnapshots().size(), 4);
         Assert.assertEquals("value_1", client.query("GET", "key_1").get());
         Assert.assertEquals("value_2", client.query("GET", "key_2").get());
@@ -120,28 +126,28 @@ public class RecoverSnapshotTest {
         }
 
         servers.get(0).getAdminClient().takeSnapshot().get();
-
         for (int i = 0; i < servers.size(); i++) {
             Assert.assertEquals(servers.get(i).getAdminClient().getSnapshots().get().getSnapshots().size(), 2);
         }
+        long index = servers.get(0).getAdminClient().getSnapshots().get().getSnapshots().get(1).getIndex();
 
         for (JkClient client : clients) {
             Assert.assertNull(client.<String, String>update("SET", "key_2 value_2").get());
             Assert.assertEquals("value_2", client.<String, String>query("GET", "key_2").get());
         }
 
-        servers.get(0).getAdminClient().recoverSnapshot(4).get();
+        servers.get(0).getAdminClient().recoverSnapshot(index).get();
 
         for (int i = 0; i < servers.size(); i++) {
             Assert.assertEquals(servers.get(i).getAdminClient().getSnapshots().get().getSnapshots().size(), 3);
         }
-
+        index = servers.get(0).getAdminClient().getSnapshots().get().getSnapshots().get(2).getIndex();
         for (JkClient client : clients) {
             Assert.assertEquals("value_1", client.<String, String>query("GET", "key_1").get());
             Assert.assertNull(client.<String, String>query("GET", "key_2").get());
         }
 
-        servers.get(0).getAdminClient().recoverSnapshot(8).get();
+        servers.get(0).getAdminClient().recoverSnapshot(index).get();
 
         for (int i = 0; i < servers.size(); i++) {
             Assert.assertEquals(servers.get(i).getAdminClient().getSnapshots().get().getSnapshots().size(), 4);
@@ -166,6 +172,5 @@ public class RecoverSnapshotTest {
         for (BootStrap server : servers) {
             server.shutdown();
         }
-
     }
 }
