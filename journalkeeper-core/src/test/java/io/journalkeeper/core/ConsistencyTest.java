@@ -94,6 +94,7 @@ public class ConsistencyTest {
             properties.setProperty("persistence.journal.file_data_size", String.valueOf(128 * 1024));
             properties.setProperty("persistence.index.file_data_size", String.valueOf(16 * 1024));
             properties.setProperty("disable_logo", "true");
+            properties.setProperty("server_name", String.valueOf(i));
 
 //            properties.setProperty("enable_metric", "true");
 //            properties.setProperty("print_metric_interval_sec", "3");

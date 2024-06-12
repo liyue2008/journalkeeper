@@ -406,7 +406,6 @@ public class StateActor implements RaftState{
             return new QueryStateResponse(new IllegalStateException());
         } else {
             StateQueryResult queryResult = state.query(request.getQuery(), journal);
-            logger.info("[QueryServerState] request: {}, server: {}, response: {}.", request.getIndex(), lastApplied, queryResult.getLastApplied());
             return new QueryStateResponse(queryResult.getResult(), queryResult.getLastApplied());
         }
     }

@@ -604,7 +604,7 @@ public class VoterActor {
         List<JournalEntry> journalEntries = requestToJournalEntries(request);
 
         actor.<Long>sendThen("Journal", "append", journalEntries)
-                .thenApply(position -> new WaitingResponse(msg, position - journalEntries.size(), position, config.get("rpc_timeout_ms"), actor))
+                .thenApply(position -> new WaitingResponse(msg, position - journalEntries.size() , position , config.get("rpc_timeout_ms"), actor))
                 .thenAccept(this.waitingResponses::add)
                 .thenRun(() -> onJournalAppend(request.getResponseConfig()));
 
@@ -747,7 +747,7 @@ public class VoterActor {
         while (iterator.hasNext()) {
             WaitingResponse waitingResponse = iterator.next();
             if (waitingResponse.positionMatch(stateResult.getLastApplied() - 1)) {
-                waitingResponse.putResult(stateResult.getUserResult());
+                waitingResponse.putResult(stateResult.getUserResult(), stateResult.getLastApplied());
                 if (waitingResponse.countdownReplication()) {
                     iterator.remove();
                 }
@@ -929,13 +929,7 @@ public class VoterActor {
         journalEntry.setTerm(this.term);
         journalEntry.setPartition(INTERNAL_PARTITION);
         actor.sendThen("Journal", "append", Collections.singletonList(journalEntry))
-                .thenRun(() -> {
-                    if(isSingleNodeCluster()){
-                        commit();
-                    } else {
-                        replication();
-                    }
-                });
+                .thenRun(() -> onJournalAppend(ResponseConfig.REPLICATION));
     }
 
     @ActorListener(topic = "checkLeadership")
@@ -978,6 +972,7 @@ public class VoterActor {
         private final long rpcTimeoutMs;
         private final List<byte[]> results;
         private final Actor actor;
+        private long lastApplied = -1L;
 
 
         public WaitingResponse(ActorMsg requestMsg, long fromPosition, long toPosition, long rpcTimeoutMs, Actor actor) {
@@ -1028,13 +1023,14 @@ public class VoterActor {
             }
             return false;
         }
-        private void putResult(byte[] result) {
+        private void putResult(byte[] result, long lastApplied) {
             results.add(result);
+            this.lastApplied = lastApplied;
         }
 
         private boolean maybeReply() {
             if (shouldReply()) {
-                actor.reply(requestMsg, new UpdateClusterStateResponse(results, fromPosition));
+                actor.reply(requestMsg, new UpdateClusterStateResponse(results, lastApplied));
                 return true;
             }
             return false;

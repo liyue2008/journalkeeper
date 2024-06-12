@@ -75,14 +75,12 @@ public class DefaultRaftClient extends AbstractClient implements RaftClient {
     }
 
     private CompletableFuture<byte[]> queryAllServers(byte[] query, QueryConsistency consistency) {
-        long finalLastApplied = lastApplied.get();
        return clientRpc.invokeClientServerRpc(
                rpc -> rpc.queryServerState(new QueryStateRequest(query, consistency == QueryConsistency.NONE ? -1L : lastApplied.get()))
        )
                 .thenApply(super::checkResponse)
                 .thenApply(response -> {
                     maybeUpdateLastApplied(response.getLastApplied());
-                    logger.info("[Query] request: {}, response: {}", finalLastApplied, response.getLastApplied());
                     return response;
                 })
                 .thenApply(QueryStateResponse::getResult);
