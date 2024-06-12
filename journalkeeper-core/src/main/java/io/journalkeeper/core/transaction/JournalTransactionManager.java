@@ -13,10 +13,7 @@
  */
 package io.journalkeeper.core.transaction;
 
-import io.journalkeeper.core.api.EntryFuture;
-import io.journalkeeper.core.api.JournalEntry;
-import io.journalkeeper.core.api.JournalEntryParser;
-import io.journalkeeper.core.api.UpdateRequest;
+import io.journalkeeper.core.api.*;
 import io.journalkeeper.core.api.transaction.JournalKeeperTransactionContext;
 import io.journalkeeper.core.api.transaction.UUIDTransactionId;
 import io.journalkeeper.exceptions.JournalException;
@@ -24,6 +21,9 @@ import io.journalkeeper.exceptions.TransactionException;
 import io.journalkeeper.core.journal.Journal;
 import io.journalkeeper.rpc.client.ClientServerRpc;
 import io.journalkeeper.rpc.client.UpdateClusterStateRequest;
+import io.journalkeeper.rpc.client.UpdateClusterStateResponse;
+import io.journalkeeper.rpc.client.UpdateVotersRequest;
+import io.journalkeeper.utils.actor.Actor;
 import io.journalkeeper.utils.state.ServerStateMachine;
 
 import java.util.Collection;
@@ -42,14 +42,22 @@ public class JournalTransactionManager extends ServerStateMachine {
     public static final int TRANSACTION_PARTITION_COUNT = 32;
 
     private final ClientServerRpc server;
+    private final Actor actor;
     private final JournalTransactionState transactionState;
     private final Map<UUID, CompletableFuture<Void>> pendingCompleteTransactionFutures = new ConcurrentHashMap<>();
     private final TransactionEntrySerializer transactionEntrySerializer = new TransactionEntrySerializer();
 
-    public JournalTransactionManager(Journal journal, ClientServerRpc server,
+    public JournalTransactionManager(RaftJournal journal, ClientServerRpc server,
                                      ScheduledExecutorService scheduledExecutor, long transactionTimeoutMs) {
         this.server = server;
+        this.actor = null;
         this.transactionState = new JournalTransactionState(journal, transactionTimeoutMs, server, scheduledExecutor);
+    }
+
+    public JournalTransactionManager(RaftJournal journal, Actor actor, long transactionTimeoutMs) {
+        this.server = null;
+        this.actor = actor;
+        this.transactionState = new JournalTransactionState(journal, transactionTimeoutMs, actor);
     }
 
     @Override
@@ -70,8 +78,17 @@ public class JournalTransactionManager extends ServerStateMachine {
         TransactionEntry entry = new TransactionEntry(transactionId, context);
         final long timestamp = entry.getTimestamp();
         byte[] serializedEntry = transactionEntrySerializer.serialize(entry);
+        CompletableFuture<UpdateClusterStateResponse> future = null;
+        UpdateClusterStateRequest request = new UpdateClusterStateRequest(new UpdateRequest(serializedEntry, partition, 1));
 
-        return server.updateClusterState(new UpdateClusterStateRequest(new UpdateRequest(serializedEntry, partition, 1)))
+        if (null != server) {
+            future = server.updateClusterState(request);
+        }
+        if (null != actor) {
+            future = actor.sendThen("Voter", "updateClusterState", request);
+        }
+
+        return future
                 .thenApply(response -> {
                     if (response.success()) {
                         return new JournalKeeperTransactionContext(
@@ -90,8 +107,15 @@ public class JournalTransactionManager extends ServerStateMachine {
         byte[] serializedEntry = transactionEntrySerializer.serialize(entry);
         CompletableFuture<Void> future = new CompletableFuture<>();
         pendingCompleteTransactionFutures.put(transactionId, future);
-        server
-                .updateClusterState(new UpdateClusterStateRequest(new UpdateRequest(serializedEntry, partition, 1)))
+        CompletableFuture<UpdateClusterStateResponse> futureRet = null;
+        UpdateClusterStateRequest request = new UpdateClusterStateRequest(new UpdateRequest(serializedEntry, partition, 1));
+        if (null != server) {
+            futureRet = server.updateClusterState(request);
+        }
+        if (null != actor) {
+            futureRet = actor.sendThen("Voter", "updateClusterState", request);
+        }
+        futureRet
                 .thenAccept(response -> {
                     if (!response.success()) {
                         CompletableFuture<Void> retFuture = pendingCompleteTransactionFutures.remove(transactionId);

@@ -59,9 +59,13 @@ class ActorOutbox {
     boolean consumeOneMsg(Consumer<ActorMsg> consumer) {
         ActorMsg msg = msgQueue.peek();
         if (msg != null) {
-            consumer.accept(msg);
-            msgQueue.poll();
-            return true;
+            try {
+                consumer.accept(msg);
+                msgQueue.poll();
+                return true;
+            } catch (Throwable t) {
+                logger.warn("consumeOneMsg error, msg: {}", msg, t);
+            }
         }
         return false;
     }

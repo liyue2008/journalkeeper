@@ -775,6 +775,7 @@ public class JournalStoreTest {
             properties.setProperty("working_dir", workingDir.toString());
             properties.setProperty("snapshot_step", "0");
             properties.setProperty("disable_logo", "true");
+            properties.setProperty("server_name", String.valueOf(i));
 
 
 

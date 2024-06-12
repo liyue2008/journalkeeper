@@ -697,6 +697,16 @@ public class StateActor implements RaftState{
 
     }
 
+    @ActorListener
+    private void addInterceptor(ApplyReservedEntryInterceptor interceptor) {
+        state.addInterceptor(interceptor);
+    }
+
+    @ActorListener
+    private void removeInterceptor(ApplyReservedEntryInterceptor interceptor) {
+        state.removeInterceptor(interceptor);
+    }
+
     private void flush() {
         if(!isRecovered){
             return;

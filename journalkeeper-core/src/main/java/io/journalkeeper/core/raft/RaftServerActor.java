@@ -52,7 +52,7 @@ public class RaftServerActor implements  RaftServer {
     private ServerContext buildServerContext(Roll roll, StateFactory stateFactory, JournalEntryParser journalEntryParser, Properties properties, Config config) {
         JournalActor journalActor = new JournalActor(journalEntryParser, config, properties);
         StateActor stateActor = new StateActor(stateFactory, journalEntryParser, journalActor.getRaftJournal(),config, properties);
-        VoterActor voterActor = new VoterActor(roll, journalEntryParser, null, journalActor.getRaftJournal(),stateActor.getState(), config);
+        VoterActor voterActor = new VoterActor(roll, journalEntryParser, journalActor.getRaftJournal(),stateActor.getState(), config);
         ServerRpcActor serverRpcActor = new ServerRpcActor();
         this.serverRpc = serverRpcActor;
         RpcActor rpcActor = new RpcActor(properties);

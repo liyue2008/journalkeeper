@@ -15,6 +15,7 @@ package io.journalkeeper.core.transaction;
 
 import io.journalkeeper.core.api.JournalEntry;
 import io.journalkeeper.core.api.JournalEntryParser;
+import io.journalkeeper.core.api.RaftJournal;
 import io.journalkeeper.core.api.UpdateRequest;
 import io.journalkeeper.core.api.transaction.JournalKeeperTransactionContext;
 import io.journalkeeper.core.api.transaction.UUIDTransactionId;
@@ -23,6 +24,7 @@ import io.journalkeeper.core.journal.Journal;
 import io.journalkeeper.rpc.client.ClientServerRpc;
 import io.journalkeeper.rpc.client.UpdateClusterStateRequest;
 import io.journalkeeper.rpc.client.UpdateClusterStateResponse;
+import io.journalkeeper.utils.actor.Actor;
 import io.journalkeeper.utils.state.ServerStateMachine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -56,7 +58,7 @@ import static io.journalkeeper.core.transaction.JournalTransactionManager.TRANSA
 class JournalTransactionState extends ServerStateMachine {
     private static final Logger logger = LoggerFactory.getLogger(JournalTransactionState.class);
     private static final long RETRY_COMPLETE_TRANSACTION_INTERVAL_MS = 10000L;
-    private final Journal journal;
+    private final RaftJournal journal;
     private final Map<Integer /* partition */, TransactionEntryType /* last transaction entry type */> partitionStatusMap;
     private final Map<UUID /* transaction id */, TransactionState /* transaction state */> openingTransactionMap;
     private final ClientServerRpc server;
@@ -67,13 +69,26 @@ class JournalTransactionState extends ServerStateMachine {
     private final long transactionTimeoutMs;
     private ScheduledFuture retryCompleteTransactionScheduledFuture = null;
     private ScheduledFuture checkOutdatedTransactionsScheduledFuture = null;
+    private final Actor actor;
 
-    JournalTransactionState(Journal journal, long transactionTimeoutMs, ClientServerRpc server, ScheduledExecutorService scheduledExecutor) {
+    JournalTransactionState(RaftJournal journal, long transactionTimeoutMs, ClientServerRpc server, ScheduledExecutorService scheduledExecutor) {
         super(false);
         this.journal = journal;
         this.transactionTimeoutMs = transactionTimeoutMs;
         this.server = server;
         this.scheduledExecutor = scheduledExecutor;
+        this.partitionStatusMap = new HashMap<>(TRANSACTION_PARTITION_COUNT);
+        this.openingTransactionMap = new HashMap<>(TRANSACTION_PARTITION_COUNT);
+        this.actor = null;
+    }
+
+    JournalTransactionState(RaftJournal journal, long transactionTimeoutMs, Actor actor) {
+        super(false);
+        this.journal = journal;
+        this.transactionTimeoutMs = transactionTimeoutMs;
+        this.server = null;
+        this.scheduledExecutor = null;
+        this.actor = actor;
         this.partitionStatusMap = new HashMap<>(TRANSACTION_PARTITION_COUNT);
         this.openingTransactionMap = new HashMap<>(TRANSACTION_PARTITION_COUNT);
     }
@@ -82,18 +97,24 @@ class JournalTransactionState extends ServerStateMachine {
     protected void doStart() {
         super.doStart();
         recoverTransactionState();
-        retryCompleteTransactionScheduledFuture = scheduledExecutor.scheduleWithFixedDelay(
-                this::retryCompleteTransactions,
-                RETRY_COMPLETE_TRANSACTION_INTERVAL_MS,
-                RETRY_COMPLETE_TRANSACTION_INTERVAL_MS,
-                TimeUnit.MILLISECONDS
-        );
-        checkOutdatedTransactionsScheduledFuture = scheduledExecutor.scheduleWithFixedDelay(
-                this::abortOutdatedTransactions,
-                transactionTimeoutMs,
-                transactionTimeoutMs,
-                TimeUnit.MILLISECONDS
-        );
+        if (null != actor) {
+            actor.addScheduler(RETRY_COMPLETE_TRANSACTION_INTERVAL_MS, TimeUnit.MILLISECONDS, "retryCompleteTransactions", this::retryCompleteTransactions);
+            actor.addScheduler(transactionTimeoutMs, TimeUnit.MILLISECONDS, "checkOutdatedTransactions", this::abortOutdatedTransactions);
+        }
+        if (null != scheduledExecutor) {
+            retryCompleteTransactionScheduledFuture = scheduledExecutor.scheduleWithFixedDelay(
+                    this::retryCompleteTransactions,
+                    RETRY_COMPLETE_TRANSACTION_INTERVAL_MS,
+                    RETRY_COMPLETE_TRANSACTION_INTERVAL_MS,
+                    TimeUnit.MILLISECONDS
+            );
+            checkOutdatedTransactionsScheduledFuture = scheduledExecutor.scheduleWithFixedDelay(
+                    this::abortOutdatedTransactions,
+                    transactionTimeoutMs,
+                    transactionTimeoutMs,
+                    TimeUnit.MILLISECONDS
+            );
+        }
     }
 
     @Override
@@ -288,26 +309,49 @@ class JournalTransactionState extends ServerStateMachine {
                 List<TransactionEntry> transactionEntries = me.getValue();
 
                 for (TransactionEntry te : transactionEntries) {
-                    futures.add(
-                            server
-                                    .updateClusterState(
-                                            new UpdateClusterStateRequest(
-                                                    new UpdateRequest(
-                                                            te.getEntry(), bizPartition, te.getBatchSize()
-                                                    )
-                                            )
-                                    )
-                                    .exceptionally(UpdateClusterStateResponse::new)
-                                    .thenAccept(response -> {
-                                        if (response.success()) {
-                                            unFinishedRequests.decrementAndGet();
-                                        } else {
-                                            logger.warn("Transaction commit {} failed! Cause: {}.",
-                                                    transactionId.toString(),
-                                                    response.errorString());
-                                        }
-                                    })
-                    );
+                    if (null != server) {
+                        futures.add(
+                                server
+                                        .updateClusterState(
+                                                new UpdateClusterStateRequest(
+                                                        new UpdateRequest(
+                                                                te.getEntry(), bizPartition, te.getBatchSize()
+                                                        )
+                                                )
+                                        )
+                                        .exceptionally(UpdateClusterStateResponse::new)
+                                        .thenAccept(response -> {
+                                            if (response.success()) {
+                                                unFinishedRequests.decrementAndGet();
+                                            } else {
+                                                logger.warn("Transaction commit {} failed! Cause: {}.",
+                                                        transactionId.toString(),
+                                                        response.errorString());
+                                            }
+                                        })
+                        );
+                    }
+
+                    if (null != actor) {
+                        futures.add(
+                                actor
+                                        .<UpdateClusterStateResponse>sendThen("Voter", "updateClusterState", new UpdateClusterStateRequest(
+                                                new UpdateRequest(
+                                                        te.getEntry(), bizPartition, te.getBatchSize()
+                                                )
+                                        ))
+                                        .exceptionally(UpdateClusterStateResponse::new)
+                                        .thenAccept(response -> {
+                                            if (response.success()) {
+                                                unFinishedRequests.decrementAndGet();
+                                            } else {
+                                                logger.warn("Transaction commit {} failed! Cause: {}.",
+                                                        transactionId ,
+                                                        response.errorString());
+                                            }
+                                        })
+                        );
+                    }
                 }
             }
             CompletableFuture
@@ -352,22 +396,41 @@ class JournalTransactionState extends ServerStateMachine {
     private void writeTransactionCompleteEntry(UUID transactionId, boolean commitOrAbort, int partition) {
         TransactionEntry entry = new TransactionEntry(transactionId, TransactionEntryType.TRANSACTION_COMPLETE, commitOrAbort);
         byte[] serializedEntry = transactionEntrySerializer.serialize(entry);
-        server.updateClusterState(new UpdateClusterStateRequest(
-                new UpdateRequest(
-                        serializedEntry, partition, 1
-                )
-        ))
-                .exceptionally(UpdateClusterStateResponse::new)
-                .thenAccept(response -> {
-                    if (response.success()) {
-                        logger.info("Transaction {} {}.", transactionId.toString(), commitOrAbort ? "committed" : "aborted");
-                    } else {
-                        logger.warn("Transaction {} {} failed! Cause: {}.",
-                                transactionId.toString(),
-                                commitOrAbort ? "commit" : "abort",
-                                response.errorString());
-                    }
-                });
+        if (null != server) {
+            server.updateClusterState(new UpdateClusterStateRequest(
+                            new UpdateRequest(
+                                    serializedEntry, partition, 1
+                            )
+                    ))
+                    .exceptionally(UpdateClusterStateResponse::new)
+                    .thenAccept(response -> {
+                        if (response.success()) {
+                            logger.info("Transaction {} {}.", transactionId.toString(), commitOrAbort ? "committed" : "aborted");
+                        } else {
+                            logger.warn("Transaction {} {} failed! Cause: {}.",
+                                    transactionId.toString(),
+                                    commitOrAbort ? "commit" : "abort",
+                                    response.errorString());
+                        }
+                    });
+        }
+        if (null != actor) {
+            actor.<UpdateClusterStateResponse>sendThen("Voter", "updateClusterState", new UpdateClusterStateRequest(
+                    new UpdateRequest(
+                            serializedEntry, partition, 1
+                    )
+            )).exceptionally(UpdateClusterStateResponse::new)
+                    .thenAccept(response -> {
+                        if (response.success()) {
+                            logger.info("Transaction {} {}.", transactionId.toString(), commitOrAbort ? "committed" : "aborted");
+                        } else {
+                            logger.warn("Transaction {} {} failed! Cause: {}.",
+                                    transactionId.toString(),
+                                    commitOrAbort ? "commit" : "abort",
+                                    response.errorString());
+                        }
+                    });
+        }
     }
 
     Collection<JournalKeeperTransactionContext> getOpeningTransactions() {

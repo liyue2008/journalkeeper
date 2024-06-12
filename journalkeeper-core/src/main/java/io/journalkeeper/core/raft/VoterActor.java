@@ -2,8 +2,11 @@ package io.journalkeeper.core.raft;
 
 import io.journalkeeper.base.ReplicableIterator;
 import io.journalkeeper.core.api.*;
+import io.journalkeeper.core.api.transaction.JournalKeeperTransactionContext;
+import io.journalkeeper.core.api.transaction.UUIDTransactionId;
 import io.journalkeeper.core.entry.internal.*;
 import io.journalkeeper.core.monitor.MonitoredVoter;
+import io.journalkeeper.core.state.ApplyReservedEntryInterceptor;
 import io.journalkeeper.core.state.ConfigState;
 import io.journalkeeper.core.state.Snapshot;
 import io.journalkeeper.core.transaction.JournalTransactionManager;
@@ -70,7 +73,8 @@ public class VoterActor {
     
     // Leader Only
     private final JournalEntryParser journalEntryParser;
-    private final JournalTransactionManager journalTransactionManager;
+    private JournalTransactionManager journalTransactionManager = null;
+    private ApplyReservedEntryInterceptor journalTransactionInterceptor;
     private boolean isWritable = true; // Leader 是否可写
     private long disableWriteTimeout = 0L; // 禁用写操作的超时时间
     private boolean isAnnounced = false; // 发布Leader announcement 被多数确认，正式行使leader职权。
@@ -86,9 +90,8 @@ public class VoterActor {
     private StickySession<URI> parentSession = null; // 父节点URI
 
 
-    VoterActor(RaftServer.Roll roll, JournalEntryParser journalEntryParser, JournalTransactionManager journalTransactionManager, RaftJournal journal, RaftState state, Config config) {
+    VoterActor(RaftServer.Roll roll, JournalEntryParser journalEntryParser,  RaftJournal journal, RaftState state, Config config) {
         this.journalEntryParser = journalEntryParser;
-        this.journalTransactionManager = journalTransactionManager;
         this.journal = journal;
         this.state = state;
         this.config = config;
@@ -240,6 +243,9 @@ public class VoterActor {
 
     private void convertToObserver() {
         VoterState oldState = raftState.current();
+        if (oldState == VoterState.LEADER ) {
+            onLeaderStepDown();
+        }
         raftState.convertTo(VoterState.OBSERVER);
         logger.info("Convert voter state from {} to OBSERVER.", oldState);
 
@@ -247,6 +253,9 @@ public class VoterActor {
 
     private void convertToFollower() {
         VoterState oldState = raftState.current();
+        if (oldState == VoterState.LEADER ) {
+            onLeaderStepDown();
+        }
         raftState.convertTo(VoterState.FOLLOWER);
         this.electionTimeoutMs = config.<Long>get("election_timeout_ms") + randomInterval(config.get("election_timeout_ms"));
         logger.info("Convert voter state from {} to FOLLOWER, electionTimeout: {}.", oldState, electionTimeoutMs);
@@ -282,7 +291,10 @@ public class VoterActor {
         leaderUri = state.getLocalUri();
         this.replicationDestinations.forEach(ReplicationDestination::reset);
         announceLeader();
-
+        this.journalTransactionManager = new JournalTransactionManager(journal, actor, config.get("transaction_timeout_ms"));
+        journalTransactionManager.start();
+        this.journalTransactionInterceptor = (entryHeader, entryFuture, index) -> journalTransactionManager.applyEntry(entryHeader, entryFuture);
+        actor.send("State", "addInterceptor", this.journalTransactionInterceptor);
         logger.info("Convert voter state from {} to LEADER, {}.", oldState, voterInfo());
 
     }
@@ -645,6 +657,26 @@ public class VoterActor {
         }
     }
 
+    // 从Leader下台后需要做的清理工作。
+    private void onLeaderStepDown() {
+        if (journalTransactionManager != null) {
+            journalTransactionManager.stop();
+            journalTransactionManager = null;
+        }
+        if (null != journalTransactionInterceptor) {
+            actor.send("State", "removeInterceptor", journalTransactionInterceptor);
+            journalTransactionInterceptor = null;
+        }
+        failAllPendingCallbacks();
+
+    }
+    // 给所有没来及处理的请求返回失败响应
+    private void failAllPendingCallbacks() {
+
+        // TODO
+    }
+
+
     /**
      * 对于每一个AsyncAppendRequest RPC请求，当收到成功响应的时需要更新repStartIndex、matchIndex和commitIndex。
      * 由于接收者按照日志的索引位置串行处理请求，一般情况下，收到的响应也是按照顺序返回的，但是考虑到网络延时和数据重传，
@@ -854,21 +886,39 @@ public class VoterActor {
 
 
     @ActorListener
-    private CreateTransactionResponse createTransaction(CreateTransactionRequest request) {
-        // TODO
-        return null;
+    @ResponseManually
+    private void createTransaction(@ActorMessage ActorMsg msg) {
+        CreateTransactionRequest request = msg.getPayload();
+        if (!(raftState.current() == VoterState.LEADER && isAnnounced)) {
+            actor.reply(msg, new CreateTransactionResponse(new NotLeaderException(this.leaderUri)));
+            return;
+        }
+        journalTransactionManager.createTransaction(request.getContext())
+                .thenApply(context -> new CreateTransactionResponse((UUIDTransactionId) context.transactionId(), context.timestamp()))
+                .thenAccept(response -> actor.reply(msg, response));
     }
 
     @ActorListener
-    private CompleteTransactionResponse completeTransaction(CompleteTransactionRequest request) {
-        // TODO
-        return null;
+    @ResponseManually
+    private void completeTransaction(@ActorMessage ActorMsg msg) {
+        CompleteTransactionRequest request = msg.getPayload();
+
+        if (!(raftState.current() == VoterState.LEADER && isAnnounced)) {
+            actor.reply(msg, new CompleteTransactionResponse(new NotLeaderException(this.leaderUri)));
+            return;
+        }
+        journalTransactionManager.completeTransaction(request.getTransactionId(), request.isCommitOrAbort())
+                .thenApply(aVoid -> new CompleteTransactionResponse())
+                .thenAccept(response -> actor.reply(msg, response));
     }
 
     @ActorListener
     private GetOpeningTransactionsResponse getOpeningTransactions() {
-        // TODO
-        return null;
+        if (!(raftState.current() == VoterState.LEADER && isAnnounced)) {
+            return new GetOpeningTransactionsResponse(new NotLeaderException(this.leaderUri));
+        } else {
+            return new GetOpeningTransactionsResponse(journalTransactionManager.getOpeningTransactions());
+        }
     }
 
     private boolean checkWriteable() {
