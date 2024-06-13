@@ -115,9 +115,9 @@ public class ServerRpcActor implements ServerRpc {
         }
         final ClusterConfiguration clusterConfiguration = new ClusterConfiguration();
         return CompletableFuture.allOf(
-                actor.<URI>sendThen("Voter", "getLeaderUri").thenAccept(clusterConfiguration::setLeader),
-                actor.<List<URI>>sendThen("State", "getVoters").thenAccept(clusterConfiguration::setVoters),
-                actor.<List<URI>>sendThen("RaftServer", "getObservers").thenAccept(clusterConfiguration::setObservers)
+                actor.<URI>sendThen("Voter", "getLeaderUri", ActorRejectPolicy.BLOCK).thenAccept(clusterConfiguration::setLeader),
+                actor.<List<URI>>sendThen("State", "getVoters", ActorRejectPolicy.BLOCK).thenAccept(clusterConfiguration::setVoters),
+                actor.<List<URI>>sendThen("RaftServer", "getObservers", ActorRejectPolicy.BLOCK).thenAccept(clusterConfiguration::setObservers)
         ).thenApply(any -> new GetServersResponse(clusterConfiguration));
     }
 
@@ -189,12 +189,12 @@ public class ServerRpcActor implements ServerRpc {
 
     @Override
     public void watch(EventWatcher eventWatcher) {
-        actor.send("EventBus", "watch", eventWatcher);
+        actor.send("EventBus", "watch", ActorMsg.Response.DEFAULT, ActorRejectPolicy.BLOCK, eventWatcher);
     }
 
     @Override
     public void unWatch(EventWatcher eventWatcher) {
-        actor.send("EventBus", "unWatch", eventWatcher);
+        actor.send("EventBus", "unWatch", ActorMsg.Response.DEFAULT, ActorRejectPolicy.BLOCK,eventWatcher);
     }
 
     @Override

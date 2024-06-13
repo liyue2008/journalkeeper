@@ -310,7 +310,8 @@ public class JournalStoreTest {
                     1000L * writeCount / takesMs);
 
             if(async) {
-                while (adminClient.getServerStatus(adminClient.getClusterConfiguration().get().getLeader()).get().getLastApplied() < startApplied + writeCount) {
+                URI leaderUri = adminClient.getClusterConfiguration().get().getLeader();
+                while (adminClient.getServerStatus(leaderUri).get().getLastApplied() < startApplied + writeCount) {
                     Thread.sleep(1);
                 }
             }

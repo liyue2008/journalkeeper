@@ -168,7 +168,7 @@ public class Actor {
         return sendThen(addr, topic, ActorRejectPolicy.EXCEPTION);
     }
     public <T> CompletableFuture<T> sendThen(String addr, String topic, ActorRejectPolicy rejectPolicy) {
-        return sendThen(addr, topic, new Object[]{});
+        return sendThen(addr, topic, rejectPolicy, new Object[]{});
     }
 
     public <T> CompletableFuture<T> sendThen(String addr, String topic, Object... payloads) {
