@@ -66,13 +66,6 @@ public class ServerRpcActor implements ServerRpc {
     private  <T> CompletableFuture<T>  forwardRequest(String addr, String topic){
         return forwardRequest(null, addr, topic);
     }
-    private  <T> CompletableFuture<T>  forwardRequest(String topic){
-        return forwardRequest(null, null, topic);
-    }
-    private  <T> CompletableFuture<T>  forwardRequest(Object request) {
-        return forwardRequest(request, null, null);
-
-    }
     private  <T> CompletableFuture<T>  forwardRequest(Object request, String addr) {
         return forwardRequest(request, addr, null);
     }
@@ -95,9 +88,9 @@ public class ServerRpcActor implements ServerRpc {
         }
 
         if (null == request) {
-            return actor.sendThen(addr, topic);
+            return actor.sendThen(addr, topic, ActorRejectPolicy.BLOCK);
         }else {
-            return actor.sendThen(addr, topic, request);
+            return actor.sendThen(addr, topic, ActorRejectPolicy.BLOCK, request);
         }
     }
 

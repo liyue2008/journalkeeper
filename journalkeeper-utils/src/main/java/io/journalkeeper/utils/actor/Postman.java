@@ -29,10 +29,12 @@ public class Postman implements Runnable {
         this.thread = new Thread(this, name);
         thread.setDaemon(true);
 
+
     }
 
     public void start() {
         thread.start();
+
     }
 
     private boolean stopFlag = false;
@@ -46,6 +48,8 @@ public class Postman implements Runnable {
     }
     @Override
     public void run() {
+        ThreadLocal<ActorThreadContext> contextThreadLocal = new ThreadLocal<>();
+        contextThreadLocal.set(new ActorThreadContext(true));
         while (!stopFlag) {
             boolean hasMessage = false;
 

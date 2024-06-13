@@ -39,15 +39,14 @@ class ActorResponseSupport {
         this.outbox = outbox;
         inbox.addTopicHandlerFunction(RESPONSE, this::processResponse);
     }
-
-    <T> CompletableFuture<T> send(String addr, String topic){
-        return send(addr, topic, new Object[]{});
+    <T> CompletableFuture<T> send(String addr, String topic,  Object... payloads){
+        return send(addr, topic, ActorRejectPolicy.EXCEPTION, payloads);
     }
-    <T> CompletableFuture<T> send(String addr, String topic, Object... payloads){
-        CompletableFuture<T> future = new CompletableFuture<>();
+    <T> CompletableFuture<T> send(String addr, String topic, ActorRejectPolicy rejectPolicy, Object... payloads){
+        ActorCompletableFuture<T> future = new ActorCompletableFuture<>();
         ActorMsg request = this.outbox.createMsg(addr, topic, ActorMsg.Response.REQUIRED, payloads);
         responseFutures.put(request, future);
-        this.outbox.send(request);
+        this.outbox.send(request,rejectPolicy);
         return future;
     }
 

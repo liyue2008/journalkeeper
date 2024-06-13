@@ -3,7 +3,11 @@ package io.journalkeeper.utils.actor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Queue;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
@@ -13,40 +17,67 @@ class ActorOutbox {
 
     private final AtomicLong msgId = new AtomicLong(0);
 
-    private final Queue<ActorMsg> msgQueue;
+    private final BlockingQueue<ActorMsg> msgQueue;
+
+    private final Map<String, BlockingQueue<ActorMsg>> topicQueueMap;
 
     private final String myAddr;
 
-    final static int DEFAULT_CAPACITY = 1000;
+    final static int DEFAULT_CAPACITY = 10000;
 
+    private final ThreadLocal<ActorThreadContext> contextThreadLocal = new ThreadLocal<>();
 
-    ActorOutbox(String myAddr) {
-        this(DEFAULT_CAPACITY, myAddr);
-    }
-    ActorOutbox(int capacity, String myAddr) {
-        this.msgQueue = new LinkedBlockingQueue<>(capacity);
+    ActorOutbox(int capacity, String myAddr, Map<String, Integer> outboxQueueMpa) {
+        this.msgQueue = new LinkedBlockingQueue<>(capacity < 0 ? DEFAULT_CAPACITY : capacity);
         this.myAddr = myAddr;
-    }
-    ActorMsg send(String addr, String topic){
-        return send(addr, topic, new Object[] {});
-    }
-    ActorMsg send(String addr, String topic, ActorMsg.Response response) {
-        return send(addr, topic, response, new Object[] {});
+        this.topicQueueMap = new HashMap<>();
+        if (null != outboxQueueMpa) {
+            for (Map.Entry<String, Integer> entry : outboxQueueMpa.entrySet()) {
+                topicQueueMap.put(entry.getKey(), new LinkedBlockingQueue<>(entry.getValue() < 0 ? DEFAULT_CAPACITY : entry.getValue()));
+            }
+        }
     }
     ActorMsg send(String addr, String topic, Object... payloads) {
         return send(addr, topic, ActorMsg.Response.DEFAULT, payloads);
     }
     ActorMsg send(String addr, String topic, ActorMsg.Response response, Object... payloads){
-        ActorMsg actorMsg = new ActorMsg(msgId.getAndIncrement(), myAddr, addr, topic,response, payloads);
-        msgQueue.add(actorMsg);
-
-        ring();
-        return actorMsg;
+        return send(createMsg(addr, topic,response, payloads), ActorRejectPolicy.EXCEPTION);
     }
 
-    void send(ActorMsg actorMsg) {
-        msgQueue.add(actorMsg);
-        ring();
+    ActorMsg send(String addr, String topic, ActorMsg.Response response, ActorRejectPolicy rejectPolicy, Object... payloads){
+        return send(createMsg(addr, topic,response, payloads), rejectPolicy);
+    }
+
+    ActorMsg send(ActorMsg actorMsg) {
+        return send(actorMsg, ActorRejectPolicy.EXCEPTION);
+    }
+    ActorMsg send(ActorMsg actorMsg, ActorRejectPolicy rejectPolicy) {
+        try {
+            BlockingQueue<ActorMsg> queue = topicQueueMap.getOrDefault(actorMsg.getTopic(), msgQueue);
+            ActorMsg ret = actorMsg;
+            switch (rejectPolicy) {
+                case EXCEPTION:
+                    queue.add(actorMsg);
+                    break;
+                case DROP:
+                    ret = queue.offer(actorMsg) ? actorMsg : null;
+                    break;
+                case BLOCK:
+
+                    ActorThreadContext context = contextThreadLocal.get();
+                    if (null != context && context.isPostmanThread()) {
+                        throw new IllegalAccessError("can not use BLOCK in postman thread.");
+                    }
+                    queue.put(actorMsg);
+                    break;
+                default:
+                    throw new IllegalArgumentException("unknown rejectPolicy: " + rejectPolicy);
+            }
+            ring();
+            return ret;
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     ActorMsg createMsg(String addr, String topic, ActorMsg.Response response, Object... payloads){
@@ -63,8 +94,8 @@ class ActorOutbox {
                 consumer.accept(msg);
                 msgQueue.poll();
                 return true;
-            } catch (Throwable t) {
-                logger.warn("consumeOneMsg error, msg: {}", msg, t);
+            } catch (IllegalStateException t) {
+                logger.debug("Target inbox queue full，retry later, msg: {}", msg, t);
             }
         }
         return false;

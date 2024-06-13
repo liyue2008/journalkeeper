@@ -1,8 +1,9 @@
 package io.journalkeeper.utils.actor;
 
-import io.journalkeeper.utils.actor.annotation.ActorListener;
-
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.*;
@@ -24,10 +25,10 @@ public class Actor {
     // 对请求/响应模式的封装支持
     private final ActorResponseSupport responseSupport;
 
-    private Actor(String addr) {
+    private Actor(String addr, int inboxCapacity, int outboxCapacity, Map<String, Integer> outboxQueueMpa) {
         this.addr = addr;
-        this.outbox = new ActorOutbox(addr);
-        this.inbox = new ActorInbox(addr, outbox);
+        this.outbox = new ActorOutbox(outboxCapacity, addr, outboxQueueMpa);
+        this.inbox = new ActorInbox(inboxCapacity, addr, outbox);
         this.responseSupport = new ActorResponseSupport(inbox, outbox);
     }
 
@@ -148,23 +149,34 @@ public class Actor {
     }
 
     public ActorMsg send(String addr, String topic) {
-        return outbox.send(addr, topic);
+        return send(addr, topic, ActorMsg.Response.DEFAULT);
     }
-    ActorMsg send(String addr, String topic, ActorMsg.Response response) {
-        return outbox.send(addr, topic, response);
+    public ActorMsg send(String addr, String topic, ActorMsg.Response response) {
+        return send(addr, topic, response, new Object[]{});
+    }
+    public ActorMsg send(String addr, String topic, Object... payloads) {
+        return send(addr, topic,ActorMsg.Response.DEFAULT, payloads);
     }
     public ActorMsg send(String addr, String topic, ActorMsg.Response response, Object... payloads) {
         return outbox.send(addr, topic, response, payloads);
     }
-    public ActorMsg send(String addr, String topic, Object... payloads) {
-        return outbox.send(addr, topic, payloads);
+    public ActorMsg send(String addr, String topic, ActorMsg.Response response, ActorRejectPolicy rejectPolicy, Object... payloads) {
+        return outbox.send(addr, topic, response, rejectPolicy, payloads);
     }
+
     public <T> CompletableFuture<T> sendThen(String addr, String topic) {
-        return responseSupport.send(addr, topic);
+        return sendThen(addr, topic, ActorRejectPolicy.EXCEPTION);
+    }
+    public <T> CompletableFuture<T> sendThen(String addr, String topic, ActorRejectPolicy rejectPolicy) {
+        return sendThen(addr, topic, new Object[]{});
     }
 
     public <T> CompletableFuture<T> sendThen(String addr, String topic, Object... payloads) {
-        return responseSupport.send(addr, topic, payloads);
+        return sendThen(addr, topic, ActorRejectPolicy.EXCEPTION,payloads);
+    }
+
+    public <T> CompletableFuture<T> sendThen(String addr, String topic, ActorRejectPolicy rejectPolicy, Object... payloads) {
+        return responseSupport.send(addr, topic, rejectPolicy, payloads);
     }
 
     private void addTopicResponseHandlerFunction(String topic, Consumer<ActorResponse> handler) {
@@ -211,8 +223,11 @@ public class Actor {
     // Builder
     public static class Builder {
         private final Actor actor;
+        private int inboxCapacity = -1;
+        private int outBoxCapacity = -1;
+        private Map<String, Integer> outboxQueueMpa = new HashMap<>();
         private Builder(String addr) {
-            this.actor = new Actor(addr);
+            this.actor = new Actor(addr, inboxCapacity, outBoxCapacity, outboxQueueMpa);
         }
 
         // add all methods start with add or set to the builder
@@ -268,6 +283,23 @@ public class Actor {
 
         public Builder setDefaultResponseHandlerFunction(Consumer<ActorResponse> handler) {
             actor.setDefaultResponseHandlerFunction(handler);
+            return this;
+        }
+        public Builder inboxCapacity(int inboxCapacity) {
+            this.inboxCapacity = inboxCapacity;
+            return this;
+        }
+        public Builder outBoxCapacity(int outBoxCapacity) {
+            this.outBoxCapacity = outBoxCapacity;
+            return this;
+        }
+
+        public Builder addTopicQueue(String topic) {
+            this.outboxQueueMpa.put(topic, -1);
+            return this;
+        }
+        public Builder addTopicQueue(String topic, int queueCapacity) {
+            this.outboxQueueMpa.put(topic, queueCapacity);
             return this;
         }
         public Actor build() {

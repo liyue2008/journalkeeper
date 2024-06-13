@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.*;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.function.*;
@@ -18,7 +19,7 @@ import static io.journalkeeper.utils.actor.ActorResponseSupport.RESPONSE;
 class ActorInbox {
     private static final Logger logger = LoggerFactory.getLogger( ActorInbox.class );
     // 收件箱队列
-    private final Queue<ActorMsg> msgQueue;
+    private final BlockingQueue<ActorMsg> msgQueue;
     // 显式注册的收消息方法
     private final Map<String /* topic */, Tuple<Object /* instance */, Method>> topicHandlerFunctions;
     // 兜底处理所有未被处理消息的方法
@@ -35,13 +36,9 @@ class ActorInbox {
     // 收到消息后，通知邮递员派送消息的响铃
     private Object ring;
 
-    ActorInbox(String myAddr, ActorOutbox outbox) {
-        this(DEFAULT_CAPACITY, myAddr, outbox);
-    }
-
     ActorInbox(int capacity, String myAddr, ActorOutbox outbox) {
         this.myAddr = myAddr;
-        msgQueue = new LinkedBlockingQueue<>(capacity);
+        msgQueue = new LinkedBlockingQueue<>(capacity < 0 ? DEFAULT_CAPACITY : capacity);
         this.outbox = outbox;
         this.defaultHandlerFunction = null;
         this.topicHandlerFunctions = new ConcurrentHashMap<>();
@@ -276,7 +273,7 @@ class ActorInbox {
 
 
     void receive(ActorMsg msg) {
-        msgQueue.add(msg);
+        msgQueue.offer(msg);
         ring();
     }
 

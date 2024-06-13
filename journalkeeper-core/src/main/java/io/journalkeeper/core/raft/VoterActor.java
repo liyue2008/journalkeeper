@@ -2,7 +2,6 @@ package io.journalkeeper.core.raft;
 
 import io.journalkeeper.base.ReplicableIterator;
 import io.journalkeeper.core.api.*;
-import io.journalkeeper.core.api.transaction.JournalKeeperTransactionContext;
 import io.journalkeeper.core.api.transaction.UUIDTransactionId;
 import io.journalkeeper.core.entry.internal.*;
 import io.journalkeeper.core.monitor.MonitoredVoter;
@@ -47,7 +46,11 @@ import static io.journalkeeper.core.entry.internal.InternalEntryType.TYPE_UPDATE
 public class VoterActor {
     public final static float RAND_INTERVAL_RANGE = 0.5F;
     private static final Logger logger = LoggerFactory.getLogger( VoterActor.class);
-    private final Actor actor = Actor.builder("Voter").setHandlerInstance(this).build();
+    private final Actor actor = Actor.builder("Voter")
+            .addTopicQueue("updateClusterState", 1024)
+            .addTopicQueue("asyncAppendEntries", 1024)
+            .setHandlerInstance(this)
+            .build();
     private final StateMachine<VoterState> raftState;
     private final RaftJournal journal;
     private final RaftState state;
