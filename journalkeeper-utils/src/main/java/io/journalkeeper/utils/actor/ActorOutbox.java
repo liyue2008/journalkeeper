@@ -48,14 +48,12 @@ class ActorOutbox {
         return send(createMsg(addr, topic,response, payloads), rejectPolicy);
     }
 
-    ActorMsg send(ActorMsg actorMsg) {
-        return send(actorMsg, ActorRejectPolicy.EXCEPTION);
-    }
     ActorMsg send(ActorMsg actorMsg, ActorRejectPolicy rejectPolicy) {
         try {
             BlockingQueue<ActorMsg> queue = topicQueueMap.getOrDefault(actorMsg.getTopic(), msgQueue);
             ActorMsg ret = actorMsg;
             switch (rejectPolicy) {
+                // TODO: 如何保证队列满时，在postman线程发消息不丢？
                 case EXCEPTION:
                     queue.add(actorMsg);
                     break;
@@ -63,7 +61,6 @@ class ActorOutbox {
                     ret = queue.offer(actorMsg) ? actorMsg : null;
                     break;
                 case BLOCK:
-
                     ActorThreadContext context = contextThreadLocal.get();
                     if (null != context && context.isPostmanThread()) {
                         throw new IllegalAccessError("can not use BLOCK in postman thread.");

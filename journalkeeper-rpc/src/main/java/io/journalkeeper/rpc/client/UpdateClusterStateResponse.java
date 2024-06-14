@@ -68,4 +68,14 @@ public class UpdateClusterStateResponse extends LeaderResponse {
     public long getLastApplied() {
         return lastApplied;
     }
+
+    @Override
+    public String toString() {
+        return "UpdateClusterStateResponse{" +
+                "success=" + success() +
+                ",error=" + errorString() +
+                ",leader=" + leader +
+                ",lastApplied=" + lastApplied +
+                '}';
+    }
 }

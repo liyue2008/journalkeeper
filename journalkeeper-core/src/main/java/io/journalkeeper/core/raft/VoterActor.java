@@ -617,11 +617,14 @@ public class VoterActor {
         actor.send("State", "maybeUpdateLeaderConfig", request);
 
         List<JournalEntry> journalEntries = requestToJournalEntries(request);
-
-        actor.<Long>sendThen("Journal", "append", journalEntries)
-                .thenApply(position -> new WaitingResponse(msg, position - journalEntries.size() , position , config.get("rpc_timeout_ms"), actor))
-                .thenAccept(this.waitingResponses::add)
-                .thenRun(() -> onJournalAppend(request.getResponseConfig()));
+        CompletableFuture<Long> appendFuture = actor.sendThen("Journal", "append", journalEntries);
+        if (request.getResponseConfig() != ResponseConfig.RECEIVE) {
+            appendFuture.thenApply(position -> this.waitingResponses.add(
+                    new WaitingResponse(msg, position - journalEntries.size(), position, config.get("rpc_timeout_ms"), actor)
+            )).thenRun(() -> onJournalAppend(request.getResponseConfig()));
+        } else {
+            appendFuture.thenRun(() -> onJournalAppend(request.getResponseConfig()));
+        }
 
     }
 

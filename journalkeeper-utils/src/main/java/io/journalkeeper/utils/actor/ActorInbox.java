@@ -273,7 +273,7 @@ class ActorInbox {
 
 
     void receive(ActorMsg msg) {
-        msgQueue.offer(msg);
+        msgQueue.add(msg);
         ring();
     }
 

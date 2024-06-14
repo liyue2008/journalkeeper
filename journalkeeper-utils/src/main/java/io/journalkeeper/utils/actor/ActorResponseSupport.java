@@ -39,9 +39,7 @@ class ActorResponseSupport {
         this.outbox = outbox;
         inbox.addTopicHandlerFunction(RESPONSE, this::processResponse);
     }
-    <T> CompletableFuture<T> send(String addr, String topic,  Object... payloads){
-        return send(addr, topic, ActorRejectPolicy.EXCEPTION, payloads);
-    }
+
     <T> CompletableFuture<T> send(String addr, String topic, ActorRejectPolicy rejectPolicy, Object... payloads){
         ActorCompletableFuture<T> future = new ActorCompletableFuture<>();
         ActorMsg request = this.outbox.createMsg(addr, topic, ActorMsg.Response.REQUIRED, payloads);
@@ -80,12 +78,10 @@ class ActorResponseSupport {
             // 调用future
             if (responseFutures.containsKey(request)) {
 
-                //noinspection rawtypes
-                CompletableFuture future = responseFutures.remove(request);
+                CompletableFuture<?> future = responseFutures.remove(request);
                 if (response.getThrowable() != null) {
                     future.completeExceptionally(response.getThrowable());
                 } else {
-                    //noinspection unchecked
                     future.complete(response.getResult());
                 }
                 return;

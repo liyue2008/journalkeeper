@@ -54,12 +54,12 @@ public class Postman implements Runnable {
             boolean hasMessage = false;
 
             for (ActorInbox inbox : inboxList) {
-                if (inbox.processOneMsg()) {
+                while (inbox.processOneMsg()) {
                     hasMessage = true;
                 }
             }
             for (ActorOutbox outbox: outboxList) {
-                if (outbox.consumeOneMsg(postOffice::send)) {
+                while (outbox.consumeOneMsg(postOffice::send)) {
                     hasMessage = true;
                 }
             }
