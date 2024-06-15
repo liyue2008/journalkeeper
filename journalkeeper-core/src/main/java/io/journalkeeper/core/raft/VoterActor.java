@@ -46,11 +46,7 @@ import static io.journalkeeper.core.entry.internal.InternalEntryType.TYPE_UPDATE
 public class VoterActor {
     public final static float RAND_INTERVAL_RANGE = 0.5F;
     private static final Logger logger = LoggerFactory.getLogger( VoterActor.class);
-    private final Actor actor = Actor.builder("Voter")
-            .addTopicQueue("updateClusterState", 1024)
-            .addTopicQueue("asyncAppendEntries", 1024)
-            .setHandlerInstance(this)
-            .build();
+    private final Actor actor;
     private final StateMachine<VoterState> raftState;
     private final RaftJournal journal;
     private final RaftState state;
@@ -98,7 +94,12 @@ public class VoterActor {
         this.journal = journal;
         this.state = state;
         this.config = config;
-
+        this.actor = Actor.builder("Voter")
+                .addTopicQueue("updateClusterState", 1024)
+                .addTopicQueue("asyncAppendEntries", 1024)
+                .setHandlerInstance(this)
+                .privatePostman(config.get("performance_mode"))
+                .build();
         this.raftState = StateMachine.<VoterState>builder()
                 .initState(VoterState.FOLLOWER)
                 .addState(VoterState.LEADER, new HashSet<>(Collections.singletonList(VoterState.CANDIDATE)))

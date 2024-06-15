@@ -92,12 +92,17 @@ public class StateActor implements RaftState{
 
     private boolean isRecovered = false;
 
+    private final Actor actor;
+
+
     public StateActor(StateFactory stateFactory, JournalEntryParser journalEntryParser, RaftJournal journal, Config config, Properties properties) {
         this.stateFactory = stateFactory;
         this.journalEntryParser = journalEntryParser;
         this.journal = journal;
         this.config = config;
         this.properties = properties;
+
+        this.actor = Actor.builder("State").setHandlerInstance(this).privatePostman(config.get("performance_mode")).build();
         persistenceFactory = ServiceSupport.load(PersistenceFactory.class);
 
         metadataPersistence = persistenceFactory.createMetadataPersistenceInstance();
@@ -269,7 +274,6 @@ public class StateActor implements RaftState{
         return serverMetadata;
     }
 
-    private final Actor actor = Actor.builder("State").setHandlerInstance(this).build();
 
     public Actor getActor() {
         return actor;

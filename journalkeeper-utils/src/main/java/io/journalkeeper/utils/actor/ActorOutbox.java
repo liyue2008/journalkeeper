@@ -23,7 +23,7 @@ class ActorOutbox {
 
     private final String myAddr;
 
-    final static int DEFAULT_CAPACITY = 10000;
+    final static int DEFAULT_CAPACITY = Integer.MAX_VALUE;
 
     private final ThreadLocal<ActorThreadContext> contextThreadLocal = new ThreadLocal<>();
 
@@ -53,7 +53,6 @@ class ActorOutbox {
             BlockingQueue<ActorMsg> queue = topicQueueMap.getOrDefault(actorMsg.getTopic(), msgQueue);
             ActorMsg ret = actorMsg;
             switch (rejectPolicy) {
-                // TODO: 如何保证队列满时，在postman线程发消息不丢？
                 case EXCEPTION:
                     queue.add(actorMsg);
                     break;

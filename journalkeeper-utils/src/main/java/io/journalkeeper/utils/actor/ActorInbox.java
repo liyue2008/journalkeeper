@@ -29,7 +29,7 @@ class ActorInbox {
     // 收消息的实例对象
     private Object handlerInstance;
     // 默认收件箱容量
-    final static int DEFAULT_CAPACITY = 1000;
+    final static int DEFAULT_CAPACITY = Integer.MAX_VALUE;
 
     private final ActorOutbox outbox;
 

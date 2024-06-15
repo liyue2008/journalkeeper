@@ -25,11 +25,19 @@ public class Actor {
     // 对请求/响应模式的封装支持
     private final ActorResponseSupport responseSupport;
 
-    private Actor(String addr, int inboxCapacity, int outboxCapacity, Map<String, Integer> outboxQueueMpa) {
+    public boolean isPrivatePostman() {
+        return privatePostman;
+    }
+
+    // 是否独占线程，独占线程有更好的性能
+    private final boolean privatePostman;
+
+    private Actor(String addr, int inboxCapacity, int outboxCapacity, Map<String, Integer> outboxQueueMpa, boolean privatePostman) {
         this.addr = addr;
         this.outbox = new ActorOutbox(outboxCapacity, addr, outboxQueueMpa);
         this.inbox = new ActorInbox(inboxCapacity, addr, outbox);
         this.responseSupport = new ActorResponseSupport(inbox, outbox);
+        this.privatePostman = privatePostman;
     }
 
     public int getInboxQueueSize() {
@@ -225,9 +233,10 @@ public class Actor {
         private final Actor actor;
         private int inboxCapacity = -1;
         private int outBoxCapacity = -1;
-        private Map<String, Integer> outboxQueueMpa = new HashMap<>();
+        private final Map<String, Integer> outboxQueueMpa = new HashMap<>();
+        private boolean privatePostman = false;
         private Builder(String addr) {
-            this.actor = new Actor(addr, inboxCapacity, outBoxCapacity, outboxQueueMpa);
+            this.actor = new Actor(addr, inboxCapacity, outBoxCapacity, outboxQueueMpa, privatePostman);
         }
 
         // add all methods start with add or set to the builder
@@ -283,6 +292,11 @@ public class Actor {
 
         public Builder setDefaultResponseHandlerFunction(Consumer<ActorResponse> handler) {
             actor.setDefaultResponseHandlerFunction(handler);
+            return this;
+        }
+
+        public Builder privatePostman(boolean privatePostman) {
+            this.privatePostman = privatePostman;
             return this;
         }
         public Builder inboxCapacity(int inboxCapacity) {

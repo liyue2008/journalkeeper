@@ -96,12 +96,14 @@ public class Postman implements Runnable {
             this.name = name;
             return this;
         }
-        void addInbox(ActorInbox inbox) {
+        Builder addInbox(ActorInbox inbox) {
             inboxList.add(inbox);
+            return this;
         }
 
-        void addOutbox(ActorOutbox outbox) {
+        Builder addOutbox(ActorOutbox outbox) {
             outboxList.add(outbox);
+            return this;
         }
         Postman build() {
             return new Postman(postOffice, inboxList, outboxList, name);

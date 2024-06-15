@@ -38,12 +38,22 @@ public class PostOffice{
             threadOutboxList.add(new ArrayList<>());
         }
         int threadIndex = 0;
-        for (Actor actor: this.actorList) {
-            threadInboxList.get(threadIndex++ % threadCount).add(actor.getInbox());
-            threadOutboxList.get(threadIndex++ % threadCount).add(actor.getOutbox());
-        }
 
         this.postmanList = new ArrayList<>(threadCount);
+
+        for (Actor actor: this.actorList) {
+            if (actor.isPrivatePostman()) {
+                Postman postman = Postman.builder().postOffice(this)
+                        .name("Postman-" + (this.name.isEmpty() ? "" : (this.name + "-")) + actor.getAddr())
+                        .addInbox(actor.getInbox())
+                        .addOutbox(actor.getOutbox()).build();
+                this.postmanList.add(postman);
+            } else {
+                threadInboxList.get(threadIndex++ % threadCount).add(actor.getInbox());
+                threadOutboxList.get(threadIndex++ % threadCount).add(actor.getOutbox());
+            }
+        }
+
         for (int i = 0; i < threadCount; i++) {
             Postman.Builder builder = Postman.builder().postOffice(this)
                     .name("Postman-" + (this.name.isEmpty() ? "" : (this.name + "-")) + i);

@@ -671,7 +671,7 @@ public class JournalStoreTest {
         Assert.assertNotNull(transactionContext);
 
         // Send some transactional messages
-        CompletableFuture[] futures = new CompletableFuture[rawEntries.size()];
+        CompletableFuture<?>[] futures = new CompletableFuture[rawEntries.size()];
         for (int i = 0; i < rawEntries.size(); i++) {
             int partition = i % partitions.size();
             futures[i] = client.append(transactionContext.transactionId(), rawEntries.get(i), partition, 1);
@@ -777,6 +777,7 @@ public class JournalStoreTest {
             properties.setProperty("snapshot_step", "0");
             properties.setProperty("disable_logo", "true");
             properties.setProperty("server_name", String.valueOf(i));
+            properties.setProperty("performance_mode", "true");
 
 
 

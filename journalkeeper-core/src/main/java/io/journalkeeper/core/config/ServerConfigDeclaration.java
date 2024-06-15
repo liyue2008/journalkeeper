@@ -52,5 +52,6 @@ public class ServerConfigDeclaration {
         config.declare("observer.pull_batch_size", Integer.class, 4 * 1024 * 1024, true, "Observer拉取日志批量大小");
         config.declare("observer.pull_interval_ms", Long.class, 100L, true, "Observer拉取日志批量大小");
         config.declare("observer.parents", String.class, "",true, "Observer父节点列表");
+        config.declare("performance_mode", Boolean.class, false, true,"性能优先模式：使用更多的线程提升性能。");
     }
 }

@@ -46,7 +46,8 @@ private static final Logger logger = LoggerFactory.getLogger( JournalActor.class
 
     private final Config config;
 
-    private final Actor actor = Actor.builder("Journal").setHandlerInstance(this).build();
+
+    private final Actor actor;
 
     private final MonitoredJournal monitoredJournal;
 
@@ -57,6 +58,7 @@ private static final Logger logger = LoggerFactory.getLogger( JournalActor.class
         bufferPool = ServiceSupport.load(BufferPool.class);
         this.journal = new Journal(persistenceFactory, bufferPool, journalEntryParser);
         this.monitoredJournal = new MonitoredJournalImpl();
+        this.actor = Actor.builder("Journal").setHandlerInstance(this).privatePostman(config.get("performance_mode")).build();
     }
 
     public RaftJournal getRaftJournal() {
