@@ -5,6 +5,7 @@ import io.journalkeeper.core.api.*;
 import io.journalkeeper.core.api.transaction.UUIDTransactionId;
 import io.journalkeeper.core.entry.internal.*;
 import io.journalkeeper.core.monitor.MonitoredVoter;
+import io.journalkeeper.core.metric.MetricProvider;
 import io.journalkeeper.core.state.ApplyReservedEntryInterceptor;
 import io.journalkeeper.core.state.ConfigState;
 import io.journalkeeper.core.state.Snapshot;
@@ -13,6 +14,7 @@ import io.journalkeeper.exceptions.IndexUnderflowException;
 import io.journalkeeper.exceptions.InstallSnapshotException;
 import io.journalkeeper.exceptions.NotLeaderException;
 import io.journalkeeper.exceptions.UpdateConfigurationException;
+import io.journalkeeper.metric.JMetric;
 import io.journalkeeper.monitor.FollowerMonitorInfo;
 import io.journalkeeper.monitor.LeaderFollowerMonitorInfo;
 import io.journalkeeper.monitor.LeaderMonitorInfo;
@@ -53,6 +55,8 @@ public class VoterActor {
     private final Config config;
 
     private final MonitoredVoter monitoredVoter= new MonitoredVoterImpl();
+    private final MetricProvider metricProvider;
+
     
     // Election Only
     private long lastHeartbeat;  // 上一次从Leader收到的心跳时间
@@ -79,6 +83,8 @@ public class VoterActor {
     private boolean isAnnounced = false; // 发布Leader announcement 被多数确认，正式行使leader职权。
     private final List<WaitingResponse> waitingResponses = new LinkedList<>(); // 处理中的待响应的update请求
     private final List<ReplicationDestination> replicationDestinations = new ArrayList<>(); // Followers
+    private JMetric updateClusterStateMetric;
+    private JMetric appendJournalMetric;
 
 
     // Observer Only
@@ -89,10 +95,11 @@ public class VoterActor {
     private StickySession<URI> parentSession = null; // 父节点URI
 
 
-    VoterActor(RaftServer.Roll roll, JournalEntryParser journalEntryParser,  RaftJournal journal, RaftState state, Config config) {
+    VoterActor(RaftServer.Roll roll, JournalEntryParser journalEntryParser, RaftJournal journal, RaftState state, MetricProvider metricProvider, Config config) {
         this.journalEntryParser = journalEntryParser;
         this.journal = journal;
         this.state = state;
+        this.metricProvider = metricProvider;
         this.config = config;
         this.actor = Actor.builder("Voter")
                 .addTopicQueue("updateClusterState", 1024)

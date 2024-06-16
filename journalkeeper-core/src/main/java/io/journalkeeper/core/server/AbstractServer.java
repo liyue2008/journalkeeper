@@ -22,6 +22,7 @@ import io.journalkeeper.core.api.RaftServer;
 import io.journalkeeper.core.api.StateFactory;
 import io.journalkeeper.core.api.StateResult;
 import io.journalkeeper.core.entry.internal.*;
+import io.journalkeeper.core.metric.MetricProvider;
 import io.journalkeeper.core.state.*;
 import io.journalkeeper.exceptions.JournalException;
 import io.journalkeeper.exceptions.RecoverException;

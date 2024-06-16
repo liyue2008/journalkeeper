@@ -3,6 +3,8 @@ package io.journalkeeper.core.raft;
 import io.journalkeeper.core.api.*;
 import io.journalkeeper.core.config.ServerConfigDeclaration;
 import io.journalkeeper.core.journal.JournalActor;
+import io.journalkeeper.core.metric.MetricProvider;
+import io.journalkeeper.core.metric.MetricProviderImpl;
 import io.journalkeeper.core.state.StateActor;
 import io.journalkeeper.exceptions.JournalException;
 import io.journalkeeper.exceptions.RecoverException;
@@ -50,10 +52,12 @@ public class RaftServerActor implements  RaftServer {
     }
 
     private ServerContext buildServerContext(Roll roll, StateFactory stateFactory, JournalEntryParser journalEntryParser, Properties properties, Config config) {
+        MetricProviderImpl metricProvider  = new MetricProviderImpl(config.get("enable_metric"), config.get("print_metric_interval_sec"));
         JournalActor journalActor = new JournalActor(journalEntryParser, config, properties);
         StateActor stateActor = new StateActor(stateFactory, journalEntryParser, journalActor.getRaftJournal(),config, properties);
-        VoterActor voterActor = new VoterActor(roll, journalEntryParser, journalActor.getRaftJournal(),stateActor.getState(), config);
+        VoterActor voterActor = new VoterActor(roll, journalEntryParser, journalActor.getRaftJournal(),stateActor.getState(), metricProvider, config);
         ServerRpcActor serverRpcActor = new ServerRpcActor();
+
         this.serverRpc = serverRpcActor;
         RpcActor rpcActor = new RpcActor(properties);
         EventBusActor eventBusActor = new EventBusActor();
@@ -67,6 +71,7 @@ public class RaftServerActor implements  RaftServer {
                 .addActor(serverRpcActor.getActor())
                 .addActor(rpcActor.getActor())
                 .addActor(eventBusActor.getActor())
+                .addActor(metricProvider.getActor())
                 .build();
         return new ServerContext(properties, config, stateActor.getState(),
                 journalActor.getRaftJournal(), voterActor.getMonitoredVoter(),

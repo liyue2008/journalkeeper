@@ -26,6 +26,7 @@ import io.journalkeeper.core.entry.internal.InternalEntriesSerializeSupport;
 import io.journalkeeper.core.entry.internal.InternalEntryType;
 import io.journalkeeper.core.entry.internal.LeaderAnnouncementEntry;
 import io.journalkeeper.core.journal.Journal;
+import io.journalkeeper.core.metric.MetricProvider;
 import io.journalkeeper.core.state.ApplyInternalEntryInterceptor;
 import io.journalkeeper.core.state.ApplyReservedEntryInterceptor;
 import io.journalkeeper.core.state.ConfigState;
