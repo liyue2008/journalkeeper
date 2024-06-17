@@ -27,12 +27,12 @@ class ActorOutbox {
 
     private final ThreadLocal<ActorThreadContext> contextThreadLocal = new ThreadLocal<>();
 
-    ActorOutbox(int capacity, String myAddr, Map<String, Integer> outboxQueueMpa) {
+    ActorOutbox(int capacity, String myAddr, Map<String, Integer> outboxQueueMap) {
         this.msgQueue = new LinkedBlockingQueue<>(capacity < 0 ? DEFAULT_CAPACITY : capacity);
         this.myAddr = myAddr;
         this.topicQueueMap = new HashMap<>();
-        if (null != outboxQueueMpa) {
-            for (Map.Entry<String, Integer> entry : outboxQueueMpa.entrySet()) {
+        if (null != outboxQueueMap) {
+            for (Map.Entry<String, Integer> entry : outboxQueueMap.entrySet()) {
                 topicQueueMap.put(entry.getKey(), new LinkedBlockingQueue<>(entry.getValue() < 0 ? DEFAULT_CAPACITY : entry.getValue()));
             }
         }

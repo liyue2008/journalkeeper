@@ -4,6 +4,7 @@ import io.journalkeeper.base.ReplicableIterator;
 import io.journalkeeper.core.api.*;
 import io.journalkeeper.core.api.transaction.UUIDTransactionId;
 import io.journalkeeper.core.entry.internal.*;
+import io.journalkeeper.core.metric.MetricNames;
 import io.journalkeeper.core.monitor.MonitoredVoter;
 import io.journalkeeper.core.metric.MetricProvider;
 import io.journalkeeper.core.state.ApplyReservedEntryInterceptor;
@@ -84,7 +85,6 @@ public class VoterActor {
     private final List<WaitingResponse> waitingResponses = new LinkedList<>(); // 处理中的待响应的update请求
     private final List<ReplicationDestination> replicationDestinations = new ArrayList<>(); // Followers
     private JMetric updateClusterStateMetric;
-    private JMetric appendJournalMetric;
 
 
     // Observer Only
@@ -101,7 +101,7 @@ public class VoterActor {
         this.state = state;
         this.metricProvider = metricProvider;
         this.config = config;
-        this.actor = Actor.builder("Voter")
+        this.actor = Actor.builder().addr("Voter")
                 .addTopicQueue("updateClusterState", 1024)
                 .addTopicQueue("asyncAppendEntries", 1024)
                 .setHandlerInstance(this)
@@ -306,6 +306,7 @@ public class VoterActor {
         journalTransactionManager.start();
         this.journalTransactionInterceptor = (entryHeader, entryFuture, index) -> journalTransactionManager.applyEntry(entryHeader, entryFuture);
         actor.send("State", "addInterceptor", this.journalTransactionInterceptor);
+        this.updateClusterStateMetric = metricProvider.getMetric(MetricNames.METRIC_UPDATE_CLUSTER_STATE);
         logger.info("Convert voter state from {} to LEADER, {}.", oldState, voterInfo());
 
     }
@@ -609,6 +610,7 @@ public class VoterActor {
         // 5. Journal.commit
         // 6. State.applyEntries
         // 7. Leader.callback
+        long startTime = System.nanoTime();
         UpdateClusterStateRequest request = msg.getPayload();
         if (!(raftState.current() == VoterState.LEADER && isAnnounced)) {
             actor.reply(msg, new UpdateClusterStateResponse(new NotLeaderException(this.leaderUri)));
@@ -620,19 +622,21 @@ public class VoterActor {
         }
         if (request.getResponseConfig() == ResponseConfig.RECEIVE) {
             actor.reply(msg, new UpdateClusterStateResponse());
+            this.updateClusterStateMetric.mark(System.nanoTime() - startTime, request.getRequests().stream().mapToLong( rt -> rt.getEntry().length).sum());
         }
 
         actor.send("State", "maybeUpdateLeaderConfig", request);
 
         List<JournalEntry> journalEntries = requestToJournalEntries(request);
-        CompletableFuture<Long> appendFuture = actor.sendThen("Journal", "append", journalEntries);
+        CompletableFuture<Long> future = actor.sendThen("Journal", "append", journalEntries);
+        CompletableFuture<?> resultFuture = future;
         if (request.getResponseConfig() != ResponseConfig.RECEIVE) {
-            appendFuture.thenApply(position -> this.waitingResponses.add(
-                    new WaitingResponse(msg, position - journalEntries.size(), position, config.get("rpc_timeout_ms"), actor)
-            )).thenRun(() -> onJournalAppend(request.getResponseConfig()));
-        } else {
-            appendFuture.thenRun(() -> onJournalAppend(request.getResponseConfig()));
+            resultFuture = future.thenApply(position -> this.waitingResponses.add(
+                    new WaitingResponse(msg, position - journalEntries.size(), position, config.get("rpc_timeout_ms"), actor, startTime, this.updateClusterStateMetric)
+            ));
         }
+        resultFuture
+                .thenRun(() -> onJournalAppend(request.getResponseConfig()));
 
     }
 
@@ -682,7 +686,8 @@ public class VoterActor {
             journalTransactionInterceptor = null;
         }
         failAllPendingCallbacks();
-
+        this.metricProvider.removeMetric(MetricNames.METRIC_UPDATE_CLUSTER_STATE);
+        this.updateClusterStateMetric = null;
     }
     // 给所有没来及处理的请求返回失败响应
     private void failAllPendingCallbacks() {
@@ -1037,12 +1042,16 @@ public class VoterActor {
         private final List<byte[]> results;
         private final Actor actor;
         private long lastApplied = -1L;
+        private final long metricStartTimeNs;
+        private final JMetric metric;
+        private final long requestSize;
 
 
-        public WaitingResponse(ActorMsg requestMsg, long fromPosition, long toPosition, long rpcTimeoutMs, Actor actor) {
+        public WaitingResponse(ActorMsg requestMsg, long fromPosition, long toPosition, long rpcTimeoutMs, Actor actor, long metricStartTimeNs, JMetric metric) {
             this.rpcTimeoutMs = rpcTimeoutMs;
             this.actor = actor;
             UpdateClusterStateRequest request = requestMsg.getPayload();
+            this.requestSize = request.getRequests().stream().mapToLong(r -> r.getEntry().length).sum();
             this.requestMsg = new ActorMsg(requestMsg.getSequentialId(), requestMsg.getSender(), requestMsg.getReceiver(), requestMsg.getTopic());
             this.responseConfig = request.getResponseConfig();
             this.fromPosition = fromPosition;
@@ -1052,6 +1061,8 @@ public class VoterActor {
             this.results = new ArrayList<>(count);
             this.flushCountDown = count;
             this.replicationCountDown = count;
+            this.metricStartTimeNs = metricStartTimeNs;
+            this.metric = metric;
         }
 
         public ActorMsg getRequestMsg() {
@@ -1095,6 +1106,7 @@ public class VoterActor {
         private boolean maybeReply() {
             if (shouldReply()) {
                 actor.reply(requestMsg, new UpdateClusterStateResponse(results, lastApplied));
+                this.metric.mark(System.nanoTime() - metricStartTimeNs, requestSize);
                 return true;
             }
             return false;
@@ -1130,6 +1142,7 @@ public class VoterActor {
             if (timestamp < deadline) {
                 logger.info("UpdateClusterStateRequest timeout, request: {}", requestMsg);
                 actor.reply(requestMsg, new UpdateClusterStateResponse(new TimeoutException()));
+                this.metric.mark(System.nanoTime() - metricStartTimeNs, requestSize);
                 return true;
             }
             return false;

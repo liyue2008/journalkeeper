@@ -102,7 +102,7 @@ public class StateActor implements RaftState{
         this.config = config;
         this.properties = properties;
 
-        this.actor = Actor.builder("State").setHandlerInstance(this).privatePostman(config.get("performance_mode")).build();
+        this.actor = Actor.builder().addr("State").setHandlerInstance(this).privatePostman(config.get("performance_mode")).build();
         persistenceFactory = ServiceSupport.load(PersistenceFactory.class);
 
         metadataPersistence = persistenceFactory.createMetadataPersistenceInstance();

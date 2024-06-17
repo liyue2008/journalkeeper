@@ -13,7 +13,7 @@ public class PubSubActor {
     private final Map<String, Set<String>> pubSubMap = new ConcurrentHashMap<>();
 
     public PubSubActor() {
-        actor = Actor.builder(ADDR).setDefaultHandlerFunction(this::pubMsg).build();
+        actor = Actor.builder().addr(ADDR).setDefaultHandlerFunction(this::pubMsg).build();
     }
 
     void subTopic(String topic, Actor actor) {

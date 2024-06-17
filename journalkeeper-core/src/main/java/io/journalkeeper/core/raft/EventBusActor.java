@@ -12,7 +12,7 @@ import io.journalkeeper.utils.event.EventType;
 
 public class EventBusActor {
     private final EventBus eventBus;
-    private final Actor actor = Actor.builder("EventBus").setHandlerInstance(this).build();
+    private final Actor actor = Actor.builder().addr("EventBus").setHandlerInstance(this).build();
 
 
 

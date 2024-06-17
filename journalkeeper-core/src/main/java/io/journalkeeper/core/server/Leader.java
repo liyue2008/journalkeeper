@@ -26,6 +26,7 @@ import io.journalkeeper.core.entry.internal.InternalEntriesSerializeSupport;
 import io.journalkeeper.core.entry.internal.InternalEntryType;
 import io.journalkeeper.core.entry.internal.LeaderAnnouncementEntry;
 import io.journalkeeper.core.journal.Journal;
+import io.journalkeeper.core.metric.MetricNames;
 import io.journalkeeper.core.metric.MetricProvider;
 import io.journalkeeper.core.state.ApplyInternalEntryInterceptor;
 import io.journalkeeper.core.state.ApplyReservedEntryInterceptor;
@@ -79,7 +80,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import static io.journalkeeper.core.api.RaftJournal.INTERNAL_PARTITION;
-import static io.journalkeeper.core.server.MetricNames.METRIC_APPEND_ENTRIES_RPC;
+import static io.journalkeeper.core.metric.MetricNames.METRIC_APPEND_ENTRIES_RPC;
 import static io.journalkeeper.core.server.ThreadNames.*;
 
 /**

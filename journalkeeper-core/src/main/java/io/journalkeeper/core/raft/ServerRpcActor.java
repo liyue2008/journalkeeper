@@ -23,7 +23,7 @@ public class ServerRpcActor implements ServerRpc {
 
     private final RpcAccessPointFactory rpcAccessPointFactory;
     private StateServer rpcServer = null;
-    private final Actor actor = Actor.builder("ServerRpc").setHandlerInstance(this).build();
+    private final Actor actor = Actor.builder().addr("ServerRpc").setHandlerInstance(this).build();
 
     private StateServer.ServerState serverState = StateServer.ServerState.CREATED;
 

@@ -6,10 +6,12 @@ import io.journalkeeper.core.api.RaftJournal;
 import io.journalkeeper.core.entry.internal.InternalEntriesSerializeSupport;
 import io.journalkeeper.core.entry.internal.InternalEntryType;
 import io.journalkeeper.core.entry.internal.ScalePartitionsEntry;
+import io.journalkeeper.core.metric.MetricNames;
+import io.journalkeeper.core.metric.MetricProvider;
 import io.journalkeeper.core.monitor.MonitoredJournal;
-import io.journalkeeper.core.state.JournalKeeperState;
 import io.journalkeeper.exceptions.JournalException;
 import io.journalkeeper.exceptions.StateRecoverException;
+import io.journalkeeper.metric.JMetric;
 import io.journalkeeper.monitor.DiskMonitorInfo;
 import io.journalkeeper.monitor.JournalMonitorInfo;
 import io.journalkeeper.monitor.JournalPartitionMonitorInfo;
@@ -17,8 +19,6 @@ import io.journalkeeper.persistence.BufferPool;
 import io.journalkeeper.persistence.JournalPersistence;
 import io.journalkeeper.persistence.MonitoredPersistence;
 import io.journalkeeper.persistence.PersistenceFactory;
-import io.journalkeeper.rpc.server.GetServerEntriesRequest;
-import io.journalkeeper.rpc.server.GetServerEntriesResponse;
 import io.journalkeeper.utils.actor.Actor;
 import io.journalkeeper.utils.actor.annotation.ActorListener;
 import io.journalkeeper.utils.actor.annotation.ActorScheduler;
@@ -51,14 +51,20 @@ private static final Logger logger = LoggerFactory.getLogger( JournalActor.class
 
     private final MonitoredJournal monitoredJournal;
 
-    public JournalActor(JournalEntryParser journalEntryParser, Config config, Properties properties) {
+    private final MetricProvider metricProvider;
+    private final JMetric appendJournalMetric;
+
+
+    public JournalActor(JournalEntryParser journalEntryParser, Config config, MetricProvider metricProvider, Properties properties) {
         this.config = config;
         this.properties = properties;
         persistenceFactory = ServiceSupport.load(PersistenceFactory.class);
         bufferPool = ServiceSupport.load(BufferPool.class);
         this.journal = new Journal(persistenceFactory, bufferPool, journalEntryParser);
         this.monitoredJournal = new MonitoredJournalImpl();
-        this.actor = Actor.builder("Journal").setHandlerInstance(this).privatePostman(config.get("performance_mode")).build();
+        this.actor = Actor.builder().addr("Journal").setHandlerInstance(this).privatePostman(config.get("performance_mode")).build();
+        this.metricProvider = metricProvider;
+        this.appendJournalMetric = metricProvider.getMetric(MetricNames.METRIC_APPEND_JOURNAL);
     }
 
     public RaftJournal getRaftJournal() {
@@ -104,6 +110,8 @@ private static final Logger logger = LoggerFactory.getLogger( JournalActor.class
 
     @ActorListener
     private long append(List<JournalEntry> journalEntries) {
+        this.appendJournalMetric.start();
+        long start = System.nanoTime();
         long position;
         if (journalEntries.size() == 1) {
             position = journal.append(journalEntries.get(0));
@@ -111,6 +119,7 @@ private static final Logger logger = LoggerFactory.getLogger( JournalActor.class
             List<Long> positions = journal.append(journalEntries);
             position = positions.get(positions.size() - 1);
         }
+        this.appendJournalMetric.end(journalEntries.stream().mapToLong(JournalEntry::getLength).sum());
         return position;
     }
 
@@ -160,6 +169,7 @@ private static final Logger logger = LoggerFactory.getLogger( JournalActor.class
     @ActorSubscriber
     private void onStop() {
         flush();
+        this.metricProvider.removeMetric(MetricNames.METRIC_APPEND_JOURNAL);
     }
 
     public Actor getActor() {

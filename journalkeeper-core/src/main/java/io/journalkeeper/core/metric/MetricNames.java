@@ -11,7 +11,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.journalkeeper.core.server;
+package io.journalkeeper.core.metric;
 
 import java.net.URI;
 
@@ -19,11 +19,11 @@ import java.net.URI;
  * @author LiYue
  * Date: 2019-09-10
  */
-class MetricNames {
-    final static String METRIC_UPDATE_CLUSTER_STATE = "UPDATE_CLUSTER_STATE";
-    final static String METRIC_APPEND_JOURNAL = "APPEND_JOURNAL";
-    final static String METRIC_APPEND_ENTRIES_RPC = "APPEND_ENTRIES_RPC";
-    final static String METRIC_OBSERVER_REPLICATION = "OBSERVER_REPLICATION";
+public class MetricNames {
+    public final static String METRIC_UPDATE_CLUSTER_STATE = "UPDATE_CLUSTER_STATE";
+    public final static String METRIC_APPEND_JOURNAL = "APPEND_JOURNAL";
+    public final static String METRIC_APPEND_ENTRIES_RPC = "APPEND_ENTRIES_RPC";
+    public final static String METRIC_OBSERVER_REPLICATION = "OBSERVER_REPLICATION";
 
     public static String compose(String prefix, URI uri) {
         return prefix + "-" + uri.toString();

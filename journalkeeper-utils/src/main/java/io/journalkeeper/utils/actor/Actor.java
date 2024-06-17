@@ -3,7 +3,6 @@ package io.journalkeeper.utils.actor;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.*;
@@ -216,8 +215,8 @@ public class Actor {
         return outbox;
     }
 
-    public static Builder builder(String addr) {
-        return new Builder(addr);
+    public static Builder builder() {
+        return new Builder();
     }
 
     boolean outboxCleared() {
@@ -230,68 +229,76 @@ public class Actor {
 
     // Builder
     public static class Builder {
-        private final Actor actor;
+        private String addr;
+        private final Map<String, Runnable> topicHandlerRunnableMap = new HashMap<>(); // <topic, handler>
+        private final Map<String, Supplier<?>> topicHandlerSupplierMap = new HashMap<>(); // <topic, supplier>
+        private final Map<String, Function<?, ?>> topicHandlerFunctionMap = new HashMap<>(); // <topic, handler>
+        private final Map<String, BiFunction<?, ?, ?>> topicHandlerBiFunctionMap = new HashMap<>(); // <topic, handler>
+        private final Map<String, BiConsumer<?, ?>> topicHandlerBiConsumerMap = new HashMap<>(); // <topic, handler>
+        private final Map<String, Consumer<?>> topicHandlerConsumerMap = new HashMap<>(); // <topic, handler>
+        private final Map<String, Consumer<ActorResponse>> topicHandlerResponseConsumerMap = new HashMap<>();
+        private Consumer<ActorMsg> defaultHandlerFunction = null; // <topic, handler>
+        private Object handlerInstance = null;
+        private Object responseHandlerInstance = null;
         private int inboxCapacity = -1;
         private int outBoxCapacity = -1;
-        private final Map<String, Integer> outboxQueueMpa = new HashMap<>();
+        private final Map<String, Integer> outboxQueueMap = new HashMap<>();
+        private Consumer<ActorResponse> defaultResponseHandlerFunction = null;
         private boolean privatePostman = false;
-        private Builder(String addr) {
-            this.actor = new Actor(addr, inboxCapacity, outBoxCapacity, outboxQueueMpa, privatePostman);
-        }
+        private Builder() {}
 
-        // add all methods start with add or set to the builder
         public Builder addTopicHandlerFunction(String topic, Runnable handler) {
-            actor.addTopicHandlerFunction(topic, handler);
+            this.topicHandlerRunnableMap.put(topic, handler);
             return this;
         }
 
         public <R> Builder addTopicHandlerFunction(String topic, Supplier<R> handler) {
-            actor.addTopicHandlerFunction(topic, handler);
+            this.topicHandlerSupplierMap.put(topic, handler);
             return this;
         }
 
         public <T, R> Builder addTopicHandlerFunction(String topic, Function<T, R> handler) {
-            actor.addTopicHandlerFunction(topic, handler);
+            this.topicHandlerFunctionMap.put(topic, handler);
             return this;
         }
 
         public <T, U, R> Builder addTopicHandlerFunction(String topic, BiFunction<T, U, R> handler) {
-            actor.addTopicHandlerFunction(topic, handler);
+            this.topicHandlerBiFunctionMap.put(topic, handler);
             return this;
         }
 
         public <T, U> Builder addTopicHandlerFunction(String topic, BiConsumer<T, U> handler) {
-            actor.addTopicHandlerFunction(topic, handler);
+            this.topicHandlerBiConsumerMap.put(topic, handler);
             return this;
         }
 
         public <T> Builder addTopicHandlerFunction(String topic, Consumer<T> handler) {
-            actor.addTopicHandlerFunction(topic, handler);
+            this.topicHandlerConsumerMap.put(topic, handler);
             return this;
         }
 
         public Builder setDefaultHandlerFunction(Consumer<ActorMsg> handler) {
-            actor.setDefaultHandlerFunction(handler);
+            this.defaultHandlerFunction = handler;
             return this;
         }
 
         public Builder setHandlerInstance(Object handlerInstance) {
-            actor.setHandlerInstance(handlerInstance);
+            this.handlerInstance = handlerInstance;
             return this;
         }
 
         public Builder addResponseHandlerFunction(String topic, Consumer<ActorResponse> handler) {
-            actor.addTopicResponseHandlerFunction(topic, handler);
+            this.topicHandlerResponseConsumerMap.put(topic, handler);
             return this;
         }
 
         public Builder setResponseHandlerInstance(Object handlerInstance) {
-            actor.setResponseHandlerInstance(handlerInstance);
+            this.responseHandlerInstance = handlerInstance;
             return this;
         }
 
         public Builder setDefaultResponseHandlerFunction(Consumer<ActorResponse> handler) {
-            actor.setDefaultResponseHandlerFunction(handler);
+            this.defaultResponseHandlerFunction = handler;
             return this;
         }
 
@@ -309,15 +316,41 @@ public class Actor {
         }
 
         public Builder addTopicQueue(String topic) {
-            this.outboxQueueMpa.put(topic, -1);
+            this.outboxQueueMap.put(topic, -1);
             return this;
         }
         public Builder addTopicQueue(String topic, int queueCapacity) {
-            this.outboxQueueMpa.put(topic, queueCapacity);
+            this.outboxQueueMap.put(topic, queueCapacity);
+            return this;
+        }
+
+        public Builder addr(String addr) {
+            this.addr = addr;
             return this;
         }
         public Actor build() {
-            return this.actor;
+            Actor actor = new Actor(addr, inboxCapacity, outBoxCapacity, outboxQueueMap, privatePostman);
+            this.topicHandlerRunnableMap.forEach(actor::addTopicHandlerFunction);
+            this.topicHandlerSupplierMap.forEach(actor::addTopicHandlerFunction);
+            this.topicHandlerFunctionMap.forEach(actor::addTopicHandlerFunction);
+            this.topicHandlerBiFunctionMap.forEach(actor::addTopicHandlerFunction);
+            this.topicHandlerBiConsumerMap.forEach(actor::addTopicHandlerFunction);
+            this.topicHandlerConsumerMap.forEach(actor::addTopicHandlerFunction);
+            if (this.defaultHandlerFunction != null) {
+                actor.setDefaultHandlerFunction(this.defaultHandlerFunction);
+            }
+            if (this.handlerInstance != null) {
+                actor.setHandlerInstance(this.handlerInstance);
+            }
+            this.topicHandlerResponseConsumerMap.forEach(actor::addTopicResponseHandlerFunction);
+            if (this.responseHandlerInstance != null) {
+                actor.setResponseHandlerInstance(this.responseHandlerInstance);
+            }
+            if (this.defaultResponseHandlerFunction != null) {
+                actor.setDefaultResponseHandlerFunction(this.defaultResponseHandlerFunction);
+            }
+
+            return actor;
         }
     }
 

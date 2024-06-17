@@ -101,13 +101,18 @@ public class JournalStoreTest {
           ResponseConfig.RECEIVE, ResponseConfig.PERSISTENCE, ResponseConfig.REPLICATION, ResponseConfig.ALL
         );
 
+        Properties properties = new Properties();
+        properties.setProperty("enable_metric", String.valueOf(true));
+        properties.setProperty("print_metric_interval_sec", String.valueOf(5));
+//        properties.setProperty("performance_mode", "true");
+
         for (Set<Integer> partitions : partitionsList) {
             for (Integer nodes : nodesList) {
                 for (ResponseConfig responseConfig : responseConfigList) {
-                    writeReadTest(nodes, partitions, 1024, 10, 10L * 1024 * 1024, false, responseConfig, true, null);
+                    writeReadTest(nodes, partitions, 1024, 10, 10L * 1024 * 1024, false, responseConfig, true, properties);
                     after();
                     before();
-                    writeReadTest(nodes, partitions, 1024, 10, 10L * 1024 * 1024, true, responseConfig, true, null);
+                    writeReadTest(nodes, partitions, 1024, 10, 10L * 1024 * 1024, true, responseConfig, true, properties);
                     after();
                     before();
                 }
@@ -122,7 +127,10 @@ public class JournalStoreTest {
                 Sets.newSet(0, 1, 2, 3, 4)
         );
 
-        writeReadTest(1, Sets.newSet(0, 1, 2, 3, 4), 1024, 10, 10L * 1024 * 1024, true, ResponseConfig.PERSISTENCE, true, null);
+        Properties properties = new Properties();
+        properties.setProperty("enable_metric", String.valueOf(true));
+        properties.setProperty("print_metric_interval_sec", String.valueOf(5));
+        writeReadTest(1, Sets.newSet(0, 1, 2, 3, 4), 1024, 10, 10L * 1024 * 1024, true, ResponseConfig.PERSISTENCE, true, properties);
 
 
     }
@@ -289,10 +297,12 @@ public class JournalStoreTest {
             long writeCount = 0L;
 
             while (currentBytes < totalBytes) {
+                long start = System.nanoTime();
                 CompletableFuture<List<Long>> resultFuture = client.append(entries, true, responseConfig);
                 if(!async && responseConfig != ResponseConfig.ONE_WAY) {
                     resultFuture.get();
                 }
+//                logger.info("takes: {} ns.", System.nanoTime() - start);
                 currentBytes += bytesOfRequest;
                 writeCount += batchSize;
             }
@@ -308,9 +318,9 @@ public class JournalStoreTest {
                     takesMs,
                     Format.formatSize(1000L * currentBytes / takesMs),
                     1000L * writeCount / takesMs);
+            URI leaderUri = adminClient.getClusterConfiguration().get().getLeader();
 
             if(async) {
-                URI leaderUri = adminClient.getClusterConfiguration().get().getLeader();
                 while (adminClient.getServerStatus(leaderUri).get().getLastApplied() < startApplied + writeCount) {
                     Thread.sleep(1);
                 }
@@ -777,7 +787,6 @@ public class JournalStoreTest {
             properties.setProperty("snapshot_step", "0");
             properties.setProperty("disable_logo", "true");
             properties.setProperty("server_name", String.valueOf(i));
-            properties.setProperty("performance_mode", "true");
 
 
 

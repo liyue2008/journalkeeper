@@ -34,7 +34,7 @@ public class RaftServerActor implements  RaftServer {
     private static final Logger logger = LoggerFactory.getLogger( RaftServerActor.class );
     private final ServerContext context;
     private ServerRpc serverRpc;
-    private final Actor actor = Actor.builder("RaftServer").setHandlerInstance(this).build();
+    private final Actor actor = Actor.builder().addr("RaftServer").setHandlerInstance(this).build();
     private final Collection<MonitorCollector> monitorCollectors;
     private final RaftServerMonitorInfoProvider monitorInfoProvider;
 
@@ -53,7 +53,7 @@ public class RaftServerActor implements  RaftServer {
 
     private ServerContext buildServerContext(Roll roll, StateFactory stateFactory, JournalEntryParser journalEntryParser, Properties properties, Config config) {
         MetricProviderImpl metricProvider  = new MetricProviderImpl(config.get("enable_metric"), config.get("print_metric_interval_sec"));
-        JournalActor journalActor = new JournalActor(journalEntryParser, config, properties);
+        JournalActor journalActor = new JournalActor(journalEntryParser, config, metricProvider, properties);
         StateActor stateActor = new StateActor(stateFactory, journalEntryParser, journalActor.getRaftJournal(),config, properties);
         VoterActor voterActor = new VoterActor(roll, journalEntryParser, journalActor.getRaftJournal(),stateActor.getState(), metricProvider, config);
         ServerRpcActor serverRpcActor = new ServerRpcActor();

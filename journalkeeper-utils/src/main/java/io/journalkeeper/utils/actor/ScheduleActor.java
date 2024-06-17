@@ -8,7 +8,7 @@ import java.util.Map;
 import java.util.concurrent.*;
 
 class ScheduleActor {
-    private final Actor actor= Actor.builder("Scheduler").setHandlerInstance(this).build();
+    private final Actor actor= Actor.builder().addr("Scheduler").setHandlerInstance(this).build();
     private ScheduledExecutorService executorService;
     private final Map<String /* addr-topic */, ScheduledFuture<?>> runningTasks = new HashMap<>();
     private boolean stopped = false;
@@ -31,7 +31,7 @@ class ScheduleActor {
             runningTasks.put("resolvedTask", scheduledFuture);
         }
         long delay = task.getInterval();
-        ScheduledFuture<?> scheduledFuture = executorService.scheduleAtFixedRate(() -> actor.send(task.getAddr(), task.getTopic()), ThreadLocalRandom.current().nextLong(delay), delay, TimeUnit.MILLISECONDS);
+        ScheduledFuture<?> scheduledFuture = executorService.scheduleAtFixedRate(() -> actor.send(task.getAddr(), task.getTopic()), ThreadLocalRandom.current().nextLong(delay), delay, task.getTimeUnit());
         runningTasks.put(task.getAddr() + "-" + task.getTopic(), scheduledFuture);
     }
 

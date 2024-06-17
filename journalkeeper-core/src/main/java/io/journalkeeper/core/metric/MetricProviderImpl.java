@@ -23,7 +23,7 @@ public class MetricProviderImpl implements MetricProvider {
 
     public MetricProviderImpl(boolean isEnableMetric, int printMetricIntervalSec) {
         this.isEnableMetric = isEnableMetric;
-        this.actor = Actor.builder("Metric").setHandlerInstance(this).build();
+        this.actor = Actor.builder().addr("Metric").setHandlerInstance(this).build();
         if (isEnableMetric) {
             try {
                 this.metricFactory = ServiceSupport.load(JMetricFactory.class);

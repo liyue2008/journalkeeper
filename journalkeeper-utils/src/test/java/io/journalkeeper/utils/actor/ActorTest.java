@@ -16,10 +16,10 @@ public class ActorTest {
     public void testAddTopicHandlerFunctionNoArg() throws InterruptedException {
 
         CountDownLatch latch = new CountDownLatch(1);
-        Actor receiver = Actor.builder("receiver")
+        Actor receiver = Actor.builder().addr("receiver")
                 .addTopicHandlerFunction("test", latch::countDown)
                 .build();
-        Actor sender = Actor.builder("sender").build();
+        Actor sender = Actor.builder().addr("sender").build();
         PostOffice.builder()
                 .addActor(sender)
                 .addActor(receiver)
@@ -31,13 +31,13 @@ public class ActorTest {
     @Test
     public void testAddTopicHandlerFunctionOneArg() throws InterruptedException {
         CountDownLatch latch = new CountDownLatch(1);
-        Actor receiver = Actor.builder("receiver")
+        Actor receiver = Actor.builder().addr("receiver")
                 .addTopicHandlerFunction("test", (Consumer<String>) str -> {
                     Assert.assertEquals("Hello, world!", str);
                     latch.countDown();
                 })
                 .build();
-        Actor sender = Actor.builder("sender").build();
+        Actor sender = Actor.builder().addr("sender").build();
         PostOffice.builder()
                 .addActor(sender)
                 .addActor(receiver)
@@ -50,13 +50,13 @@ public class ActorTest {
     @Test
     public void testAddTopicHandlerFunctionTwoArgs() throws InterruptedException {
         CountDownLatch latch = new CountDownLatch(1);
-        Actor receiver = Actor.builder("receiver")
+        Actor receiver = Actor.builder().addr("receiver")
                 .addTopicHandlerFunction("test", (str, num) -> {
                     Assert.assertEquals("Hello, world!", str);
                     Assert.assertEquals(12, num);
                     latch.countDown();
                 }).build();
-        Actor sender = Actor.builder("sender").build();
+        Actor sender = Actor.builder().addr("sender").build();
         PostOffice.builder()
                 .addActor(sender)
                 .addActor(receiver)
@@ -70,11 +70,11 @@ public class ActorTest {
     @Test
     public void testAddTopicHandlerFunctionNoArgWithResponse() throws InterruptedException {
         CountDownLatch latch = new CountDownLatch(2);
-        Actor receiver = Actor.builder("receiver").addTopicHandlerFunction("test", () -> {
+        Actor receiver = Actor.builder().addr("receiver").addTopicHandlerFunction("test", () -> {
             latch.countDown();
             return "Hello, world!";
         }).build();
-        Actor sender = Actor.builder("sender").build();
+        Actor sender = Actor.builder().addr("sender").build();
         PostOffice.builder()
                 .addActor(sender)
                 .addActor(receiver)
@@ -91,12 +91,12 @@ public class ActorTest {
     @Test
     public void testAddTopicHandlerFunctionOneArgWithResponse() throws InterruptedException {
         CountDownLatch latch = new CountDownLatch(2);
-        Actor receiver = Actor.builder("receiver").addTopicHandlerFunction("test", str -> {
+        Actor receiver = Actor.builder().addr("receiver").addTopicHandlerFunction("test", str -> {
             Assert.assertEquals("Hello, world!", str);
             latch.countDown();
             return "Hello, world2!";
         }).build();
-        Actor sender = Actor.builder("sender").build();
+        Actor sender = Actor.builder().addr("sender").build();
         PostOffice.builder()
                 .addActor(sender)
                 .addActor(receiver)
@@ -114,13 +114,13 @@ public class ActorTest {
     @Test
     public void testAddTopicHandlerFunctionTwoArgsWithResponse() throws InterruptedException {
         CountDownLatch latch = new CountDownLatch(2);
-        Actor receiver = Actor.builder("receiver").addTopicHandlerFunction("test", (str, num) -> {
+        Actor receiver = Actor.builder().addr("receiver").addTopicHandlerFunction("test", (str, num) -> {
             Assert.assertEquals("Hello, world!", str);
             Assert.assertEquals(12, num);
             latch.countDown();
             return "Hello, world2!";
         }).build();
-        Actor sender = Actor.builder("sender").build();
+        Actor sender = Actor.builder().addr("sender").build();
         PostOffice.builder()
                 .addActor(sender)
                 .addActor(receiver)
@@ -198,8 +198,8 @@ public class ActorTest {
     public void testAddTopicHandlerFunctionWithTopicName() throws InterruptedException {
         final CountDownLatch latch = new CountDownLatch(12);
         TopicNameHandlerFunctions handlerFunctions = new TopicNameHandlerFunctions(latch);
-        Actor receiver = Actor.builder("receiver").setHandlerInstance(handlerFunctions).build();
-        Actor sender = Actor.builder("sender").build();
+        Actor receiver = Actor.builder().addr("receiver").setHandlerInstance(handlerFunctions).build();
+        Actor sender = Actor.builder().addr("sender").build();
         PostOffice.builder()
                 .addActor(sender)
                 .addActor(receiver)
@@ -331,8 +331,8 @@ public class ActorTest {
     public void testActorMessageAnnotation() throws InterruptedException {
         CountDownLatch latch = new CountDownLatch(2);
         ActorMsgClass handlerFunctions = new ActorMsgClass(latch);
-        Actor receiver = Actor.builder("receiver").setHandlerInstance(handlerFunctions).build();
-        Actor sender = Actor.builder("sender").build();
+        Actor receiver = Actor.builder().addr("receiver").setHandlerInstance(handlerFunctions).build();
+        Actor sender = Actor.builder().addr("sender").build();
         PostOffice.builder()
                 .addActor(sender)
                 .addActor(receiver)
@@ -366,8 +366,8 @@ public class ActorTest {
     public void testPubSub() throws InterruptedException {
         CountDownLatch latch = new CountDownLatch(1);
         Sub sub = new Sub(latch);
-        Actor receiver = Actor.builder("receiver").setHandlerInstance(sub).build();
-        Actor sender = Actor.builder("sender").build();
+        Actor receiver = Actor.builder().addr("receiver").setHandlerInstance(sub).build();
+        Actor sender = Actor.builder().addr("sender").build();
         PostOffice.builder()
                 .addActor(sender)
                 .addActor(receiver)
@@ -383,10 +383,10 @@ public class ActorTest {
     public void testPubSubThen() throws InterruptedException, ExecutionException {
         CountDownLatch latch = new CountDownLatch(2);
         Sub sub1 = new Sub(latch);
-        Actor receiver1 = Actor.builder("receiver1").setHandlerInstance(sub1).build();
+        Actor receiver1 = Actor.builder().addr("receiver1").setHandlerInstance(sub1).build();
         Sub sub2 = new Sub(latch);
-        Actor receiver2 = Actor.builder("receiver2").setHandlerInstance(sub2).build();
-        Actor sender = Actor.builder("sender").build();
+        Actor receiver2 = Actor.builder().addr("receiver2").setHandlerInstance(sub2).build();
+        Actor sender = Actor.builder().addr("sender").build();
         PostOffice.builder()
                 .addActor(sender)
                 .addActor(receiver1)
@@ -416,7 +416,7 @@ public class ActorTest {
     @Test
     public void testScheduler () throws InterruptedException {
         SchedulerClass schedulerClass = new SchedulerClass();
-        Actor receiver = Actor.builder("receiver").setHandlerInstance(schedulerClass).build();
+        Actor receiver = Actor.builder().addr("receiver").setHandlerInstance(schedulerClass).build();
         PostOffice.builder()
                 .addActor(receiver)
                 .build();
@@ -429,7 +429,7 @@ public class ActorTest {
     @Test
     public void testRunDelay () throws InterruptedException {
         AtomicInteger counter = new AtomicInteger(0);
-        Actor actor = Actor.builder("actor").build();
+        Actor actor = Actor.builder().addr("actor").build();
         PostOffice.builder()
                 .addActor(actor)
                 .build();
@@ -441,7 +441,7 @@ public class ActorTest {
 
     @Test
     public void testAddScheduler () throws InterruptedException {
-        Actor receiver = Actor.builder("receiver").build();
+        Actor receiver = Actor.builder().addr("receiver").build();
         AtomicInteger counter = new AtomicInteger();
         PostOffice.builder()
                 .addActor(receiver)
@@ -454,7 +454,7 @@ public class ActorTest {
 
     @Test
     public void testRemoveScheduler () throws InterruptedException {
-        Actor receiver = Actor.builder("receiver").build();
+        Actor receiver = Actor.builder().addr("receiver").build();
         AtomicInteger counter = new AtomicInteger();
         PostOffice.builder()
                 .addActor(receiver)
@@ -479,8 +479,8 @@ public class ActorTest {
     public void testAddTopicHandlerFunctionWithAnnotation() throws InterruptedException {
         final CountDownLatch latch = new CountDownLatch(12);
         AnnotationHandlerFunctions handlerFunctions = new AnnotationHandlerFunctions(latch);
-        Actor receiver = Actor.builder("receiver").setHandlerInstance(handlerFunctions).build();
-        Actor sender = Actor.builder("sender").build();
+        Actor receiver = Actor.builder().addr("receiver").setHandlerInstance(handlerFunctions).build();
+        Actor sender = Actor.builder().addr("sender").build();
         PostOffice.builder()
                 .addActor(sender)
                 .addActor(receiver)
@@ -519,7 +519,7 @@ public class ActorTest {
     @Test
     public void testSetDefaultHandlerFunction() throws InterruptedException {
         CountDownLatch latch = new CountDownLatch(1);
-        Actor receiver = Actor.builder("receiver").setDefaultHandlerFunction(msg -> {
+        Actor receiver = Actor.builder().addr("receiver").setDefaultHandlerFunction(msg -> {
             Assert.assertEquals("sender", msg.getSender());
             Assert.assertEquals("receiver", msg.getReceiver());
             Assert.assertEquals("test", msg.getTopic());
@@ -528,7 +528,7 @@ public class ActorTest {
             Assert.assertEquals(12, msg.getPayloads()[1]);
             latch.countDown();
         }).build();
-        Actor sender = Actor.builder("sender").build();
+        Actor sender = Actor.builder().addr("sender").build();
         PostOffice.builder()
                 .addActor(sender)
                 .addActor(receiver)
@@ -545,7 +545,7 @@ public class ActorTest {
         CountDownLatch latch = new CountDownLatch(2);
         AtomicInteger topic1Count = new AtomicInteger(0);
         AtomicInteger topic2Count = new AtomicInteger(0);
-        Actor receiver = Actor.builder("receiver").addTopicHandlerFunction("topic1", () -> {
+        Actor receiver = Actor.builder().addr("receiver").addTopicHandlerFunction("topic1", () -> {
             topic1Count.incrementAndGet();
             latch.countDown();
         }).setDefaultHandlerFunction(msg -> {
@@ -555,7 +555,7 @@ public class ActorTest {
             topic2Count.incrementAndGet();
             latch.countDown();
         }).build();
-        Actor sender = Actor.builder("sender").build();
+        Actor sender = Actor.builder().addr("sender").build();
         PostOffice.builder()
                 .addActor(sender)
                 .addActor(receiver)
@@ -573,12 +573,12 @@ public class ActorTest {
     @Test
     public void testResponseHandlerFunction() throws InterruptedException {
         final CountDownLatch latch = new CountDownLatch(2);
-        Actor receiver = Actor.builder("receiver").addTopicHandlerFunction("topic", request -> {
+        Actor receiver = Actor.builder().addr("receiver").addTopicHandlerFunction("topic", request -> {
             Assert.assertEquals("Hello!", request);
             latch.countDown();
             return "World!";
         }).build();
-        Actor sender = Actor.builder("sender").addResponseHandlerFunction("topic", resp -> {
+        Actor sender = Actor.builder().addr("sender").addResponseHandlerFunction("topic", resp -> {
 
             Assert.assertEquals("World!", resp.getResult());
             latch.countDown();
@@ -621,7 +621,7 @@ public class ActorTest {
     @Test
     public void testResponseAnnotationFunction() throws InterruptedException {
         final CountDownLatch latch = new CountDownLatch(4);
-        Actor receiver = Actor.builder("receiver")
+        Actor receiver = Actor.builder().addr("receiver")
                 .addTopicHandlerFunction("my_topic1", () -> {
                     latch.countDown();
                     return "result";
@@ -632,7 +632,7 @@ public class ActorTest {
                 })
                 .build();
         ResponseAnnotationHandlerClass cls = new ResponseAnnotationHandlerClass(latch);
-        Actor sender = Actor.builder("sender").setResponseHandlerInstance(cls).build();
+        Actor sender = Actor.builder().addr("sender").setResponseHandlerInstance(cls).build();
         PostOffice.builder()
                 .addActor(sender)
                 .addActor(receiver)
@@ -668,14 +668,14 @@ public class ActorTest {
     @Test
     public void testResponseFunction() throws InterruptedException {
         final CountDownLatch latch = new CountDownLatch(2);
-        Actor receiver = Actor.builder("receiver")
+        Actor receiver = Actor.builder().addr("receiver")
                 .addTopicHandlerFunction("topic", () -> {
                     latch.countDown();
                     return "result";
                 })
                 .build();
         ResponseHandlerClass cls = new ResponseHandlerClass(latch);
-        Actor sender = Actor.builder("sender").setResponseHandlerInstance(cls).build();
+        Actor sender = Actor.builder().addr("sender").setResponseHandlerInstance(cls).build();
         PostOffice.builder()
                 .addActor(sender)
                 .addActor(receiver)
@@ -692,7 +692,7 @@ public class ActorTest {
     @Test
     public void testDefaultResponseFunction() throws InterruptedException {
         final CountDownLatch latch = new CountDownLatch(4);
-        Actor receiver = Actor.builder("receiver")
+        Actor receiver = Actor.builder().addr("receiver")
                 .addTopicHandlerFunction("topic1", () -> {
                     latch.countDown();
                     return "result";
@@ -702,7 +702,7 @@ public class ActorTest {
                     return "result";
                 })
                 .build();
-        Actor sender = Actor.builder("sender")
+        Actor sender = Actor.builder().addr("sender")
                 .setDefaultResponseHandlerFunction(response -> {
                     Assert.assertEquals("result", response.getResult());
                     Assert.assertNull(response.getThrowable());
@@ -755,11 +755,11 @@ public class ActorTest {
     public void testReply() throws InterruptedException {
         final CountDownLatch latch = new CountDownLatch(4);
         ReplyCls cls = new ReplyCls(latch);
-        Actor receiver = Actor.builder("receiver")
+        Actor receiver = Actor.builder().addr("receiver")
                 .setHandlerInstance(cls)
                 .build();
         cls.setActor(receiver);
-        Actor sender = Actor.builder("sender").build();
+        Actor sender = Actor.builder().addr("sender").build();
         PostOffice.builder()
                 .addActor(sender)
                 .addActor(receiver)
@@ -784,12 +784,12 @@ public class ActorTest {
     @Test
     public void testSendThen() throws InterruptedException {
         final CountDownLatch latch = new CountDownLatch(2);
-        Actor receiver = Actor.builder("receiver").addTopicHandlerFunction("topic", request -> {
+        Actor receiver = Actor.builder().addr("receiver").addTopicHandlerFunction("topic", request -> {
             Assert.assertEquals("Hello!", request);
             latch.countDown();
             return "World!";
         }).build();
-        Actor sender = Actor.builder("sender").addResponseHandlerFunction("topic", resp -> {
+        Actor sender = Actor.builder().addr("sender").addResponseHandlerFunction("topic", resp -> {
 
             Assert.assertEquals("World!", resp.getResult());
             latch.countDown();
@@ -810,13 +810,13 @@ public class ActorTest {
     @Test
     public void testResponseConfigIgnored() throws InterruptedException {
         final CountDownLatch latch = new CountDownLatch(2);
-        Actor receiver = Actor.builder("receiver").addTopicHandlerFunction("topic", request -> {
+        Actor receiver = Actor.builder().addr("receiver").addTopicHandlerFunction("topic", request -> {
             Assert.assertEquals("Hello!", request);
             latch.countDown();
             return "World";
         }).build();
 
-        Actor sender = Actor.builder("sender").addResponseHandlerFunction("topic", resp -> {
+        Actor sender = Actor.builder().addr("sender").addResponseHandlerFunction("topic", resp -> {
             // 响应配置为忽略，不应调用到这里
             latch.countDown();
         }).build();
@@ -832,11 +832,11 @@ public class ActorTest {
     @Test
     public void testResponseConfigRequired() throws InterruptedException {
         final CountDownLatch latch = new CountDownLatch(2);
-        Actor receiver = Actor.builder("receiver").addTopicHandlerFunction("topic", request -> {
+        Actor receiver = Actor.builder().addr("receiver").addTopicHandlerFunction("topic", request -> {
             Assert.assertEquals("Hello!", request);
             latch.countDown();
         }).build();
-        Actor sender = Actor.builder("sender").addResponseHandlerFunction("topic", resp -> {
+        Actor sender = Actor.builder().addr("sender").addResponseHandlerFunction("topic", resp -> {
 
             Assert.assertNull(resp.getResult());
             latch.countDown();
@@ -867,9 +867,9 @@ public class ActorTest {
     @Test
     public void testResponseManually() throws InterruptedException, ExecutionException {
         ResponseManuallyCls cls = new ResponseManuallyCls();
-        Actor receiver = Actor.builder("receiver").setHandlerInstance(cls).build();
+        Actor receiver = Actor.builder().addr("receiver").setHandlerInstance(cls).build();
         cls.setActor(receiver);
-        Actor sender = Actor.builder("sender").addResponseHandlerFunction("topic", resp -> {
+        Actor sender = Actor.builder().addr("sender").addResponseHandlerFunction("topic", resp -> {
 
             Assert.assertEquals("result1", resp.getResult());
         }).build();

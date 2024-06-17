@@ -71,7 +71,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
-import static io.journalkeeper.core.server.MetricNames.METRIC_OBSERVER_REPLICATION;
+import static io.journalkeeper.core.metric.MetricNames.METRIC_OBSERVER_REPLICATION;
 import static io.journalkeeper.core.server.ThreadNames.OBSERVER_REPLICATION_THREAD;
 import static io.journalkeeper.core.server.ThreadNames.STATE_MACHINE_THREAD;
 
