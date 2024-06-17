@@ -812,7 +812,17 @@ public class VoterActor {
         if (raftState.current() != VoterState.LEADER) {
             return;
         }
-        this.waitingResponses.removeIf(waitingResponse -> waitingResponse.getToPosition() <= journalFlushIndex && waitingResponse.countdownFlush());
+        Iterator<WaitingResponse> iterator = this.waitingResponses.iterator();
+
+        while (iterator.hasNext()) {
+            WaitingResponse waitingResponse = iterator.next();
+            if (waitingResponse.getToPosition() <= journalFlushIndex) {
+                waitingResponse.markFlushed();
+                iterator.remove();
+            } else {
+                break;
+            }
+        }
     }
 
     @ActorSubscriber(topic = "onJournalCommit")
@@ -1036,7 +1046,8 @@ public class VoterActor {
         private final ResponseConfig responseConfig;
         private final long fromPosition;
         private final long toPosition;
-        private int flushCountDown, replicationCountDown;
+        private int replicationCountDown;
+        private boolean flushed;
         private final long timestamp;
         private final long rpcTimeoutMs;
         private final List<byte[]> results;
@@ -1059,7 +1070,6 @@ public class VoterActor {
             this.timestamp = System.currentTimeMillis();
             int count = request.getRequests().size();
             this.results = new ArrayList<>(count);
-            this.flushCountDown = count;
             this.replicationCountDown = count;
             this.metricStartTimeNs = metricStartTimeNs;
             this.metric = metric;
@@ -1085,12 +1095,12 @@ public class VoterActor {
         public int compareTo(WaitingResponse o) {
             return Long.compare(fromPosition, o.fromPosition);
         }
-        private boolean countdownFlush() {
-            if (--flushCountDown == 0) {
-                return maybeReply();
-            }
-            return false;
+        private void markFlushed() {
+            flushed = true;
+            maybeReply();
         }
+
+
 
         private boolean countdownReplication() {
             if (--replicationCountDown == 0) {
@@ -1106,6 +1116,7 @@ public class VoterActor {
         private boolean maybeReply() {
             if (shouldReply()) {
                 actor.reply(requestMsg, new UpdateClusterStateResponse(results, lastApplied));
+                logger.info("UpdateClusterStateRequest reply, request: {}", requestMsg);
                 this.metric.mark(System.nanoTime() - metricStartTimeNs, requestSize);
                 return true;
             }
@@ -1115,7 +1126,7 @@ public class VoterActor {
         private boolean shouldReply () {
             switch (responseConfig) {
                 case PERSISTENCE:
-                    if (flushCountDown <= 0) {
+                    if (flushed) {
                         return true;
                     }
                 case REPLICATION:
@@ -1123,7 +1134,7 @@ public class VoterActor {
                         return true;
                     }
                 case ALL:
-                    if (flushCountDown <= 0 && replicationCountDown <= 0) {
+                    if (flushed && replicationCountDown <= 0) {
                         return true;
                     }
                 default:
@@ -1223,10 +1234,12 @@ public class VoterActor {
         void replication() {
             long maxIndex;
 
-            if (waitingForResponse || (nextIndex >= (maxIndex = journal.maxIndex()) // NOT 还有需要复制的数据
-                    &&
-                    System.currentTimeMillis() - lastHeartbeatRequestTime < heartbeatIntervalMs // NOT 距离上次复制/心跳已经超过一个心跳超时了
-            )) {
+            if (waitingForResponse ||
+                    (nextIndex >= (maxIndex = journal.maxIndex()) // NOT 还有需要复制的数据
+                        &&
+                        System.currentTimeMillis() - lastHeartbeatRequestTime < heartbeatIntervalMs // NOT 距离上次复制/心跳已经超过一个心跳超时了
+                    )
+            ) {
                 return;
             }
 

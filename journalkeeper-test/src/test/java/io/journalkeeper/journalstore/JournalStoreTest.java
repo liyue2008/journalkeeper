@@ -130,9 +130,7 @@ public class JournalStoreTest {
         Properties properties = new Properties();
         properties.setProperty("enable_metric", String.valueOf(true));
         properties.setProperty("print_metric_interval_sec", String.valueOf(5));
-        writeReadTest(1, Sets.newSet(0, 1, 2, 3, 4), 1024, 10, 10L * 1024 * 1024, true, ResponseConfig.PERSISTENCE, true, properties);
-
-
+        writeReadTest(1, Sets.newSet(0, 1, 2, 3, 4), 1024, 10, 10L * 1024 * 1024, false, ResponseConfig.REPLICATION, true, properties);
     }
 
     @Test
