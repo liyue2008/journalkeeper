@@ -102,8 +102,8 @@ public class VoterActor {
         this.metricProvider = metricProvider;
         this.config = config;
         this.actor = Actor.builder().addr("Voter")
-                .addTopicQueue("updateClusterState", 1024)
-                .addTopicQueue("asyncAppendEntries", 1024)
+                .addTopicQueue("updateClusterState", 102400)
+                .addTopicQueue("asyncAppendEntries", 102400)
                 .setHandlerInstance(this)
                 .privatePostman(config.get("performance_mode"))
                 .build();
@@ -495,8 +495,10 @@ public class VoterActor {
     @ActorListener
     @ResponseManually
     public void asyncAppendEntries(@ActorMessage ActorMsg msg) {
+
         AsyncAppendEntriesRequest request = msg.getPayload();
 
+        logger.info("Receive async append entries request: {}.", request);
 //        If RPC request or response contains term T > currentTerm:
 //        set currentTerm = T, convert to follower
         if (request.getTerm() > term) {
@@ -842,8 +844,12 @@ public class VoterActor {
             commit();
         } else {
             this.replicationDestinations.forEach(ReplicationDestination::onJournalCommit);
-            this.replicationDestinations.forEach(ReplicationDestination::replication);
+            doReplication();
         }
+    }
+    @ActorListener(topic = "replication")
+    private void doReplication() {
+        this.replicationDestinations.forEach(ReplicationDestination::replication);
     }
     @ActorScheduler
     private void removeTimeoutResponses() {
@@ -1242,7 +1248,7 @@ public class VoterActor {
             this.uri = uri;
             this.nextIndex = nextIndex;
             this.heartbeatIntervalMs = heartbeatIntervalMs;
-            this.lastHeartbeatResponseTime = 0L;
+            this.lastHeartbeatResponseTime = System.currentTimeMillis();
             this.replicationBatchSize = replicationBatchSize;
         }
 
@@ -1262,6 +1268,7 @@ public class VoterActor {
             if (installSnapshotInProgress) {
                 return;
             }
+//            logger.info("Replication destination: {}, nextIndex: {}, maxIndex: {}, commitIndex: {}", uri, nextIndex, journal.maxIndex(), journal.commitIndex());
 
 
             // 如果有必要，先安装第一个快照
@@ -1291,7 +1298,12 @@ public class VoterActor {
                         logger.warn("Replication execution exception, from {} to {}, cause: {}.", state.getLocalUri(), uri, null == e.getCause() ? e.getMessage() : e.getCause().getMessage());
                         return null;
                     })
-                    .whenComplete((c, r) -> waitingForResponse = false);
+                    .whenComplete((c, r) -> {
+                        waitingForResponse = false;
+                        if (nextIndex < journal.maxIndex()) {
+                            actor.send("Voter", "replication");
+                        }
+                    });
             lastHeartbeatRequestTime = System.currentTimeMillis();
         }
 
@@ -1300,13 +1312,13 @@ public class VoterActor {
             if (checkTerm(response.getTerm())) {
                 return;
             }
-
+            lastHeartbeatResponseTime = System.currentTimeMillis();
             if(!response.success()) {
+                logger.warn("Receive async append entries response failed from {}, response: {}.", this.getUri(), response);
                 return;
             }
-            logger.info("Receive async append entries response from {}.", this.getUri());
+//            logger.info("Receive async append entries response from {}.", this.getUri());
             // 成功收到响应响应
-            lastHeartbeatResponseTime = System.currentTimeMillis();
             if (response.isSuccess()) { // 复制成功
                 if (entrySize > 0) {
                     nextIndex += entrySize;
