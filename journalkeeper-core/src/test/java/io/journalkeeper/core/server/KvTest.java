@@ -199,7 +199,7 @@ public class KvTest {
                 logger.info("Wait for new leader...");
                 AdminClient adminClient = kvServers.get(0).getAdminClient();
                 adminClient.waitForClusterReady(0L);
-                Assert.assertEquals("value" + keyNum, new JkClient(kvServers.get(0).getRaftClient()).query("GET", "key" + keyNum).get());
+                Assert.assertEquals("value" + keyNum, new JkClient(kvServers.get(0).getRaftClient()).query("GET", "key" + keyNum, QueryConsistency.STRICT).get());
                 keyNum++;
             }
         }
@@ -214,7 +214,7 @@ public class KvTest {
                 AdminClient adminClient = kvServers.get(0).getAdminClient();
                 adminClient.waitForClusterReady(0L);
                 for (int i = 0; i < keyNum; i++) {
-                    Assert.assertEquals("value" + i, new JkClient(kvServers.get(0).getRaftClient()).query("GET", "key" + i).get());
+                    Assert.assertEquals("value" + i, new JkClient(kvServers.get(0).getRaftClient()).query("GET", "key" + i, QueryConsistency.STRICT).get());
                 }
             }
         }

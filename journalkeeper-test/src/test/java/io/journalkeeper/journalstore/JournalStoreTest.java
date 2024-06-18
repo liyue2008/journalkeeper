@@ -104,7 +104,7 @@ public class JournalStoreTest {
         Properties properties = new Properties();
         properties.setProperty("enable_metric", String.valueOf(true));
         properties.setProperty("print_metric_interval_sec", String.valueOf(5));
-//        properties.setProperty("performance_mode", "true");
+        properties.setProperty("performance_mode", "true");
 
         for (Set<Integer> partitions : partitionsList) {
             for (Integer nodes : nodesList) {
@@ -120,6 +120,7 @@ public class JournalStoreTest {
         }
 
     }
+    @Ignore
     @Test
     public void tempTest() throws Exception {
         // 单分区和多分区

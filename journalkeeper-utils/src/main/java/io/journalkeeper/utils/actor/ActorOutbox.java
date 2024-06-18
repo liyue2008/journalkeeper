@@ -3,10 +3,7 @@ package io.journalkeeper.utils.actor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Queue;
+import java.util.*;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicLong;
@@ -27,6 +24,8 @@ class ActorOutbox {
 
     private final ThreadLocal<ActorThreadContext> contextThreadLocal = new ThreadLocal<>();
 
+    private final List<BlockingQueue<ActorMsg>> allMsgQueues;
+
     ActorOutbox(int capacity, String myAddr, Map<String, Integer> outboxQueueMap) {
         this.msgQueue = new LinkedBlockingQueue<>(capacity < 0 ? DEFAULT_CAPACITY : capacity);
         this.myAddr = myAddr;
@@ -35,6 +34,12 @@ class ActorOutbox {
             for (Map.Entry<String, Integer> entry : outboxQueueMap.entrySet()) {
                 topicQueueMap.put(entry.getKey(), new LinkedBlockingQueue<>(entry.getValue() < 0 ? DEFAULT_CAPACITY : entry.getValue()));
             }
+        }
+
+        allMsgQueues = new ArrayList<>();
+        allMsgQueues.add(msgQueue);
+        for (Map.Entry<String, BlockingQueue<ActorMsg>> entry : topicQueueMap.entrySet()) {
+            allMsgQueues.add(entry.getValue());
         }
     }
     ActorMsg send(String addr, String topic, Object... payloads) {
@@ -84,18 +89,22 @@ class ActorOutbox {
 
 
     boolean consumeOneMsg(Consumer<ActorMsg> consumer) {
-        ActorMsg msg = msgQueue.peek();
-        if (msg != null) {
-            try {
-                consumer.accept(msg);
-                msgQueue.poll();
-                return true;
-            } catch (IllegalStateException t) {
-                logger.debug("Target inbox queue full，retry later, msg: {}", msg, t);
+        boolean hasMessage = false;
+        for (BlockingQueue<ActorMsg> queue : allMsgQueues) {
+            ActorMsg msg = queue.peek();
+            if (msg != null) {
+                try {
+                    consumer.accept(msg);
+                    queue.poll();
+                    hasMessage = true;
+                } catch (IllegalStateException t) {
+                    logger.debug("Target inbox queue full，retry later, msg: {}", msg, t);
+                }
             }
         }
-        return false;
+        return hasMessage;
     }
+
 
     private Object ring;
     void setRing(Object ring) {

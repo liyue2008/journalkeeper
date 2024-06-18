@@ -817,8 +817,9 @@ public class VoterActor {
         while (iterator.hasNext()) {
             WaitingResponse waitingResponse = iterator.next();
             if (waitingResponse.getToPosition() <= journalFlushIndex) {
-                waitingResponse.markFlushed();
-                iterator.remove();
+                if (waitingResponse.markFlushed()) {
+                    iterator.remove();
+                }
             } else {
                 break;
             }
@@ -830,8 +831,12 @@ public class VoterActor {
         if (raftState.current() != VoterState.LEADER) {
             return;
         }
-        this.replicationDestinations.forEach(ReplicationDestination::onJournalCommit);
-        this.replicationDestinations.forEach(ReplicationDestination::replication);
+        if (isSingleNodeCluster()) {
+            commit();
+        } else {
+            this.replicationDestinations.forEach(ReplicationDestination::onJournalCommit);
+            this.replicationDestinations.forEach(ReplicationDestination::replication);
+        }
     }
     @ActorScheduler
     private void removeTimeoutResponses() {
@@ -1095,9 +1100,9 @@ public class VoterActor {
         public int compareTo(WaitingResponse o) {
             return Long.compare(fromPosition, o.fromPosition);
         }
-        private void markFlushed() {
+        private boolean markFlushed() {
             flushed = true;
-            maybeReply();
+            return maybeReply();
         }
 
 
@@ -1116,7 +1121,6 @@ public class VoterActor {
         private boolean maybeReply() {
             if (shouldReply()) {
                 actor.reply(requestMsg, new UpdateClusterStateResponse(results, lastApplied));
-                logger.info("UpdateClusterStateRequest reply, request: {}", requestMsg);
                 this.metric.mark(System.nanoTime() - metricStartTimeNs, requestSize);
                 return true;
             }
@@ -1151,7 +1155,6 @@ public class VoterActor {
             long deadline = System.currentTimeMillis() - this.rpcTimeoutMs;
 
             if (timestamp < deadline) {
-                logger.info("UpdateClusterStateRequest timeout, request: {}", requestMsg);
                 actor.reply(requestMsg, new UpdateClusterStateResponse(new TimeoutException()));
                 this.metric.mark(System.nanoTime() - metricStartTimeNs, requestSize);
                 return true;
