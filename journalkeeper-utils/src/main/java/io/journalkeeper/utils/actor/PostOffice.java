@@ -18,6 +18,7 @@ public class PostOffice{
     private final List<Actor> actorList;
     private final String name;
     private final PubSubActor pubSubActor = new PubSubActor();
+    private final Thread shutdownThread;
 
     private PostOffice(int threadCount, List<Actor> actorList, String name) {
         this.name = null == name ? "" : name;
@@ -62,8 +63,10 @@ public class PostOffice{
             this.postmanList.add(builder.build());
         }
         start();
+        shutdownThread = new Thread(this::doStop);
         // add shutdown hook
-        Runtime.getRuntime().addShutdownHook(new Thread(this::stop));
+        Runtime.getRuntime().addShutdownHook(shutdownThread);
+
     }
 
     private String name() {
@@ -95,7 +98,11 @@ public class PostOffice{
     }
 
     public void stop() {
+        Runtime.getRuntime().removeShutdownHook(shutdownThread);
+        doStop();
+    }
 
+    private void doStop() {
         try {
             // 停止接收新的定时任务
             // 取消所有定时任务

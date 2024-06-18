@@ -136,7 +136,7 @@ public abstract class DoubleCopy implements Closeable {
             }
         }
         flushVersion.set(dataVersion.get());
-        logger.info(getName() + " recover success, file: {}.", file.getAbsolutePath());
+//        logger.info(getName() + " recover success, file: {}.", file.getAbsolutePath());
     }
 
 

@@ -73,7 +73,7 @@ public class Postman implements Runnable {
                 }
             }
         }
-        logger.info("{} stopped.", Thread.currentThread().getName());
+//        logger.info("{} stopped.", Thread.currentThread().getName());
     }
 
 

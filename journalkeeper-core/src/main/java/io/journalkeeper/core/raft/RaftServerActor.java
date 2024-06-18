@@ -111,8 +111,6 @@ public class RaftServerActor implements  RaftServer {
                     )).whenComplete((r, e) -> {
                         if (e != null) {
                             logger.warn("Recover failed!", e);
-                        } else {
-                            logger.info("Recover success!");
                         }
                         releaseFileLock();
                     }).get();

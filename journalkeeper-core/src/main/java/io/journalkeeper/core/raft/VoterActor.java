@@ -300,13 +300,13 @@ public class VoterActor {
         VoterState oldState = raftState.current();
         raftState.convertTo(VoterState.LEADER);
         leaderUri = state.getLocalUri();
-        this.replicationDestinations.forEach(ReplicationDestination::reset);
         announceLeader();
         this.journalTransactionManager = new JournalTransactionManager(journal, actor, config.get("transaction_timeout_ms"));
         journalTransactionManager.start();
         this.journalTransactionInterceptor = (entryHeader, entryFuture, index) -> journalTransactionManager.applyEntry(entryHeader, entryFuture);
         actor.send("State", "addInterceptor", this.journalTransactionInterceptor);
         this.updateClusterStateMetric = metricProvider.getMetric(MetricNames.METRIC_UPDATE_CLUSTER_STATE);
+        this.replicationDestinations.forEach(ReplicationDestination::reset);
         logger.info("Convert voter state from {} to LEADER, {}.", oldState, voterInfo());
 
     }
@@ -631,9 +631,16 @@ public class VoterActor {
         CompletableFuture<Long> future = actor.sendThen("Journal", "append", journalEntries);
         CompletableFuture<?> resultFuture = future;
         if (request.getResponseConfig() != ResponseConfig.RECEIVE) {
-            resultFuture = future.thenApply(position -> this.waitingResponses.add(
-                    new WaitingResponse(msg, position - journalEntries.size(), position, config.get("rpc_timeout_ms"), actor, startTime, this.updateClusterStateMetric)
-            ));
+            resultFuture = future.thenAccept(position -> {
+                if (raftState.current() == VoterState.LEADER) {
+                    this.waitingResponses.add(
+                            new WaitingResponse(msg, position - journalEntries.size(), position,
+                                    config.get("rpc_timeout_ms"), actor, startTime, this.updateClusterStateMetric)
+                    );
+                } else {
+                    actor.reply(msg, new UpdateClusterStateResponse(new NotLeaderException(this.leaderUri)));
+                }
+            });
         }
         resultFuture
                 .thenRun(() -> onJournalAppend(request.getResponseConfig()));
@@ -691,8 +698,8 @@ public class VoterActor {
     }
     // 给所有没来及处理的请求返回失败响应
     private void failAllPendingCallbacks() {
-
-        // TODO
+        this.waitingResponses.forEach(waitingResponse -> waitingResponse.failOnStepDown(this.leaderUri == state.getLocalUri() ? null: this.leaderUri));
+        this.waitingResponses.clear();
     }
 
 
@@ -1157,9 +1164,15 @@ public class VoterActor {
             if (timestamp < deadline) {
                 actor.reply(requestMsg, new UpdateClusterStateResponse(new TimeoutException()));
                 this.metric.mark(System.nanoTime() - metricStartTimeNs, requestSize);
+                logger.info("Remove timeout request: {}", requestMsg);
                 return true;
             }
             return false;
+        }
+
+        public void failOnStepDown(URI newLeader) {
+            actor.reply(requestMsg, new UpdateClusterStateResponse(new NotLeaderException(newLeader)));
+            this.metric.mark(System.nanoTime() - metricStartTimeNs, requestSize);
         }
     }
 
@@ -1271,6 +1284,7 @@ public class VoterActor {
                             entries, state.commitIndex(), maxIndex);
 
             waitingForResponse = true;
+            logger.info("send async append entries to {} ...", this.getUri());
             actor.<AsyncAppendEntriesResponse>sendThen("Rpc", "asyncAppendEntries", new RpcMsg<>(this.uri, request))
                     .thenAccept(resp -> handleAppendEntriesResponse(resp, entries.size(), fistSnapShotEntry.getKey()))
                     .exceptionally(e -> {
@@ -1290,6 +1304,7 @@ public class VoterActor {
             if(!response.success()) {
                 return;
             }
+            logger.info("Receive async append entries response from {}.", this.getUri());
             // 成功收到响应响应
             lastHeartbeatResponseTime = System.currentTimeMillis();
             if (response.isSuccess()) { // 复制成功
