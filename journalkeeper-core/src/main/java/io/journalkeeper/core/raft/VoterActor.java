@@ -102,8 +102,8 @@ public class VoterActor {
         this.metricProvider = metricProvider;
         this.config = config;
         this.actor = Actor.builder().addr("Voter")
-                .addTopicQueue("updateClusterState", 102400)
-                .addTopicQueue("asyncAppendEntries", 102400)
+                .addTopicQueue("updateClusterState", 1024)
+                .addTopicQueue("asyncAppendEntries", 1024)
                 .setHandlerInstance(this)
                 .privatePostman(config.get("performance_mode"))
                 .build();
