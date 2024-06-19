@@ -18,8 +18,8 @@ class JkRequest implements Serializable {
         return command;
     }
 
+    @SuppressWarnings("unchecked")
     public <T> T getParameter() {
-        //noinspection unchecked
         return (T) parameter;
     }
 }

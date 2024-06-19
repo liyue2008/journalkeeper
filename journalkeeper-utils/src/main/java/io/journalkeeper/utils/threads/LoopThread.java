@@ -14,6 +14,7 @@
 package io.journalkeeper.utils.threads;
 
 
+import java.io.IOException;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -40,7 +41,7 @@ abstract class LoopThread implements AsyncLoopThread {
     /**
      * 每次循环需要执行的代码。
      */
-    abstract void doWork();
+    abstract void doWork() throws IOException, InterruptedException;
 
     @Override
     public String getName() {

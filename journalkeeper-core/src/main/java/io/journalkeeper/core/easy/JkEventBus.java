@@ -96,8 +96,8 @@ public class JkEventBus {
             this.eventData = eventData;
         }
 
+        @SuppressWarnings("unchecked")
         public <T> T get() {
-            //noinspection unchecked
             return (T) eventData;
 
         }

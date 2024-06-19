@@ -53,10 +53,7 @@ import java.nio.channels.FileLock;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ConcurrentModificationException;
-import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -77,7 +74,6 @@ public class JournalKeeperState implements Flushable {
     static final String USER_STATE_PATH = "user";
     private static final String INTERNAL_STATE_PATH = "internal";
     private static final String INTERNAL_STATE_FILE = "state";
-    private final Map<InternalEntryType, List<ApplyInternalEntryInterceptor>> internalEntryInterceptors = new HashMap<>();
     private final List<ApplyReservedEntryInterceptor> reservedEntryInterceptors = new CopyOnWriteArrayList<>();
     private final StateFactory userStateFactory;
     private final MetadataPersistence metadataPersistence;
@@ -192,18 +188,6 @@ public class JournalKeeperState implements Flushable {
         return metadataPersistence.load(internalStateFile, PersistInternalState.class).toInternalState();
     }
 
-    public synchronized void addInterceptor(InternalEntryType type, ApplyInternalEntryInterceptor internalEntryInterceptor) {
-        List<ApplyInternalEntryInterceptor> list = this.internalEntryInterceptors.computeIfAbsent(type, key -> new LinkedList<>());
-        list.add(internalEntryInterceptor);
-    }
-
-    public synchronized void removeInterceptor(InternalEntryType type, ApplyInternalEntryInterceptor internalEntryInterceptor) {
-        List<ApplyInternalEntryInterceptor> list = internalEntryInterceptors.get(type);
-        if (null != list) {
-            list.remove(internalEntryInterceptor);
-        }
-    }
-
     public synchronized void addInterceptor(ApplyReservedEntryInterceptor interceptor) {
         reservedEntryInterceptors.add(interceptor);
     }
@@ -260,7 +244,6 @@ public class JournalKeeperState implements Flushable {
         return result;
     }
 
-    // TODO: 将Interceptor改成actor 事件方式
     private void applyInternalEntry(byte[] internalEntry) {
         InternalEntryType type = InternalEntriesSerializeSupport.parseEntryType(internalEntry);
         logger.debug("Apply internal entry, type: {}", type);
@@ -280,15 +263,7 @@ public class JournalKeeperState implements Flushable {
                 default:
             }
 
-            List<ApplyInternalEntryInterceptor> interceptors = internalEntryInterceptors.get(type);
-            if (null != interceptors) {
-                for (ApplyInternalEntryInterceptor interceptor : interceptors) {
-                    interceptor.applyInternalEntry(type, internalEntry);
-                }
-            }
-            if (null != actor) {
-                actor.pub("onInternalEntryApply", type, internalEntry);
-            }
+            actor.pub("onInternalEntryApply", type, internalEntry);
         } catch (Throwable t) {
             logger.warn("Apply internal entry exception, type: {}, exception: ", type, t);
         }

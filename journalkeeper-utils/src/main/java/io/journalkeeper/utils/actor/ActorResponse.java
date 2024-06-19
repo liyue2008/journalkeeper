@@ -22,8 +22,8 @@ public class ActorResponse {
         return request;
     }
 
+    @SuppressWarnings("unchecked")
     public <T> T getResult() {
-        //noinspection unchecked
         return (T) result;
     }
 

@@ -13,10 +13,12 @@
  */
 package io.journalkeeper.utils.threads;
 
+import java.io.IOException;
+
 /**
  * @author LiYue
  * Date: 2019-06-21
  */
 public interface Worker {
-    void doWork();
+    void doWork() throws IOException, InterruptedException;
 }

@@ -34,7 +34,7 @@ public class LocalRpcBus implements ClientServerRpcAccessPoint, ServerRpcAccessP
 
     @Override
     public void stop() {
-
+        // noting to do
     }
 
     @Override
@@ -44,6 +44,11 @@ public class LocalRpcBus implements ClientServerRpcAccessPoint, ServerRpcAccessP
             throw new ServerNotFoundException("No provider for uri: " + uri + "!");
         }
         return serverRpc;
+    }
+
+    @Override
+    public void stopServerRpc(ServerRpc rpc) {
+        // nothing to do
     }
 
     @Override

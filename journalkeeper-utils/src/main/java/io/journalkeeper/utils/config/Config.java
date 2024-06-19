@@ -84,11 +84,11 @@ public class Config {
 
     }
 
+    @SuppressWarnings("unchecked")
     public <T> T get(String key) {
         if (!loaded.get()) {
             throw new IllegalStateException("Config is not loaded.");
         }
-        //noinspection unchecked
         return (T) values.get(key);
     }
 

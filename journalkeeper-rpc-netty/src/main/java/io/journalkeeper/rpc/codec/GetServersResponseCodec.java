@@ -35,16 +35,14 @@ public class GetServersResponseCodec extends ResponseCodec<GetServersResponse> i
 
         CodecSupport.encodeString(buffer, uriToString(clusterConfiguration.getLeader()));
         CodecSupport.encodeList(buffer, clusterConfiguration.getVoters(), (obj, buffer1) -> CodecSupport.encodeUri(buffer1, (URI) obj));
-        CodecSupport.encodeList(buffer, clusterConfiguration.getObservers(), (obj, buffer1) -> CodecSupport.encodeUri(buffer1, (URI) obj));
     }
 
     @Override
     protected GetServersResponse decodeResponse(JournalKeeperHeader header, ByteBuf buffer) {
         URI leader = CodecSupport.decodeUri(buffer);
         List<URI> voters = CodecSupport.decodeList(buffer, CodecSupport::decodeUri);
-        List<URI> observers = CodecSupport.decodeList(buffer, CodecSupport::decodeUri);
 
-        return new GetServersResponse(new ClusterConfiguration(leader, voters, observers));
+        return new GetServersResponse(new ClusterConfiguration(leader, voters));
     }
 
     @Override

@@ -12,17 +12,13 @@ import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Method;
 import java.net.URI;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
 
 public class RpcActor {
-    private static final Logger logger = LoggerFactory.getLogger( RpcActor.class );
     private final Actor actor = Actor.builder().addr("Rpc")
             .setDefaultHandlerFunction(this::send)
             .build();
-    private final Map<URI, ServerRpc> remoteServers = new HashMap<>();
     private final ServerRpcAccessPoint serverRpcAccessPoint;
 
     public RpcActor(Properties properties) {
@@ -36,8 +32,7 @@ public class RpcActor {
 
 
     private ServerRpc getServerRpc(URI uri) {
-        // FIXME：需要一个清理remoteServers的机制
-        return remoteServers.computeIfAbsent(uri, serverRpcAccessPoint::getServerRpcAgent);
+        return serverRpcAccessPoint.getServerRpcAgent(uri);
     }
 
     private void send(ActorMsg actorMsg) {

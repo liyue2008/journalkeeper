@@ -13,6 +13,8 @@
  */
 package io.journalkeeper.utils.threads;
 
+import java.io.IOException;
+
 /**
  * @author LiYue
  * Date: 2019-06-21
@@ -69,7 +71,7 @@ public class ThreadBuilder {
     public AsyncLoopThread build() {
         LoopThread loopThread = new LoopThread() {
             @Override
-            void doWork() {
+            void doWork() throws IOException, InterruptedException {
                 worker.doWork();
             }
 

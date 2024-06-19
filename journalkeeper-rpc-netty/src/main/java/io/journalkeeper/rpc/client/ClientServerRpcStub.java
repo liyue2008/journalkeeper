@@ -71,7 +71,6 @@ public class ClientServerRpcStub implements ClientServerRpc {
         this.uri = uri;
         this.version = version;
         this.inetSocketAddress = inetSocketAddress;
-//        logger.info("Using protocol version {}, supported versions up to {}.", version, JournalKeeperHeader.DEFAULT_VERSION);
     }
 
 

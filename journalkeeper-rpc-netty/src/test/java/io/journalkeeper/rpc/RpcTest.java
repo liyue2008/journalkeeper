@@ -403,7 +403,7 @@ public class RpcTest {
                 URI.create("jk://voter1_host:8888"),
                 URI.create("jk://leader_host:8888"),
                 URI.create("jk://192.168.8.8:8888"));
-        ClusterConfiguration clusterConfiguration = new ClusterConfiguration(leader, voters, null);
+        ClusterConfiguration clusterConfiguration = new ClusterConfiguration(leader, voters);
         ClientServerRpc clientServerRpc = clientServerRpcAccessPoint.getClintServerRpc(serverRpcMock.serverUri());
         GetServersResponse response;
 
@@ -414,7 +414,6 @@ public class RpcTest {
 
         Assert.assertEquals(leader, response.getClusterConfiguration().getLeader());
         Assert.assertEquals(voters, response.getClusterConfiguration().getVoters());
-        Assert.assertNull(response.getClusterConfiguration().getObservers());
     }
 
     @Test

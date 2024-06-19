@@ -54,6 +54,13 @@ public class JournalKeeperServerRpcAccessPoint implements ServerRpcAccessPoint {
     }
 
     @Override
+    public void stopServerRpc(ServerRpc rpc) {
+        serverInstances.remove(rpc.serverUri());
+        rpc.stop();
+    }
+
+
+    @Override
     public void stop() {
         serverInstances.values().forEach(ServerRpcStub::stop);
         transportClient.stop();

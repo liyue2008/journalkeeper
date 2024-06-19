@@ -12,7 +12,6 @@ import io.journalkeeper.persistence.LockablePersistence;
 import io.journalkeeper.persistence.PersistenceFactory;
 import io.journalkeeper.rpc.server.*;
 import io.journalkeeper.utils.actor.*;
-import io.journalkeeper.utils.actor.annotation.ActorListener;
 import io.journalkeeper.utils.config.Config;
 import io.journalkeeper.utils.config.PropertiesConfigProvider;
 import io.journalkeeper.utils.spi.ServiceSupport;
@@ -206,14 +205,6 @@ public class RaftServerActor implements  RaftServer {
             this.lockablePersistence = null;
         }
     }
-
-
-    @ActorListener
-    private List<URI> getObservers() {
-        // TODO 维护Raft集群和Observer的心跳。
-        return Collections.emptyList();
-    }
-
 
     public ServerRpc getServerRpc() {
         return serverRpc;

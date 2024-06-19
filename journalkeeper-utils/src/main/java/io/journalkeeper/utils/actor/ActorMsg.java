@@ -58,8 +58,8 @@ public class ActorMsg {
         return payloads;
     }
 
+    @SuppressWarnings("unchecked")
     public <T> T getPayload(int index) {
-        //noinspection unchecked
         return (T) payloads[index];
     }
 

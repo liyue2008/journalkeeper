@@ -24,15 +24,13 @@ import java.util.List;
 public class ClusterConfiguration {
     private URI leader;
     private List<URI> voters;
-    private List<URI> observers;
 
     public ClusterConfiguration() {
     }
 
-    public ClusterConfiguration(URI leader, List<URI> voters, List<URI> observers) {
+    public ClusterConfiguration(URI leader, List<URI> voters) {
         this.leader = leader;
         this.voters = voters;
-        this.observers = observers;
     }
 
 
@@ -52,11 +50,4 @@ public class ClusterConfiguration {
         this.voters = voters;
     }
 
-    public List<URI> getObservers() {
-        return observers;
-    }
-
-    public void setObservers(List<URI> observers) {
-        this.observers = observers;
-    }
 }

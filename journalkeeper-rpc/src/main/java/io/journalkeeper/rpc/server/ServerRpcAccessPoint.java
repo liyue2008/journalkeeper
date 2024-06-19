@@ -22,6 +22,6 @@ import java.net.URI;
  */
 public interface ServerRpcAccessPoint {
     ServerRpc getServerRpcAgent(URI uri);
-
+    void stopServerRpc(ServerRpc rpc);
     void stop();
 }

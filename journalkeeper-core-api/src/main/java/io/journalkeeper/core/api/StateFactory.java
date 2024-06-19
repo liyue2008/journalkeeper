@@ -18,6 +18,5 @@ package io.journalkeeper.core.api;
  * Date: 2019-03-20
  */
 public interface StateFactory {
-    // TODO : 去掉这个接口
     State createState();
 }

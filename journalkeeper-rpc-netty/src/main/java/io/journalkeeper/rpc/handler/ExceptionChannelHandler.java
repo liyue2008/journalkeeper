@@ -17,7 +17,7 @@ import io.journalkeeper.rpc.remoting.transport.RequestBarrier;
 import io.journalkeeper.rpc.remoting.transport.command.handler.ExceptionHandler;
 import io.journalkeeper.rpc.remoting.transport.exception.TransportException;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundHandler;
+import io.netty.channel.ChannelInboundHandlerAdapter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,7 +27,7 @@ import org.slf4j.LoggerFactory;
  * <p>
  * date: 2019/4/5
  */
-public class ExceptionChannelHandler implements ChannelInboundHandler {
+public class ExceptionChannelHandler extends ChannelInboundHandlerAdapter  {
     private static final Logger logger = LoggerFactory.getLogger(ExceptionChannelHandler.class);
 
     public ExceptionChannelHandler(ExceptionHandler exceptionHandler, RequestBarrier requestBarrier) {
@@ -76,11 +76,10 @@ public class ExceptionChannelHandler implements ChannelInboundHandler {
     }
 
     @Override
-    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+        super.exceptionCaught(ctx, cause);
         if (TransportException.isClosed(cause)) {
             logger.warn("channel close, address: {}, message: {}", ctx.channel().remoteAddress(), cause.getMessage());
-        } else {
-            ctx.fireExceptionCaught(cause);
         }
     }
 }
