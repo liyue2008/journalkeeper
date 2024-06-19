@@ -31,13 +31,13 @@ import java.util.zip.Checksum;
 public abstract class DoubleCopy implements Closeable {
 
 
-    private static Logger logger = LoggerFactory.getLogger(DoubleCopy.class);
+    private static final Logger logger = LoggerFactory.getLogger(DoubleCopy.class);
     // 第二份数据的位置
     private final int NEXT;
     private final AtomicLong dataVersion = new AtomicLong(0L);
     private final AtomicLong flushVersion = new AtomicLong(0L);
     // 文件
-    protected File file;
+    protected final File file;
     // 时间戳
     private long timestamp;
     private RandomAccessFile raf;
@@ -118,7 +118,7 @@ public abstract class DoubleCopy implements Closeable {
             try {
                 success = tryToRecover();
             } catch (Exception e) {
-                logger.warn("Exception while recover first copy of " + getName(), e);
+                logger.warn("Exception while recover first copy of {}", getName(), e);
             }
 
 
@@ -127,7 +127,7 @@ public abstract class DoubleCopy implements Closeable {
                     raf.seek(next());
                     success = tryToRecover();
                 } catch (Exception e) {
-                    logger.warn("Exception while recover second copy of " + getName(), e);
+                    logger.warn("Exception while recover second copy of {}", getName(), e);
                 }
             }
 
@@ -187,7 +187,7 @@ public abstract class DoubleCopy implements Closeable {
 
             raf.getFD().sync();
         } catch (IOException e) {
-            logger.error(getName() + "flush error.", e);
+            logger.error("{}flush error.", getName(), e);
         } finally {
             this.timestamp = timestamp;
         }

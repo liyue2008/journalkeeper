@@ -61,10 +61,8 @@ public class TransportException extends RuntimeException {
         }
         if (e instanceof IOException) {
             String message = e.getMessage();
-            if (message.contains("Connection reset") || message.contains("Socket closed") || message
-                    .contains("连接被对端重置") || message.contains("Connection refused")) {
-                return true;
-            }
+            return message.contains("Connection reset") || message.contains("Socket closed") || message
+                    .contains("连接被对端重置") || message.contains("Connection refused");
         }
         return false;
     }

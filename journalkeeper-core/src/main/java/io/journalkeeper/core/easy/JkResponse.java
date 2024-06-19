@@ -27,8 +27,8 @@ class JkResponse implements Serializable {
         return command;
     }
 
+    @SuppressWarnings("unchecked")
     public <T> T getResult() {
-        //noinspection unchecked
         return (T) result;
     }
 

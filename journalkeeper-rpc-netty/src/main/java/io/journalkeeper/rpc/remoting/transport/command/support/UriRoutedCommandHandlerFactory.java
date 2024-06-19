@@ -34,7 +34,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class UriRoutedCommandHandlerFactory implements CommandHandlerFactory {
     private static final Logger logger = LoggerFactory.getLogger(UriRoutedCommandHandlerFactory.class);
     private final static CommandHandler defaultHandler = new NoUriCommandHandler();
-    private Map<URI, DefaultCommandHandlerFactory> handlerFactoryMap = new ConcurrentHashMap<>();
+    private final Map<URI, DefaultCommandHandlerFactory> handlerFactoryMap = new ConcurrentHashMap<>();
 
     @Override
     public CommandHandler getHandler(Command command) {

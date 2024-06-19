@@ -15,7 +15,6 @@ package io.journalkeeper.core.api;
 
 import io.journalkeeper.exceptions.IndexOverflowException;
 import io.journalkeeper.exceptions.IndexUnderflowException;
-import io.journalkeeper.utils.event.Watchable;
 
 import java.util.List;
 import java.util.Map;

@@ -2,7 +2,6 @@ package io.journalkeeper.core.state;
 
 import io.journalkeeper.core.api.EntryFuture;
 import io.journalkeeper.core.api.RaftJournal;
-import io.journalkeeper.core.journal.Journal;
 
 /**
  * @author LiYue

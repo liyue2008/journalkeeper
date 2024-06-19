@@ -23,25 +23,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-/**
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- * <p>
- * http://www.apache.org/licenses/LICENSE-2.0
- * <p>
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 package io.journalkeeper.core.state;
-
-/**
- * @author LiYue
- * Date: 2019/11/20
- */
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,7 +31,6 @@ import org.slf4j.LoggerFactory;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.Callable;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
@@ -139,16 +120,13 @@ public class ConfigState {
         }
     }
 
-    public void toNewConfig(Callable appendEntryCallable) throws Exception {
+    public void toNewConfig() {
         rwLock.writeLock().lock();
         try {
             if (!jointConsensus) {
                 throw new IllegalStateException("Invalid joint consensus state! expected: jointConsensus == true, actual: false.");
             }
             logger.info("Config changed from joint consensus to new, ({}, {}) -> {}.", configOld, configNew, configNew);
-            if (null != appendEntryCallable) {
-                appendEntryCallable.call();
-            }
             jointConsensus = false;
             configOld.clear();
             buildAllVoters();
@@ -158,16 +136,13 @@ public class ConfigState {
         }
     }
 
-    public void toJointConsensus(List<URI> configOld, List<URI> configNew, Callable appendEntryCallable) throws Exception {
+    public void toJointConsensus(List<URI> configOld, List<URI> configNew) {
         rwLock.writeLock().lock();
         try {
             if (jointConsensus) {
                 throw new IllegalStateException("Invalid joint consensus state! expected: jointConsensus == false, actual: true.");
             }
             logger.info("Config changed to joint consensus, {} -> ({}, {}).", this.configNew, configOld, configNew);
-            if (null != appendEntryCallable) {
-                appendEntryCallable.call();
-            }
             jointConsensus = true;
             this.configOld.addAll(configOld);
             this.configNew.clear();
@@ -180,7 +155,8 @@ public class ConfigState {
     }
 
     @Override
-    public ConfigState clone() {
+    public ConfigState clone() throws CloneNotSupportedException{
+        super.clone();
         rwLock.readLock().lock();
         try {
             if (jointConsensus) {

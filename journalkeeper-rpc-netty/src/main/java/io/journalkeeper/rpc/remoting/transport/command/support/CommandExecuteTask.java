@@ -28,18 +28,18 @@ import java.util.List;
 /**
  * 命令执行线程
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/8/14
  */
 public class CommandExecuteTask implements Runnable {
 
     protected static final Logger logger = LoggerFactory.getLogger(CommandExecuteTask.class);
 
-    private Transport transport;
-    private Command command;
-    private CommandHandler commandHandler;
-    private CommandHandlerFilterFactory commandHandlerFilterFactory;
-    private ExceptionHandler exceptionHandler;
+    private final Transport transport;
+    private final Command command;
+    private final CommandHandler commandHandler;
+    private final CommandHandlerFilterFactory commandHandlerFilterFactory;
+    private final ExceptionHandler exceptionHandler;
 
     public CommandExecuteTask(Transport transport, Command command, CommandHandler commandHandler, CommandHandlerFilterFactory commandHandlerFilterFactory, ExceptionHandler exceptionHandler) {
         this.transport = transport;

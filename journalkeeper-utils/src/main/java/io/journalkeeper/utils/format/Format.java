@@ -29,7 +29,7 @@ public class Format {
     private final static long K = 1024, M = K * K;
     private final static long G = K * M, T = K * G;
     private final static Map<String, Long> UNIT_MAP = new HashMap<>(4);
-    private static ThreadLocal<SimpleDateFormat> sdfHolder
+    private static final ThreadLocal<SimpleDateFormat> sdfHolder
             = ThreadLocal.withInitial(() -> new SimpleDateFormat("yyyy-MM-dd HH:mm:ss"));
 
     static {

@@ -36,7 +36,7 @@ import java.util.concurrent.CompletableFuture;
 /**
  * 故障切换通信
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/9/3
  */
 public class FailoverChannelTransport implements ChannelTransport {
@@ -49,7 +49,6 @@ public class FailoverChannelTransport implements ChannelTransport {
     private SocketAddress address;
     private final long connectionTimeout;
     private final TransportClient transportClient;
-    private final TransportConfig config;
     private final EventBus<TransportEvent> transportEventBus;
     private volatile long lastReconnect;
 
@@ -58,7 +57,6 @@ public class FailoverChannelTransport implements ChannelTransport {
         this.address = address;
         this.connectionTimeout = connectionTimeout;
         this.transportClient = transportClient;
-        this.config = config;
         this.transportEventBus = transportEventBus;
     }
 
@@ -133,6 +131,7 @@ public class FailoverChannelTransport implements ChannelTransport {
     }
 
 
+    @SuppressWarnings("BooleanMethodIsAlwaysInverted")
     protected boolean checkChannel() {
         if (isChannelActive()) {
             return true;

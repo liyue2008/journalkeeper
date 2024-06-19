@@ -18,7 +18,7 @@ import io.netty.channel.Channel;
 /**
  * 通达通道
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/8/13
  */
 public interface ChannelTransport extends Transport {

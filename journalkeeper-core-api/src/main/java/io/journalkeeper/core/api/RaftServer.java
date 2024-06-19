@@ -15,9 +15,7 @@ package io.journalkeeper.core.api;
 
 import io.journalkeeper.utils.state.StateServer;
 
-import java.io.IOException;
 import java.net.URI;
-import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
@@ -31,19 +29,19 @@ public interface RaftServer extends StateServer {
 
     Roll roll();
 
-    default void init(URI uri, List<URI> voters) throws IOException {
+    default void init(URI uri, List<URI> voters) {
         init(uri, voters, null);
     }
 
-    default void init(URI uri, List<URI> voters, Set<Integer> partitions) throws IOException {
+    default void init(URI uri, List<URI> voters, Set<Integer> partitions) {
         init(uri, voters, partitions, null);
     }
 
-    void init(URI uri, List<URI> voters, Set<Integer> partitions, URI preferredLeader) throws IOException;
+    void init(URI uri, List<URI> voters, Set<Integer> partitions, URI preferredLeader);
 
     boolean isInitialized();
 
-    void recover() throws IOException;
+    void recover();
 
     URI serverUri();
 

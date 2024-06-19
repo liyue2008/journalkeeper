@@ -49,9 +49,7 @@ public class DefaultJournalEntryParser implements JournalEntryParser {
         JournalEntryParseSupport.setLong(buffer, JournalEntryParseSupport.TIMESTAMP, System.currentTimeMillis());
 
 
-        for (int i = 0; i < payload.length; i++) {
-            rawEntry[headerLength + i] = payload[i];
-        }
+        System.arraycopy(payload, 0, rawEntry, headerLength , payload.length);
         return new DefaultJournalEntry(rawEntry, false, false);
 
     }

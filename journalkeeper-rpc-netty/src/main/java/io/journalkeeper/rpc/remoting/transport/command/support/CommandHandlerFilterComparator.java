@@ -20,7 +20,7 @@ import java.util.Comparator;
 /**
  * 命令处理顺序比较
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/8/27
  */
 public class CommandHandlerFilterComparator implements Comparator<Object> {
@@ -33,7 +33,7 @@ public class CommandHandlerFilterComparator implements Comparator<Object> {
         if ((o1 instanceof Ordered) && !(o2 instanceof Ordered)) {
             return -1;
         }
-        if (!(o1 instanceof Ordered) && (o2 instanceof Ordered)) {
+        if (!(o1 instanceof Ordered)) {
             return 1;
         }
 

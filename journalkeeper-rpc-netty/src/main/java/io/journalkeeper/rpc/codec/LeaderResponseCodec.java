@@ -26,22 +26,22 @@ import java.net.URI;
  */
 public abstract class LeaderResponseCodec<R extends LeaderResponse> extends ResponseCodec<R> {
     @Override
-    protected final void encodeResponse(JournalKeeperHeader header, R response, ByteBuf buffer) throws Exception {
+    protected final void encodeResponse(JournalKeeperHeader header, R response, ByteBuf buffer) {
         encodeLeaderResponse(header, response, buffer);
         CodecSupport.encodeString(buffer, response.getLeader() == null ? null : response.getLeader().toString());
     }
 
     @Override
-    protected final R decodeResponse(JournalKeeperHeader header, ByteBuf buffer) throws Exception {
+    protected final R decodeResponse(JournalKeeperHeader header, ByteBuf buffer) {
         R response = decodeLeaderResponse(header, buffer);
         String leaderStr = CodecSupport.decodeString(buffer);
-        if (leaderStr.length() > 0) {
+        if (!leaderStr.isEmpty()) {
             response.setLeader(URI.create(leaderStr));
         }
         return response;
     }
 
-    protected abstract void encodeLeaderResponse(JournalKeeperHeader header,R leaderResponse, ByteBuf buffer) throws Exception;
+    protected abstract void encodeLeaderResponse(JournalKeeperHeader header,R leaderResponse, ByteBuf buffer);
 
-    protected abstract R decodeLeaderResponse(JournalKeeperHeader header, ByteBuf buffer) throws Exception;
+    protected abstract R decodeLeaderResponse(JournalKeeperHeader header, ByteBuf buffer);
 }

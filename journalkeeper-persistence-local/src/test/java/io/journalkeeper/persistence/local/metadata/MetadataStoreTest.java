@@ -40,7 +40,7 @@ public class MetadataStoreTest {
     @Test
     public void readWriteTest() throws IOException {
         ServerMetadata writeMetadata = createServerMetadata();
-        // voters is not set
+        // voters are not set
 
         JsonDoubleCopiesPersistence writeStore = new JsonDoubleCopiesPersistence();
         writeStore.save(path, writeMetadata);
@@ -92,7 +92,7 @@ public class MetadataStoreTest {
         ));
         writeMetadata.setThisServer(URI.create("jk://localhost:9999"));
         writeMetadata.setVotedFor(URI.create("jk://new_leader:9993"));
-        // voters is not set
+        // voters are not set
         return writeMetadata;
     }
 

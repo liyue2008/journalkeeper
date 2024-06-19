@@ -446,7 +446,7 @@ public class VoterActor {
                 actor.<RequestVoteResponse>sendThen("Rpc","requestVote", new RpcMsg<>(destination, request))
                         .thenAccept(response -> {
                             if (null != response) {
-                                logger.info("Request vote result {}, dest uri: {}, {}...",
+                                logger.info("Request vote result {}, target uri: {}, {}...",
                                         response.isVoteGranted(),
                                         destination,
                                         voterInfo());
@@ -498,15 +498,9 @@ public class VoterActor {
 
         AsyncAppendEntriesRequest request = msg.getPayload();
 
-        logger.info("Receive async append entries request: {}.", request);
 //        If RPC request or response contains term T > currentTerm:
 //        set currentTerm = T, convert to follower
-        if (request.getTerm() > term) {
-            logger.info("Set current term from {} to {}, {}.", this.term, term, voterInfo());
-            this.term = request.getTerm();
-            this.votedFor = null;
-            convertToFollower();
-        }
+        checkTerm(request.getTerm());
         // Reply false if term < currentTerm
         if (request.getTerm() < term) {
             actor.reply(msg, new AsyncAppendEntriesResponse(false, request.getPrevLogIndex() + 1,
@@ -1093,18 +1087,6 @@ public class VoterActor {
             this.metric = metric;
         }
 
-        public ActorMsg getRequestMsg() {
-            return requestMsg;
-        }
-
-        public ResponseConfig getResponseConfig() {
-            return responseConfig;
-        }
-
-        public long getFromPosition() {
-            return fromPosition;
-        }
-
         public long getToPosition() {
             return toPosition;
         }
@@ -1291,7 +1273,6 @@ public class VoterActor {
                             entries, state.commitIndex(), maxIndex);
 
             waitingForResponse = true;
-            logger.info("send async append entries to {} ...", this.getUri());
             actor.<AsyncAppendEntriesResponse>sendThen("Rpc", "asyncAppendEntries", new RpcMsg<>(this.uri, request))
                     .thenAccept(resp -> handleAppendEntriesResponse(resp, entries.size(), fistSnapShotEntry.getKey()))
                     .exceptionally(e -> {
@@ -1317,7 +1298,6 @@ public class VoterActor {
                 logger.warn("Receive async append entries response failed from {}, response: {}.", this.getUri(), response);
                 return;
             }
-//            logger.info("Receive async append entries response from {}.", this.getUri());
             // 成功收到响应响应
             if (response.isSuccess()) { // 复制成功
                 if (entrySize > 0) {

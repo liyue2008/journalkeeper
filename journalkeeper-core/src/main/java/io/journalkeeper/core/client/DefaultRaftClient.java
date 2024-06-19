@@ -146,7 +146,7 @@ public class DefaultRaftClient extends AbstractClient implements RaftClient {
             if (index > finalLastApplied) {
                 if(lastApplied.compareAndSet(finalLastApplied, index)) {
                     return;
-                };
+                }
             } else {
                 return;
             }

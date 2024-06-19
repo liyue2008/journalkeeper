@@ -16,7 +16,7 @@ package io.journalkeeper.rpc.remoting.protocol;
 /**
  * 协议通信
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/8/16
  */
 public interface ProtocolTransport {

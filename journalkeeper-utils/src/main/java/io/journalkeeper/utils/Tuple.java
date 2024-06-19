@@ -23,7 +23,7 @@ public class Tuple<X, Y> {
             return false;
         }
 
-        //noinspection unchecked
+        @SuppressWarnings("unchecked")
         Tuple<X,Y> other_ = (Tuple<X,Y>) other;
 
         // this may cause NPE if nulls are valid values for x or y. The logic may be improved to handle nulls properly, if needed.

@@ -59,7 +59,6 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -86,7 +85,7 @@ public class JournalStoreTest {
     @Test
     public void writeReadTest() throws Exception {
         // 单分区和多分区
-        List<Set<Integer>> partitionsList = Arrays.asList(
+        List<Set<Integer>> partitionsList = Collections.singletonList(
                 Sets.newSet(0, 1, 2, 3, 4)
         );
 
@@ -102,8 +101,6 @@ public class JournalStoreTest {
         );
 
         Properties properties = new Properties();
-//        properties.setProperty("enable_metric", String.valueOf(true));
-//        properties.setProperty("print_metric_interval_sec", String.valueOf(5));
         properties.setProperty("performance_mode", "true");
 
         for (Set<Integer> partitions : partitionsList) {
@@ -124,7 +121,7 @@ public class JournalStoreTest {
     @Test
     public void tempTest() throws Exception {
         // 单分区和多分区
-        List<Set<Integer>> partitionsList = Arrays.asList(
+        List<Set<Integer>> partitionsList = Collections.singletonList(
                 Sets.newSet(0, 1, 2, 3, 4)
         );
 
@@ -206,7 +203,7 @@ public class JournalStoreTest {
     }
 
     @Test
-    public void queryIndexTest() throws IOException, ExecutionException, InterruptedException, TimeoutException {
+    public void queryIndexTest() throws IOException, ExecutionException, InterruptedException {
         JournalEntryParser journalEntryParser = new DefaultJournalEntryParser();
         JournalStoreServer server = createServers(1, base).get(0);
 
@@ -322,6 +319,7 @@ public class JournalStoreTest {
 
             if(async) {
                 while (adminClient.getServerStatus(leaderUri).get().getLastApplied() < startApplied + writeCount) {
+                    //noinspection BusyWait
                     Thread.sleep(1);
                 }
             }
@@ -439,7 +437,7 @@ public class JournalStoreTest {
             client.waitForClusterReady();
             logger.info("Cluster is ready.");
             byte[] rawEntries = ByteUtils.createFixedSizeBytes(entrySize);
-            CompletableFuture[] futures = new CompletableFuture[count];
+            CompletableFuture<?>[] futures = new CompletableFuture[count];
             for (int i = 0; i < count; i++) {
                 futures[i] = client.append(0, 1, rawEntries, ResponseConfig.ALL);
             }
@@ -486,7 +484,7 @@ public class JournalStoreTest {
         Assert.assertEquals(context, transactionContext.context());
 
         // Send some transactional messages
-        CompletableFuture[] futures = new CompletableFuture[rawEntries.size()];
+        CompletableFuture<?>[] futures = new CompletableFuture[rawEntries.size()];
         for (int i = 0; i < rawEntries.size(); i++) {
             int partition = i % partitions.size();
             futures[i] = client.append(transactionContext.transactionId(), rawEntries.get(i), partition, 1);
@@ -545,7 +543,7 @@ public class JournalStoreTest {
         Assert.assertNotNull(transactionContext.transactionId());
 
         // Send some transactional messages
-        CompletableFuture[] futures = new CompletableFuture[rawEntries.size()];
+        CompletableFuture<?>[] futures = new CompletableFuture[rawEntries.size()];
         for (int i = 0; i < rawEntries.size(); i++) {
             int partition = i % partitions.size();
             futures[i] = client.append(transactionContext.transactionId(), rawEntries.get(i), partition, 1);
@@ -603,7 +601,7 @@ public class JournalStoreTest {
         Assert.assertEquals(context, transactionContext.context());
 
         // Send some transactional messages
-        CompletableFuture[] futures = new CompletableFuture[rawEntries.size() / 2];
+        CompletableFuture<?>[] futures = new CompletableFuture[rawEntries.size() / 2];
         int i = 0;
         for (; i < rawEntries.size() / 2; i++) {
             int partition = i % partitions.size();
@@ -793,11 +791,7 @@ public class JournalStoreTest {
             if (null != props) {
                 properties.putAll(props);
             }
-//            properties.setProperty("print_metric_interval_sec", String.valueOf(5));
-//            properties.setProperty("enable_metric", String.valueOf(true));
             properties.setProperty("print_state_interval_sec", String.valueOf(5));
-//            properties.setProperty("persistence.journal.file_data_size", String.valueOf(128 * 1024));
-//            properties.setProperty("persistence.index.file_data_size", String.valueOf(16 * 1024));
             propertiesList.add(properties);
         }
         return createServers(serverURIs, propertiesList, partitions);

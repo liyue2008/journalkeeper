@@ -24,7 +24,7 @@ import org.slf4j.LoggerFactory;
 /**
  * 连接处理
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/8/15
  */
 @ChannelHandler.Sharable
@@ -45,7 +45,7 @@ public class ConnectionHandler extends ChannelInboundHandlerAdapter {
     }
 
     @Override
-    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
         Channel channel = ctx.channel();
         try {
             channel.close().await();

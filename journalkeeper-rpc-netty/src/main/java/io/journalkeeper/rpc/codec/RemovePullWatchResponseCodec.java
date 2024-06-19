@@ -24,12 +24,12 @@ import io.netty.buffer.ByteBuf;
  */
 public class RemovePullWatchResponseCodec extends ResponseCodec<RemovePullWatchResponse> implements Type {
     @Override
-    protected void encodeResponse(JournalKeeperHeader header, RemovePullWatchResponse response, ByteBuf buffer) throws Exception {
+    protected void encodeResponse(JournalKeeperHeader header, RemovePullWatchResponse response, ByteBuf buffer) {
         //boolean success, long journalIndex, int term, int entryCount
     }
 
     @Override
-    protected RemovePullWatchResponse decodeResponse(JournalKeeperHeader header, ByteBuf buffer) throws Exception {
+    protected RemovePullWatchResponse decodeResponse(JournalKeeperHeader header, ByteBuf buffer) {
         return new RemovePullWatchResponse();
     }
 

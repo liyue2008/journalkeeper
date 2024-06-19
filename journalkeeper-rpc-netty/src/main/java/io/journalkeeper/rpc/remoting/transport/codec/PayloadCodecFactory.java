@@ -25,47 +25,46 @@ import java.util.Map;
 /**
  * jmq消息体编解码器工厂
  * author: gaohaoxiang
- *
  * date: 2018/8/21
  */
 public class PayloadCodecFactory {
 
     protected static final Logger logger = LoggerFactory.getLogger(PayloadCodecFactory.class);
 
-    private final Map<Integer /** payload type **/, PayloadDecoder> decoderMapper = new HashMap<>();
-    private final Map<Integer /** payload type **/, PayloadEncoder> encoderMapper = new HashMap<>();
+    private final Map<Integer /* payload type */, PayloadDecoder<?>> decoderMapper = new HashMap<>();
+    private final Map<Integer /* payload type */, PayloadEncoder<?,?>> encoderMapper = new HashMap<>();
 
-    public PayloadDecoder getDecoder(Header header) {
+    public PayloadDecoder<?> getDecoder(Header header) {
         return decoderMapper.get(header.getType());
     }
 
-    public PayloadEncoder getEncoder(Header header) {
+    public PayloadEncoder<?, ?> getEncoder(Header header) {
         return encoderMapper.get(header.getType());
     }
 
-    public void register(int type, PayloadCodec payloadCodec) {
+    public void register(int type, PayloadCodec<?, ?> payloadCodec) {
         int[] types = new int[]{type};
-        register(types, (PayloadDecoder) payloadCodec);
-        register(types, (PayloadEncoder) payloadCodec);
+        register(types, (PayloadDecoder<?>) payloadCodec);
+        register(types, (PayloadEncoder<?, ?>) payloadCodec);
     }
 
-    public void register(PayloadCodec payloadCodec) {
+    public void register(PayloadCodec<?, ?> payloadCodec) {
         int[] types = getTypes(payloadCodec);
-        register(types, (PayloadDecoder) payloadCodec);
-        register(types, (PayloadEncoder) payloadCodec);
+        register(types, (PayloadDecoder<?>) payloadCodec);
+        register(types, (PayloadEncoder<?, ?>) payloadCodec);
     }
 
-    public void register(PayloadDecoder payloadDecoder) {
+    public void register(PayloadDecoder<?> payloadDecoder) {
         int[] types = getTypes(payloadDecoder);
         register(types, payloadDecoder);
     }
 
-    public void register(PayloadEncoder payloadEncoder) {
+    public void register(PayloadEncoder<?, ?> payloadEncoder) {
         int[] types = getTypes(payloadEncoder);
         register(types, payloadEncoder);
     }
 
-    protected void register(int[] types, PayloadEncoder payloadEncoder) {
+    protected void register(int[] types, PayloadEncoder<?, ?> payloadEncoder) {
         if (types == null) {
             logger.error("unsupported payload encoder, encoder: {}", payloadEncoder);
             return;
@@ -77,7 +76,7 @@ public class PayloadCodecFactory {
         }
     }
 
-    protected void register(int[] types, PayloadDecoder payloadDecoder) {
+    protected void register(int[] types, PayloadDecoder<?> payloadDecoder) {
         if (types == null) {
             logger.error("unsupported payload decoder, decoder: {}", payloadDecoder);
             return;

@@ -28,7 +28,7 @@ import io.netty.buffer.ByteBuf;
  */
 public class GetServerStatusResponseCodec extends ResponseCodec<GetServerStatusResponse> implements Type {
     @Override
-    protected void encodeResponse(JournalKeeperHeader header, GetServerStatusResponse response, ByteBuf buffer) throws Exception {
+    protected void encodeResponse(JournalKeeperHeader header, GetServerStatusResponse response, ByteBuf buffer) {
         ServerStatus serverStatus = response.getServerStatus();
         if (null == serverStatus) serverStatus = new ServerStatus();
         CodecSupport.encodeString(buffer, serverStatus.getRoll() == null ? "" : serverStatus.getRoll().name());
@@ -42,7 +42,7 @@ public class GetServerStatusResponseCodec extends ResponseCodec<GetServerStatusR
     }
 
     @Override
-    protected GetServerStatusResponse decodeResponse(JournalKeeperHeader header, ByteBuf buffer) throws Exception {
+    protected GetServerStatusResponse decodeResponse(JournalKeeperHeader header, ByteBuf buffer) {
         String str = CodecSupport.decodeString(buffer);
         RaftServer.Roll roll = str.isEmpty() ? null : RaftServer.Roll.valueOf(str);
         str = CodecSupport.decodeString(buffer);

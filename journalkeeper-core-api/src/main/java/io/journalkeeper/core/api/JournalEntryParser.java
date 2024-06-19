@@ -29,9 +29,7 @@ public interface JournalEntryParser {
     default JournalEntry createJournalEntry(byte[] payload) {
         int headerLength = headerLength();
         byte[] rawEntry = new byte[headerLength + payload.length];
-        for (int i = 0; i < payload.length; i++) {
-            rawEntry[headerLength + i] = payload[i];
-        }
+        System.arraycopy(payload, 0, rawEntry, headerLength, payload.length);
         return parse(rawEntry);
     }
 }

@@ -16,7 +16,7 @@ package io.journalkeeper.utils.retry;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * Refer to https://aws.amazon.com/cn/blogs/architecture/exponential-backoff-and-jitter/
+ * Refer to <a href="https://aws.amazon.com/cn/blogs/architecture/exponential-backoff-and-jitter/">...</a>
  */
 public class ExponentialRetryPolicy implements RetryPolicy{
     private final long baseMs;

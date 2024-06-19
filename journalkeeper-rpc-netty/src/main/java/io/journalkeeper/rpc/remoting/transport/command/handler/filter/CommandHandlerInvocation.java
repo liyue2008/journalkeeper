@@ -24,15 +24,15 @@ import java.util.List;
 /**
  * 命令处理器上下文
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/8/16
  */
 public class CommandHandlerInvocation {
 
-    private Transport transport;
-    private Command command;
-    private CommandHandler commandHandler;
-    private Iterator<CommandHandlerFilter> filterIterator;
+    private final Transport transport;
+    private final Command command;
+    private final CommandHandler commandHandler;
+    private final Iterator<CommandHandlerFilter> filterIterator;
     private CommandHandlerContext context;
 
     public CommandHandlerInvocation(Transport transport, Command command, CommandHandler commandHandler, List<CommandHandlerFilter> filterList) {

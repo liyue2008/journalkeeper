@@ -43,17 +43,17 @@ import java.util.TimerTask;
 /**
  * 默认通信客户端
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/8/24
  */
 public class DefaultTransportClient extends TransportClientSupport implements TransportClient {
 
-    private Codec codec;
-    private RequestBarrier requestBarrier;
-    private RequestHandler requestHandler;
-    private ResponseHandler responseHandler;
-    private EventBus<TransportEvent> transportEventBus;
-    private Timer clearTimer;
+    private final Codec codec;
+    private final RequestBarrier requestBarrier;
+    private final RequestHandler requestHandler;
+    private final ResponseHandler responseHandler;
+    private final EventBus<TransportEvent> transportEventBus;
+    private final Timer clearTimer;
 
     public DefaultTransportClient(ClientConfig config, Codec codec, final RequestBarrier requestBarrier, RequestHandler requestHandler, ResponseHandler responseHandler, EventBus<TransportEvent> transportEventBus) {
         super(config);

@@ -25,13 +25,13 @@ import io.netty.buffer.ByteBuf;
  */
 public class InstallSnapshotResponseCodec extends ResponseCodec<InstallSnapshotResponse> implements Type {
     @Override
-    protected void encodeResponse(JournalKeeperHeader header, InstallSnapshotResponse response, ByteBuf buffer) throws Exception {
+    protected void encodeResponse(JournalKeeperHeader header, InstallSnapshotResponse response, ByteBuf buffer) {
 
         CodecSupport.encodeInt(buffer, response.getTerm());
     }
 
     @Override
-    protected InstallSnapshotResponse decodeResponse(JournalKeeperHeader header, ByteBuf buffer) throws Exception {
+    protected InstallSnapshotResponse decodeResponse(JournalKeeperHeader header, ByteBuf buffer) {
         return new InstallSnapshotResponse(
                 CodecSupport.decodeInt(buffer)
         );

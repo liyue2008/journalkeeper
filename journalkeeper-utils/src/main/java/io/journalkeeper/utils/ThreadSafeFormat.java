@@ -23,7 +23,7 @@ import java.util.Locale;
  * Date: 2019-01-17
  */
 public class ThreadSafeFormat {
-    private static ThreadLocal<SimpleDateFormat> sdfHolder
+    private static final ThreadLocal<SimpleDateFormat> sdfHolder
             = ThreadLocal.withInitial(() -> new SimpleDateFormat("yyyy-MM-dd HH:mm:ss"));
 
     public static String format(Date date) {

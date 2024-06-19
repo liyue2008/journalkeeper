@@ -47,7 +47,7 @@ JournalKeeper在支持强一致的同时，提供另外一种比更宽松的高�
 
 从一致性的限制强度来说：
 
-<center>强一致 > 顺序一致 > 最终一致 </center>
+<div style="text-align: center;">强一致 > 顺序一致 > 最终一致 </div>
 
 满足强一致的系统一定满足顺序一致，满足顺序一致的系统一定满足最终一致。
 
@@ -150,21 +150,21 @@ JournalKeeper中LEADER为每个FOLLOWER维护3个位置：
 在LEADER上对于每个FOLLOWER，如果存在一批日志，它们的索引位置不小于nextIndex，LEADER需要更新nextIndex（nextIndex自增本次发送的日志条数）然后给这个FOLLOWER发送AsyncAppendRequest RPC请求。LEADER可以同时给同一个FOLLOWER发送多个AsyncAppendRequest RPC请求并行复制。
 AsyncAppendRequest RPC请求的参数和返回值如下：
 
-| 参数 | 描述 |
-| :--- | :--- | 
-| term | LEADER的任期号|
-| leaderAddr | LEADER的地址，为了其他服务器能重定向到客户端|
-| prevLogIndex | 发送日志之前的日志的索引值|
-| prevLogTerm | 发送日志之前的日志的领导人任期号|
-| entries[] | 将要存储的日志条目（表示 heartbeat 时为空，有时会为了效率发送超过一条）|
-| leaderCommit | LEADER上当前的提交位置|
+| 参数           | 描述                                        |
+|:-------------|:------------------------------------------| 
+| term         | LEADER的任期号                                |
+| leaderAddr   | LEADER的地址，为了其他服务器能重定向到客户端                 |
+| prevLogIndex | 发送日志之前的日志的索引值                             |
+| prevLogTerm  | 发送日志之前的日志的领导人任期号                          |
+| entries[]    | 将要存储的日志条目（表示 heartbeat 时为空，有时会为了效率发送超过一条） |
+| leaderCommit | LEADER上当前的提交位置                            |
 
-| 返回值 | 描述 | 
-| :--- | :--- | 
-term | 当前的任期号，用于领导人更新自己的任期号
-success | 如果其它服务器包含能够匹配上 prevLogIndex 和 prevLogTerm 的日志时为真
-logIndex | 请求中第一条日志的位置
-entryCount | 请求中日志的数量
+| 返回值        | 描述                                               | 
+|:-----------|:-------------------------------------------------| 
+| term       | 当前的任期号，用于领导人更新自己的任期号                             |
+| success    | 如果其它服务器包含能够匹配上 prevLogIndex 和 prevLogTerm 的日志时为真 |
+| logIndex   | 请求中第一条日志的位置                                      |
+| entryCount | 请求中日志的数量                                         |
 
 ### <a name="async-replication-leader"></a>LEADER
 
@@ -187,11 +187,11 @@ RAFT的复制算法中，接收者通过比较当前复制位置前一条日志�
 接收者将所有收到的请求暂存到一个按照日志索引位置排序的有序列表中，每次从列表中取第一个请求顺序处理。处理的逻辑和RAFT算法中的要求是一样的：
 
 1. 如果 term < currentTerm返回 false；
-1. 如果 term > currentTerm且节点当前的状态不是FOLLOWER，将节点当前的状态转换为FOLLOWER；
-1. 如果在prevLogIndex处的日志的任期号与prevLogTerm不匹配时，返回 false；
-1. 如果一条已经存在的日志与新的冲突（index 相同但是任期号 term 不同），则删除已经存在的日志和它之后所有的日志；
-1. 添加任何在已有的日志中不存在的条目；
-1. 如果leaderCommit > commitIndex，将commitIndex设置为leaderCommit和最新日志条目索引号中较小的一个；
+2. 如果 term > currentTerm且节点当前的状态不是FOLLOWER，将节点当前的状态转换为FOLLOWER；
+3. 如果在prevLogIndex处的日志的任期号与prevLogTerm不匹配时，返回 false；
+4. 如果一条已经存在的日志与新的冲突（index 相同但是任期号 term 不同），则删除已经存在的日志和它之后所有的日志；
+5. 添加任何在已有的日志中不存在的条目；
+6. 如果leaderCommit > commitIndex，将commitIndex设置为leaderCommit和最新日志条目索引号中较小的一个；
 
 ## 迁移LEADER
 
@@ -203,9 +203,9 @@ RAFT的复制算法中，接收者通过比较当前复制位置前一条日志�
 因而，需要一种安全的方法将集群的LEADER迁移到指定的节点上。例如，需要将LEADER从节点$S_{old}$迁移到$S_{new}$，迁移过程中需要一个迁移协调者节点协调迁移过程：
 
 1. 通知节点$S_{old}$暂停写入服务；
-1. 等待日志同步：等待$S_{old}$节点上所有日志都提交完成，等待$S_{new}$节点上的日志的提交位置与$S_{old}$相同。
-1. 通知节点$S_{new}$节点，将选举任期自增1，然后给集群所有节点发送RquestVote RPC；
-1. 反复检查，等待选举完成，直到节点$S_{new}$成为新的LEADER。
+2. 等待日志同步：等待$S_{old}$节点上所有日志都提交完成，等待$S_{new}$节点上的日志的提交位置与$S_{old}$相同。
+3. 通知节点$S_{new}$节点，将选举任期自增1，然后给集群所有节点发送RquestVote RPC；
+4. 反复检查，等待选举完成，直到节点$S_{new}$成为新的LEADER。
 
 在极少数情况下（例如，迁移过程中出现网络异常等）有可能会出现集群新选举出来的LEADER不是节点$S_{new}$，因此迁移协调者需要检查选举结果，必要的时候进行重试迁移过程。
 
@@ -223,16 +223,16 @@ JournalKeeper以接口和事件方式对外提供服务，服务的形式可以�
 
 #### 接口
 
-| 方法 | 节点 | 说明 |
-| :--- | :--- |  :--- | 
-updateClusterState | LEADER | 客户端调用LEADER节点写入操作日志变更状态。
-queryClusterState | LEADER | 客户端查询集群当前的状态，保证强一致。
-queryServerState | ALL | 客户端查询节点当前的状态，该服务不保证强一致性，只保证顺序一致
-lastApplied | LEADER | 客户端调用LEADER节点查询集群最新提交位置，用于二步读取。
-querySnapshot | ALL | 客户端查询任意节点上指定日志位置对应快照的状态，用于二步读取。
-getServers | ALL | 客户端查询任意节点获取集群配置。
-updateVoters | LEADER | 客户端调用LEADER节点变更选民节点配置。
-updateObservers | LEADER | 客户端调用LEADER节点变更观察者节点配置。
+| 方法                 | 节点     | 说明                              |
+|:-------------------|:-------|:--------------------------------| 
+ updateClusterState | LEADER | 客户端调用LEADER节点写入操作日志变更状态。        
+ queryClusterState  | LEADER | 客户端查询集群当前的状态，保证强一致。             
+ queryServerState   | ALL    | 客户端查询节点当前的状态，该服务不保证强一致性，只保证顺序一致 
+ lastApplied        | LEADER | 客户端调用LEADER节点查询集群最新提交位置，用于二步读取。 
+ querySnapshot      | ALL    | 客户端查询任意节点上指定日志位置对应快照的状态，用于二步读取。 
+ getServers         | ALL    | 客户端查询任意节点获取集群配置。                
+ updateVoters       | LEADER | 客户端调用LEADER节点变更选民节点配置。          
+ updateObservers    | LEADER | 客户端调用LEADER节点变更观察者节点配置。         
 
 #### 变更状态服务
 
@@ -240,14 +240,14 @@ updateObservers | LEADER | 客户端调用LEADER节点变更观察者节点配�
 
 客户端调用LEADER节点写入操作日志变更状态。集群保证按照提供的顺序写入，保证原子性，服务是线性的，任一时间只能有一个客户端使用该服务。日志在集群中复制到大多数节点，并在状态机执行后返回。
 
-| 参数 | 描述 |
-| :--- | :--- |
-entry | 待写入的日志。
+| 参数    | 描述      |
+|:------|:--------|
+ entry | 待写入的日志。 
 
-| 返回 | 描述 |
-| :--- | :--- |
-result | 写入结果，包括：<br/>**SUCCESS**: 成功。<br/>**NOT_LEADER**: 当前节点不是LEADER，不可写。<br/> **FAILED**: 写入失败，写入过程中发生其他错误。
-leader | 当result = NOT_LEADER时，返回LEADER的地址。
+| 返回     | 描述                                                                                                     |
+|:-------|:-------------------------------------------------------------------------------------------------------|
+ result | 写入结果，包括：<br/>**SUCCESS**: 成功。<br/>**NOT_LEADER**: 当前节点不是LEADER，不可写。<br/> **FAILED**: 写入失败，写入过程中发生其他错误。 
+ leader | 当result = NOT_LEADER时，返回LEADER的地址。                                                                     
 
 #### 查询状态服务
 
@@ -255,50 +255,50 @@ leader | 当result = NOT_LEADER时，返回LEADER的地址。
 
 客户端调用LEADER节点查询集群当前的状态，即日志在状态机中执行完成后产生的数据。该服务保证强一致性，保证读到的状态总是集群的最新状态。
 
-| 参数 | 描述 | 
-| :--- | :--- |
-query | 查询条件。
+| 参数    | 描述    | 
+|:------|:------|
+ query | 查询条件。 
 
-| 返回 | 描述 | 
-| :--- | :--- |
-result | 按照查询条件获得的集群最新状态。
+| 返回     | 描述               | 
+|:-------|:-----------------|
+ result | 按照查询条件获得的集群最新状态。 
 
 ##### queryServerState
 
 客户端调用任意节点查询节点当前的状态，即日志在状态机中执行完成后产生的数据。该服务不保证强一致性，只保证顺序一致，由于复制存在时延，集群中各节点的当前状态可能比集群的当前状态更旧。
 
-参数 | 描述
-| :--- | :--- |
-query | 查询条件。
+ 参数    | 描述    
+|:------|:------|
+ query | 查询条件。 
 
-返回 | 描述
-| :--- | :--- |
-result | 按照查询条件获得的节点最新状态。
-lastApplied | state对应的日志位置
+ 返回          | 描述               
+|:------------|:-----------------|
+ result      | 按照查询条件获得的节点最新状态。 
+ lastApplied | state对应的日志位置     
 
 ##### lastApplied
 
 客户端调用LEADER节点查询集群最新提交位置，用于二步读取。
 
-返回 | 描述
-| :--- | :--- |
-result | 查询结果，包括：<br/>**SUCCESS**: 成功。<br/>**NOT_LEADER**: 当前节点不是LEADER。
-appliedIndex | 当查询成功时返回集群当前状态对应的日志位置。
-leaderAddr | 当result = NOT_LEADER时，返回LEADER的地址。
+ 返回           | 描述                                                              
+|:-------------|:----------------------------------------------------------------|
+ result       | 查询结果，包括：<br/>**SUCCESS**: 成功。<br/>**NOT_LEADER**: 当前节点不是LEADER。 
+ appliedIndex | 当查询成功时返回集群当前状态对应的日志位置。                                          
+ leaderAddr   | 当result = NOT_LEADER时，返回LEADER的地址。                              
 
 ##### querySnapshot
 
 客户端查询任意节点上指定日志位置对应快照的状态，用于二步读取中，在非LEADER节点获取状态数据。
 
-参数 | 描述
-| :--- | :--- |
-logIndex | 待查询快照对应的日志位置。
-query | 查询条件。
+ 参数       | 描述            
+|:---------|:--------------|
+ logIndex | 待查询快照对应的日志位置。 
+ query    | 查询条件。         
 
-返回 | 描述
-| :--- | :--- |
-success | 查询结果，包括：<br/>**SUCCESS**: 成功。<br/>**INDEX_OVERFLOW**: 请求位置对应的快照尚未生成。<br/>**INDEX_UNDERFLOW**：请求位置对应的快照已删除。
-state | 查询成功时返回按照查询条件获得的快照状态。
+ 返回      | 描述                                                                                                         
+|:--------|:-----------------------------------------------------------------------------------------------------------|
+ success | 查询结果，包括：<br/>**SUCCESS**: 成功。<br/>**INDEX_OVERFLOW**: 请求位置对应的快照尚未生成。<br/>**INDEX_UNDERFLOW**：请求位置对应的快照已删除。 
+ state   | 查询成功时返回按照查询条件获得的快照状态。                                                                                      
 
 #### 集群配置服务
 
@@ -306,47 +306,47 @@ state | 查询成功时返回按照查询条件获得的快照状态。
 
 客户端查询任意节点获取集群配置，返回集群所有节点和当前的LEADER节点。需要注意的是，只有LEADER节点上的配置是最新且准确的，在其它节点上查询到的集群配置有可能是已过期的旧配置。
 
-返回 | 描述
-| :--- | :--- |
-voterAddrs[] | 所有选民节点的地址（含LEADER）。
-leaderAddr | LEADER节点地址
-observerAddrs[] | 所有观察者节点地址。
+ 返回              | 描述                  
+|:----------------|:--------------------|
+ voterAddrs[]    | 所有选民节点的地址（含LEADER）。 
+ leaderAddr      | LEADER节点地址          
+ observerAddrs[] | 所有观察者节点地址。          
 
 ##### updateVoters
 
 客户端调用LEADER节点变更选民节点配置。集群保证原子性，服务是线性的，任一时间只能有一个客户端使用该服务。集群成功变更返回。
 
-参数 | 描述
-| :--- | :--- |
-operation | 操作，ADD：添加，REMOVE：删除
-voterAddr  | 需要添加或删除的节点地址。
+ 参数        | 描述                  
+|:----------|:--------------------|
+ operation | 操作，ADD：添加，REMOVE：删除 
+ voterAddr | 需要添加或删除的节点地址。       
 
-返回 | 描述
-| :--- | :--- |
-result | 变更结果，包括：<br/>**SUCCESS**: 成功。<br/>**NOT_LEADER**: 当前节点不是LEADER。<br/> **CLUSTER_NOT_AVAILABLE**: 集群不可用，可能正在选举。<br/>**FAILED**: 变更失败，变更过程中发生其他错误。集群配置仍为变更之前。
-leaderAddr | 当result = NOT_LEADER时，返回LEADER的地址。
+ 返回         | 描述                                                                                                                                                         
+|:-----------|:-----------------------------------------------------------------------------------------------------------------------------------------------------------|
+ result     | 变更结果，包括：<br/>**SUCCESS**: 成功。<br/>**NOT_LEADER**: 当前节点不是LEADER。<br/> **CLUSTER_NOT_AVAILABLE**: 集群不可用，可能正在选举。<br/>**FAILED**: 变更失败，变更过程中发生其他错误。集群配置仍为变更之前。 
+ leaderAddr | 当result = NOT_LEADER时，返回LEADER的地址。                                                                                                                         
 
 ##### updateObservers
 
 客户端调用LEADER节点变更观察者节点配置。集群保证原子性，服务是线性的，任一时间只能有一个客户端使用该服务。集群成功变更返回。
 
-参数 | 描述
-| :--- | :--- |
-toBeAdded[] | 需要新增的节点地址。
-toBeRemoved[] | 需要删除的节点地址。
+| 参数            | 描述         |
+|:--------------|:-----------|
+| toBeAdded[]   | 需要新增的节点地址。 |
+| toBeRemoved[] | 需要删除的节点地址。 |
 
-返回 | 描述
-| :--- | :--- |
-result | 变更结果，包括：<br/>**SUCCESS**: 成功。<br/>**NOT_LEADER**: 当前节点不是LEADER。<br/> **CLUSTER_NOT_AVAILABLE**: 集群不可用，可能正在选举。<br/> **FAILED**: 变更失败，变更过程中发生其他错误。集群配置仍为变更之前。
-leaderAddr | 当result = NOT_LEADER时，返回LEADER的地址。
+| 返回         | 描述                                                                                                                                                          |
+|:-----------|:------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| result     | 变更结果，包括：<br/>**SUCCESS**: 成功。<br/>**NOT_LEADER**: 当前节点不是LEADER。<br/> **CLUSTER_NOT_AVAILABLE**: 集群不可用，可能正在选举。<br/> **FAILED**: 变更失败，变更过程中发生其他错误。集群配置仍为变更之前。 |
+| leaderAddr | 当result = NOT_LEADER时，返回LEADER的地址。                                                                                                                          |
 
 #### 事件
 
-事件 | 内容 | 说明
-| :--- | :--- | :--- |
-onLeaderChanged | leaderAddr：当前LEADER<br/>term：当前任期 | LEADER节点变更
-onStateChanged | logIndex：集群状态对应的日志索引序号| 集群状态变更
-onVotersChanged | voterAddrs：变更后的所有选民节点 | 选民节点配置变更
+ 事件              | 内容                                | 说明         
+|:----------------|:----------------------------------|:-----------|
+ onLeaderChanged | leaderAddr：当前LEADER<br/>term：当前任期 | LEADER节点变更 
+ onStateChanged  | logIndex：集群状态对应的日志索引序号            | 集群状态变更     
+ onVotersChanged | voterAddrs：变更后的所有选民节点             | 选民节点配置变更   
 
 ### 领域模型
 
@@ -367,96 +367,96 @@ Server就是集群中的节点，它包含了存储在Server上日志（logs[]�
 
 Server提供[服务](#服务)一章中定义的所有方法供客户端调用，还包含如下几个内部使用的方法：
 
-方法 | 节点 | 描述
-| :--- | :--- | :--- |
-getServerEntries | ALL | 观察者查询任意节点上指定位置的日志，用于观察者复制日志。
-getServerState | ALL | 观察者复制任意节点上的当前最新状态。
-asyncAppendEntries | VOTER | LEADER调用FOLLOWER并行复制日志。
-requestVote | VOTER | 同RAFT中RequestVote RPC，CANDIDATE调用其它VOTER发起投票的请求。
+ 方法                 | 节点    | 描述                                               
+|:-------------------|:------|:-------------------------------------------------|
+ getServerEntries   | ALL   | 观察者查询任意节点上指定位置的日志，用于观察者复制日志。                     
+ getServerState     | ALL   | 观察者复制任意节点上的当前最新状态。                               
+ asyncAppendEntries | VOTER | LEADER调用FOLLOWER并行复制日志。                          
+ requestVote        | VOTER | 同RAFT中RequestVote RPC，CANDIDATE调用其它VOTER发起投票的请求。 
 
 ##### getServerEntries
 
 客户端查询任意节点上指定位置的日志，用于观察者复制日志。
 
-参数 | 描述
-| :--- | :--- |
-logIndex | 待查询的日志位置。
-maxSize | 最多返回日志的条数。
+ 参数       | 描述         
+|:---------|:-----------|
+ logIndex | 待查询的日志位置。  
+ maxSize  | 最多返回日志的条数。 
 
-返回 | 描述
-| :--- | :--- |
-success | 查询结果，包括：<br/>**SUCCESS**: 成功。<br/>**INDEX_OVERFLOW**: 请求位置对应的快照尚未生成。<br/>**INDEX_UNDERFLOW**：请求位置对应的快照已删除。
-entries[] | 查询成功时返回的日志数组。
-minIndex | 当前节点日志的最小位置（含）。
+ 返回        | 描述                                                                                                         
+|:----------|:-----------------------------------------------------------------------------------------------------------|
+ success   | 查询结果，包括：<br/>**SUCCESS**: 成功。<br/>**INDEX_OVERFLOW**: 请求位置对应的快照尚未生成。<br/>**INDEX_UNDERFLOW**：请求位置对应的快照已删除。 
+ entries[] | 查询成功时返回的日志数组。                                                                                              
+ minIndex  | 当前节点日志的最小位置（含）。                                                                                            
 
 ##### getServerState
 
 观察者复制任意节点上的当前最新状态。如果状态数据比较大，可以分多次请求。
 
-参数 | 描述
-| :--- | :--- |
-lastIncludedIndex | 快照中包含的最后日志条目的索引值，首次请求为空。
-offset | 本次请求状态数据的偏移量，首次请求为0。
+ 参数                | 描述                       
+|:------------------|:-------------------------|
+ lastIncludedIndex | 快照中包含的最后日志条目的索引值，首次请求为空。 
+ offset            | 本次请求状态数据的偏移量，首次请求为0。     
 
-返回 | 描述
-| :--- | :--- |
-lastIncludedIndex | 状态中包含的最后日志条目的索引值。
-lastIncludedTerm | 状态中包含的最后日志条目的任期号。
-offset | 本次请求状态数据的偏移量。
-data[] | 状态数据
-done | 如果是最后一块数据则为真
+ 返回                | 描述                
+|:------------------|:------------------|
+ lastIncludedIndex | 状态中包含的最后日志条目的索引值。 
+ lastIncludedTerm  | 状态中包含的最后日志条目的任期号。 
+ offset            | 本次请求状态数据的偏移量。     
+ data[]            | 状态数据              
+ done              | 如果是最后一块数据则为真      
 
 ##### asyncAppendEntries
 
 LEADER可以同时给同一个接收者发送多个asyncAppendEntries请求并行复制。
 asyncAppendEntries请求的参数和返回值如下：
 
-参数 | 描述
-| :--- | :--- |
-term | LEADER的任期号
-leaderAddr | LEADER的地址，为了其他服务器能重定向到客户端
-prevLogIndex | 发送日志之前的日志的索引值
-prevLogTerm | 发送日志之前的日志的领导人任期号
-entries[] | 将要存储的日志条目（表示 heartbeat 时为空，有时会为了效率发送超过一条）
-leaderCommit | LEADER上当前的提交位置
+ 参数           | 描述                                        
+|:-------------|:------------------------------------------|
+ term         | LEADER的任期号                                
+ leaderAddr   | LEADER的地址，为了其他服务器能重定向到客户端                 
+ prevLogIndex | 发送日志之前的日志的索引值                             
+ prevLogTerm  | 发送日志之前的日志的领导人任期号                          
+ entries[]    | 将要存储的日志条目（表示 heartbeat 时为空，有时会为了效率发送超过一条） 
+ leaderCommit | LEADER上当前的提交位置                            
 
-返回值 | 描述
-| :--- | :--- |
-term | 当前的任期号，用于领导人更新自己的任期号
-success | 如果其它服务器包含能够匹配上 prevLogIndex 和 prevLogTerm 的日志时为真
-logIndex | 请求中第一条日志的位置
-entryCount | 请求中日志的数量
+ 返回值        | 描述                                               
+|:-----------|:-------------------------------------------------|
+ term       | 当前的任期号，用于领导人更新自己的任期号                             
+ success    | 如果其它服务器包含能够匹配上 prevLogIndex 和 prevLogTerm 的日志时为真 
+ logIndex   | 请求中第一条日志的位置                                      
+ entryCount | 请求中日志的数量                                         
 
 ##### requestVote
 
 同RAFT中RequestVote RPC，CANDIDATE调用其它VOTER发起投票的请求。
 
-参数 | 描述
-| :--- | :--- |
-term | CANDIDATE的当前任期号
-candidateAddr | 请求投票的CANDIDATE地址
-lastLogIndex | CANDIDATE 最新日志条目的索引值
-lastLogTerm | CANDIDATE最新日志条目对应的任期号
+ 参数            | 描述                    
+|:--------------|:----------------------|
+ term          | CANDIDATE的当前任期号       
+ candidateAddr | 请求投票的CANDIDATE地址      
+ lastLogIndex  | CANDIDATE 最新日志条目的索引值  
+ lastLogTerm   | CANDIDATE最新日志条目对应的任期号 
 
-返回值 | 描述
-| :--- | :--- |
-term | 目前的任期号，用于CANDIDATE更新自己
-voteGranted | 如果当前节点决定投票给CANDIDATE，返回值为true，否则返回false
+ 返回值         | 描述                                      
+|:------------|:----------------------------------------|
+ term        | 目前的任期号，用于CANDIDATE更新自己                  
+ voteGranted | 如果当前节点决定投票给CANDIDATE，返回值为true，否则返回false 
 
 #### 属性
 
 Server需要维护如下属性
 
-属性 | 持久化 | 描述
-| :--- | :--- | :--- |
-log[] | 可选 | 节点上的日志
-snapshots[] | 可选 | 存放节点上所有状态快照的稀疏数组，数组的索引就是快照对应的日志位置的索引
-stateMachine | N | 状态机
-state | 可选 | 节点上的最新状态
-commitIndex | 可选 | 已知的被提交的最大日志条目的索引值（从 0 开始递增）
-lastApplied | 可选 | 被状态机执行的最大日志条目的索引值（从 0 开始递增）
-leaderAddr | N | 当前LEADER节点地址
-voterAddrs[] | Y | 所有选民节点地址，包含LEADER
+ 属性           | 持久化 | 描述                                   
+|:-------------|:----|:-------------------------------------|
+ log[]        | 可选  | 节点上的日志                               
+ snapshots[]  | 可选  | 存放节点上所有状态快照的稀疏数组，数组的索引就是快照对应的日志位置的索引 
+ stateMachine | N   | 状态机                                  
+ state        | 可选  | 节点上的最新状态                             
+ commitIndex  | 可选  | 已知的被提交的最大日志条目的索引值（从 0 开始递增）          
+ lastApplied  | 可选  | 被状态机执行的最大日志条目的索引值（从 0 开始递增）          
+ leaderAddr   | N   | 当前LEADER节点地址                         
+ voterAddrs[] | Y   | 所有选民节点地址，包含LEADER                    
 
 #### 实现
 
@@ -467,7 +467,7 @@ Server模型中，只定义如下通用方法的实现，其它方法在其子�
 每个Server模块中需要运行一个用于执行日志更新状态，保存Snapshot的状态机线程，这个线程监听属性commitIndex的变化，当commitIndex变更时如果commitIndex > lastApplied，反复执行如下流程直到lastApplied == commitIndex：
 
 1. 如果需要，复制当前状态为新的快照保存到属性snapshots, 索引值为lastApplied。
-1. lastApplied自增，将log[lastApplied]应用到状态机，更新当前状态state；
+2. lastApplied自增，将log[lastApplied]应用到状态机，更新当前状态state；
 
 ##### queryServerState 方法
 
@@ -479,10 +479,10 @@ Server模型中，只定义如下通用方法的实现，其它方法在其子�
 实现流程：
 
 1. 对比logIndex与在属性snapshots数组的上下界，检查请求位置是否越界，如果越界返回INDEX_OVERFLOW/INDEX_UNDERFLOW错误。
-1. 查询snapshots[logIndex]是否存在，如果存在快照中读取状态返回，否则下一步；
-1. 找到snapshots中距离logIndex最近且小于logIndex的快照位置和快照，记为nearestLogIndex和nearestSnapshot；
-1. 从log中的索引位置`nearestLogIndex + 1`开始，读取N条日志，`N = logIndex - nearestLogIndex`获取待执行的日志数组execLogs[]；
-1. 调用以nearestSnapshot为输入，依次在状态机stateMachine中执行execLogs，得到logIndex位置对应的快照，从快照中读取状态返回。
+2. 查询snapshots[logIndex]是否存在，如果存在快照中读取状态返回，否则下一步；
+3. 找到snapshots中距离logIndex最近且小于logIndex的快照位置和快照，记为nearestLogIndex和nearestSnapshot；
+4. 从log中的索引位置`nearestLogIndex + 1`开始，读取N条日志，`N = logIndex - nearestLogIndex`获取待执行的日志数组execLogs[]；
+5. 调用以nearestSnapshot为输入，依次在状态机stateMachine中执行execLogs，得到logIndex位置对应的快照，从快照中读取状态返回。
 
 ##### getServers 方法
 
@@ -504,9 +504,9 @@ Observer模块在拉取日志时遵循如下原则：
 
 Observer模块需要配置一个父节点的列表，用于拉取日志。
 
-属性 | 持久化 | 描述
-| :--- | :--- | :--- |
-parentsAddrs | Y | 父节点列表
+ 属性           | 持久化 | 描述    
+|:-------------|:----|:------|
+ parentsAddrs | Y   | 父节点列表 
 
 #### 实现
 
@@ -532,18 +532,18 @@ Voter继承自Server，是角色为选民的Server抽象。**Voter等同于RAFT�
 
 Voter上需要维护的属性包括：
 
-名称 | 持久化| 描述
-| :--- | :--- | :--- |
-voterState | N | 选民状态，在**LEADER**、**FOLLOWER**和**CANDIDATE**之间转换。初始值为FOLLOWER。
-currentTerm | Y | Voter最后知道的任期号（从 0 开始递增）
-votedFor | Y | 在当前任期内收到选票的候选人地址（如果没有就为 null）
-nextIndex[] | N | 仅LEADER使用，对于每一个FOLLOWER，记录需要发给它的下一个日志条目的索引（初始化为领导人上一条日志的索引值 +1）
-matchIndex[] | N | 仅LEADER使用，对于每一个FOLLOWER，记录已经复制到该服务器的日志的最高索引值（从 0 开始递增）
-repStartIndex[] | N | 仅LEADER使用，对于每一个FOLLOWER，记录所有在途的日志复制请求中日志位置的最小值（初始化为nextIndex）
-lastHeartBeat | N | 仅FOLLOWER使用，上次从LEADER收到心跳（asyncAppendEntries）的时间戳
-lastHeartBeats[] | N | 仅LEADER使用，上次从FOLLOWER收到心跳（asyncAppendEntries）成功响应的时间戳
-pendingAppendResponses[] | N | 仅LEADER使用，待处理的asyncAppendEntries Response，按照Response中的logIndex排序。
-pendingAppendRequests[] | N | 待处理的asyncAppendEntries Request，按照request中的preLogTerm和prevLogIndex排序。
+| 名称                       | 持久化 | 描述                                                                   |
+|:-------------------------|:----|:---------------------------------------------------------------------|
+| voterState               | N   | 选民状态，在**LEADER**、**FOLLOWER**和**CANDIDATE**之间转换。初始值为FOLLOWER。        |
+| currentTerm              | Y   | Voter最后知道的任期号（从 0 开始递增）                                              |
+| votedFor                 | Y   | 在当前任期内收到选票的候选人地址（如果没有就为 null）                                        |
+| nextIndex[]              | N   | 仅LEADER使用，对于每一个FOLLOWER，记录需要发给它的下一个日志条目的索引（初始化为领导人上一条日志的索引值 +1）      |
+| matchIndex[]             | N   | 仅LEADER使用，对于每一个FOLLOWER，记录已经复制到该服务器的日志的最高索引值（从 0 开始递增）               |
+| repStartIndex[]          | N   | 仅LEADER使用，对于每一个FOLLOWER，记录所有在途的日志复制请求中日志位置的最小值（初始化为nextIndex）        |
+| lastHeartBeat            | N   | 仅FOLLOWER使用，上次从LEADER收到心跳（asyncAppendEntries）的时间戳                    |
+| lastHeartBeats[]         | N   | 仅LEADER使用，上次从FOLLOWER收到心跳（asyncAppendEntries）成功响应的时间戳                |
+| pendingAppendResponses[] | N   | 仅LEADER使用，待处理的asyncAppendEntries Response，按照Response中的logIndex排序。    |
+| pendingAppendRequests[]  | N   | 待处理的asyncAppendEntries Request，按照request中的preLogTerm和prevLogIndex排序。 |
 
 #### 实现
 
@@ -573,7 +573,7 @@ pendingAppendRequests[] | N | 待处理的asyncAppendEntries Request，按照req
 
 ##### LEADER复制响应线程
 
-当voterState是LEADER时，Voter需要维护一个复制响应线程，处理所有asyncAppendEntries的响应。处理的流程参见：[并行复制-LEADER](#async-replication-leader)。对于成功的响应，还要更新对应FOLLOWER的心跳时间(`lastHeartBeats[n] = now`)。
+当voterState是LEADER时，Voter需要维护一个复制响应线程，处理所有asyncAppendEntries的响应。处理的流程参见：[并行复制-LEADER](#并行复制-LEADER)。对于成功的响应，还要更新对应FOLLOWER的心跳时间(`lastHeartBeats[n] = now`)。
 
 ##### 复制接收线程
 
@@ -584,18 +584,18 @@ pendingAppendRequests[] | N | 待处理的asyncAppendEntries Request，按照req
 客户端调用LEADER节点写入操作日志变更状态。集群保证按照提供的顺序写入，保证原子性，服务是线性的，任一时间只能有一个客户端使用该服务。日志在集群中复制到大多数节点，并在状态机执行后返回。
 
 1. 检查当前voterState，如果不是LEADER，返回NOT_LEADER，同时返回leaderAddr，否则继续。
-1. 将entries写入log[]中，同时记录log[]的最大位置，记为L；
-1. 等待直到lastApplied >= L，返回SUCCESS；
+2. 将entries写入log[]中，同时记录log[]的最大位置，记为L；
+3. 等待直到lastApplied >= L，返回SUCCESS；
 
 ##### queryClusterState 方法
 
 1. 检查LEADER有效性，成功则继续，否则返回NOT_LEADER;
-1. 用query参数查询属性state，返回查询结果。
+2. 用query参数查询属性state，返回查询结果。
 
 ##### getClusterApplied 方法
 
 1. 检查LEADER有效性，成功则继续，否则返回NOT_LEADER;
-1. 返回lastApplied。
+2. 返回lastApplied。
 
 ##### updateVoters方法
 

@@ -26,16 +26,16 @@ import org.slf4j.LoggerFactory;
 /**
  * 请求处理器
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/8/24
  */
 public class RequestHandler {
 
     protected static final Logger logger = LoggerFactory.getLogger(RequestHandler.class);
 
-    private CommandHandlerFactory commandHandlerFactory;
-    private CommandHandlerFilterFactory commandHandlerFilterFactory;
-    private ExceptionHandler exceptionHandler;
+    private final CommandHandlerFactory commandHandlerFactory;
+    private final CommandHandlerFilterFactory commandHandlerFilterFactory;
+    private final ExceptionHandler exceptionHandler;
 
     public RequestHandler(CommandHandlerFactory commandHandlerFactory, CommandHandlerFilterFactory commandHandlerFilterFactory, ExceptionHandler exceptionHandler) {
         this.commandHandlerFactory = commandHandlerFactory;

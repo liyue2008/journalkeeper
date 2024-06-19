@@ -30,22 +30,20 @@ import java.util.concurrent.Executors;
 /**
  * 响应处理器
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/8/24
  */
 public class ResponseHandler {
 
     protected static final Logger logger = LoggerFactory.getLogger(ResponseHandler.class);
 
-    private TransportConfig config;
-    private RequestBarrier barrier;
-    private ExceptionHandler exceptionHandler;
-    private ExecutorService asyncExecutorService;
+    private final TransportConfig config;
+    private final RequestBarrier barrier;
+    private final ExecutorService asyncExecutorService;
 
     public ResponseHandler(TransportConfig transportConfig, RequestBarrier barrier, ExceptionHandler exceptionHandler) {
         this.config = transportConfig;
         this.barrier = barrier;
-        this.exceptionHandler = exceptionHandler;
         this.asyncExecutorService = newAsyncExecutorService();
     }
 
@@ -67,16 +65,13 @@ public class ResponseHandler {
             ExecutorService executor = this.asyncExecutorService;
             if (executor != null) {
                 try {
-                    executor.execute(new Runnable() {
-                        @Override
-                        public void run() {
-                            try {
-                                responseFuture.onSuccess();
-                            } catch (Throwable e) {
-                                logger.error("execute callback error.", e);
-                            } finally {
-                                responseFuture.release();
-                            }
+                    executor.execute(() -> {
+                        try {
+                            responseFuture.onSuccess();
+                        } catch (Throwable e) {
+                            logger.error("execute callback error.", e);
+                        } finally {
+                            responseFuture.release();
                         }
                     });
                     success = true;

@@ -24,10 +24,10 @@ import java.util.List;
  * RPC 方法
  * {@link ClientServerRpc#pullEvents(PullEventsRequest) pullEvents{}}
  * 返回响应。
- *
+ * <p>
  * 返回从上次ack 的序号至今的所有事件，保证事件有序。
  * 如果没有事件返回长度为0的List。
- *
+ * <p>
  * StatusCode:
  * StatusCode.PULL_WATCH_ID_NOT_EXISTS: 监听ID不存在。
  * @author LiYue

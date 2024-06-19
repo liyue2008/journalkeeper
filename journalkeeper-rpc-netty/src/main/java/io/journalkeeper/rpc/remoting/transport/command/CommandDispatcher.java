@@ -18,7 +18,7 @@ import io.netty.channel.Channel;
 /**
  * 命令调度器
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/8/13
  */
 public interface CommandDispatcher {

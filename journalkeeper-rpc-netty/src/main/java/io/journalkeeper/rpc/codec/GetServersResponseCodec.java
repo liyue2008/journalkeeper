@@ -29,7 +29,7 @@ import java.util.List;
  */
 public class GetServersResponseCodec extends ResponseCodec<GetServersResponse> implements Type {
     @Override
-    protected void encodeResponse(JournalKeeperHeader header, GetServersResponse response, ByteBuf buffer) throws Exception {
+    protected void encodeResponse(JournalKeeperHeader header, GetServersResponse response, ByteBuf buffer) {
         ClusterConfiguration clusterConfiguration = response == null ? new ClusterConfiguration() : response.getClusterConfiguration();
         if (null == clusterConfiguration) clusterConfiguration = new ClusterConfiguration();
 
@@ -39,7 +39,7 @@ public class GetServersResponseCodec extends ResponseCodec<GetServersResponse> i
     }
 
     @Override
-    protected GetServersResponse decodeResponse(JournalKeeperHeader header, ByteBuf buffer) throws Exception {
+    protected GetServersResponse decodeResponse(JournalKeeperHeader header, ByteBuf buffer) {
         URI leader = CodecSupport.decodeUri(buffer);
         List<URI> voters = CodecSupport.decodeList(buffer, CodecSupport::decodeUri);
         List<URI> observers = CodecSupport.decodeList(buffer, CodecSupport::decodeUri);

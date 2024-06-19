@@ -27,14 +27,14 @@ import java.util.Map;
 /**
  * 默认命令处理工厂
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/8/13
  */
 public class DefaultCommandHandlerFactory implements CommandHandlerFactory {
 
     protected static final Logger logger = LoggerFactory.getLogger(DefaultCommandHandlerFactory.class);
 
-    private Map<Integer /** type **/, CommandHandler> commandHandlerMapper = new HashMap<>();
+    private final Map<Integer, CommandHandler> commandHandlerMapper = new HashMap<>();
 
     @Override
     public CommandHandler getHandler(Command command) {

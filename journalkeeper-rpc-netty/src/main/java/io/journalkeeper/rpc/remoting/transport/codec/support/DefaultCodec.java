@@ -22,13 +22,13 @@ import io.netty.buffer.ByteBuf;
 /**
  * 默认编解码器
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/8/13
  */
 public class DefaultCodec implements Codec {
 
-    private Decoder decoder;
-    private Encoder encoder;
+    private final Decoder decoder;
+    private final Encoder encoder;
 
     public DefaultCodec(Decoder decoder, Encoder encoder) {
         this.decoder = decoder;

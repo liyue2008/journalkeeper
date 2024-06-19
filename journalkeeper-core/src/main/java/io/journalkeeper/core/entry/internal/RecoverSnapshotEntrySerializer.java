@@ -13,16 +13,14 @@
  */
 package io.journalkeeper.core.entry.internal;
 
-import io.journalkeeper.base.Serializer;
-
 import java.nio.ByteBuffer;
 
 /**
  * RecoverSnapshotEntrySerializer
- *
+ * <p>
  * type BYTE(1)
  * index LONG(8)
- *
+ * <p>
  * author: gaohaoxiang
  * date: 2019/12/12
  */

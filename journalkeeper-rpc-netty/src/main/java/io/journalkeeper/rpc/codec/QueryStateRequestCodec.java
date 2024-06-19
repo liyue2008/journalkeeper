@@ -25,13 +25,13 @@ import io.netty.buffer.ByteBuf;
  */
 public class QueryStateRequestCodec extends GenericPayloadCodec<QueryStateRequest> implements Types {
     @Override
-    protected void encodePayload(JournalKeeperHeader header, QueryStateRequest request, ByteBuf buffer) throws Exception {
+    protected void encodePayload(JournalKeeperHeader header, QueryStateRequest request, ByteBuf buffer) {
         CodecSupport.encodeLong(buffer, request.getIndex());
         CodecSupport.encodeBytes(buffer, request.getQuery());
     }
 
     @Override
-    protected QueryStateRequest decodePayload(JournalKeeperHeader header, ByteBuf buffer) throws Exception {
+    protected QueryStateRequest decodePayload(JournalKeeperHeader header, ByteBuf buffer) {
         long index = CodecSupport.decodeLong(buffer);
         byte[] query = CodecSupport.decodeBytes(buffer);
         return new QueryStateRequest(query, index);

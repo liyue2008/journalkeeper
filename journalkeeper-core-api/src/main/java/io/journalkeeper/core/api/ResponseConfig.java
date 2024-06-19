@@ -31,7 +31,7 @@ public enum ResponseConfig {
     REPLICATION(3),
     ALL(9);
 
-    private int value;
+    private final int value;
 
     ResponseConfig(int value) {
         this.value = value;

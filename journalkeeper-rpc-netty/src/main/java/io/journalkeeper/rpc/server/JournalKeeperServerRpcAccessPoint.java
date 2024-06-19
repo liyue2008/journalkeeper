@@ -28,9 +28,8 @@ import java.util.Properties;
  * Date: 2019-03-30
  */
 public class JournalKeeperServerRpcAccessPoint implements ServerRpcAccessPoint {
-    private final Properties properties;
     private final TransportClient transportClient;
-    private Map<URI, ServerRpcStub> serverInstances = new HashMap<>();
+    private final Map<URI, ServerRpcStub> serverInstances = new HashMap<>();
     public final String PROTOCOL_VERSION_KEY = "protocol.version";
     private final int protocolVersion;
 
@@ -41,7 +40,6 @@ public class JournalKeeperServerRpcAccessPoint implements ServerRpcAccessPoint {
         } catch (Exception e) {
             throw new RpcException(e);
         }
-        this.properties = properties;
         protocolVersion = Integer.parseInt(properties.getProperty(PROTOCOL_VERSION_KEY, String.valueOf(JournalKeeperHeader.DEFAULT_VERSION)));
     }
 

@@ -13,14 +13,12 @@
  */
 package io.journalkeeper.core.entry.internal;
 
-import io.journalkeeper.base.Serializer;
-
 import java.nio.ByteBuffer;
 
 /**
  * @author LiYue
  * Date: 2019-05-09
- *
+ * <p>
  * Type:                                    1 byte
  * preferred leader URI String
  *  Length of the URI String in bytes:    2 bytes

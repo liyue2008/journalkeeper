@@ -26,15 +26,15 @@ import io.journalkeeper.rpc.remoting.transport.config.TransportConfig;
 /**
  * 默认命令调度器工厂
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/8/16
  */
 public class DefaultCommandDispatcherFactory implements CommandDispatcherFactory {
 
-    private TransportConfig transportConfig;
-    private RequestBarrier requestBarrier;
-    private CommandHandlerFilterFactory commandHandlerFilterFactory;
-    private ExceptionHandler exceptionHandler;
+    private final TransportConfig transportConfig;
+    private final RequestBarrier requestBarrier;
+    private final CommandHandlerFilterFactory commandHandlerFilterFactory;
+    private final ExceptionHandler exceptionHandler;
 
     public DefaultCommandDispatcherFactory(TransportConfig transportConfig, RequestBarrier requestBarrier, CommandHandlerFilterFactory commandHandlerFilterFactory, ExceptionHandler exceptionHandler) {
         this.transportConfig = transportConfig;

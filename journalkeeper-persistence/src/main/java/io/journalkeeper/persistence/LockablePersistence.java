@@ -8,5 +8,5 @@ import java.io.IOException;
  */
 public interface LockablePersistence {
     void lock() throws IOException;
-    void unlock() throws IOException;
+    void unlock();
 }

@@ -20,10 +20,10 @@ import io.netty.buffer.ByteBuf;
 /**
  * jmq消息体编码器
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/8/21
  */
 public interface PayloadEncoder<H extends Header, T extends Payload> {
 
-    void encode(T payload, ByteBuf buffer, H header) throws Exception;
+    void encode(T payload, ByteBuf buffer, H header);
 }

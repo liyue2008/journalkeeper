@@ -16,7 +16,6 @@ package io.journalkeeper.core.server;
 import io.journalkeeper.core.BootStrap;
 import io.journalkeeper.core.api.RaftServer;
 import io.journalkeeper.core.api.SnapshotEntry;
-import io.journalkeeper.core.api.SnapshotsEntry;
 import io.journalkeeper.core.easy.JkClient;
 import io.journalkeeper.core.state.KvStateFactory;
 import io.journalkeeper.utils.files.FileUtils;
@@ -109,7 +108,7 @@ public class RecoverSnapshotTest {
             URI uri = URI.create("local://test" + i);
             File root = new File(ROOT);
             Properties properties = new Properties();
-            properties.setProperty("working_dir", root.toString() + "/" + i);
+            properties.setProperty("working_dir", root + "/" + i);
 
             BootStrap kvServer = BootStrap.builder().roll(RaftServer.Roll.VOTER).stateFactory(new KvStateFactory()).properties(properties).build();
             kvServer.getServer().init(uri, uris);
@@ -126,8 +125,8 @@ public class RecoverSnapshotTest {
         }
 
         servers.get(0).getAdminClient().takeSnapshot().get();
-        for (int i = 0; i < servers.size(); i++) {
-            Assert.assertEquals(servers.get(i).getAdminClient().getSnapshots().get().getSnapshots().size(), 2);
+        for (BootStrap item : servers) {
+            Assert.assertEquals(item.getAdminClient().getSnapshots().get().getSnapshots().size(), 2);
         }
         long index = servers.get(0).getAdminClient().getSnapshots().get().getSnapshots().get(1).getIndex();
 
@@ -138,8 +137,8 @@ public class RecoverSnapshotTest {
 
         servers.get(0).getAdminClient().recoverSnapshot(index).get();
 
-        for (int i = 0; i < servers.size(); i++) {
-            Assert.assertEquals(servers.get(i).getAdminClient().getSnapshots().get().getSnapshots().size(), 3);
+        for (BootStrap value : servers) {
+            Assert.assertEquals(value.getAdminClient().getSnapshots().get().getSnapshots().size(), 3);
         }
         index = servers.get(0).getAdminClient().getSnapshots().get().getSnapshots().get(2).getIndex();
         for (JkClient client : clients) {
@@ -149,8 +148,8 @@ public class RecoverSnapshotTest {
 
         servers.get(0).getAdminClient().recoverSnapshot(index).get();
 
-        for (int i = 0; i < servers.size(); i++) {
-            Assert.assertEquals(servers.get(i).getAdminClient().getSnapshots().get().getSnapshots().size(), 4);
+        for (BootStrap strap : servers) {
+            Assert.assertEquals(strap.getAdminClient().getSnapshots().get().getSnapshots().size(), 4);
         }
 
         for (JkClient client : clients) {
@@ -160,8 +159,8 @@ public class RecoverSnapshotTest {
 
         servers.get(0).getAdminClient().recoverSnapshot(0).get();
 
-        for (int i = 0; i < servers.size(); i++) {
-            Assert.assertEquals(servers.get(i).getAdminClient().getSnapshots().get().getSnapshots().size(), 5);
+        for (BootStrap bootStrap : servers) {
+            Assert.assertEquals(bootStrap.getAdminClient().getSnapshots().get().getSnapshots().size(), 5);
         }
 
         for (JkClient client : clients) {

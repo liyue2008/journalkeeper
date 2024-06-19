@@ -30,9 +30,9 @@ public class Segment {
                     "255.255.255.252", "255.255.255.254", "255.255.255.255"};
 
     // 起始IP
-    private long begin;
+    private final long begin;
     // 最后IP
-    private long end;
+    private final long end;
 
     public Segment(final String ips) {
         if (ips == null || ips.isEmpty()) {
@@ -94,8 +94,8 @@ public class Segment {
 
     @Override
     public int hashCode() {
-        int result = (int) (begin ^ (begin >>> 32));
-        result = 31 * result + (int) (end ^ (end >>> 32));
+        int result = Long.hashCode(begin);
+        result = 31 * result + Long.hashCode(end);
         return result;
     }
 

@@ -47,7 +47,7 @@ public class StateMachine< T extends  Enum<T>> {
 
     public static class Builder<B extends Enum<B>> {
         private B initState = null;
-        private Map<B, Set<B>> stats = new HashMap<>();
+        private final Map<B, Set<B>> stats = new HashMap<>();
         private Builder() {}
 
         public Builder<B> initState(B initState) {

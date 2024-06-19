@@ -16,7 +16,7 @@ package io.journalkeeper.rpc.remoting.transport.config;
 /**
  * 通信服务配置
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/8/13
  */
 public class ClientConfig extends TransportConfig {

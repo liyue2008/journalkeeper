@@ -5,7 +5,7 @@ import io.journalkeeper.core.api.*;
 import io.journalkeeper.core.entry.internal.*;
 import io.journalkeeper.core.journal.JournalActor;
 import io.journalkeeper.core.raft.RaftState;
-import io.journalkeeper.core.server.PartialSnapshot;
+import io.journalkeeper.core.raft.PartialSnapshot;
 import io.journalkeeper.exceptions.*;
 import io.journalkeeper.persistence.MetadataPersistence;
 import io.journalkeeper.persistence.PersistenceFactory;
@@ -70,11 +70,11 @@ public class StateActor implements RaftState{
     /**
      * 持久化实现接入点
      */
-    protected PersistenceFactory persistenceFactory;
+    protected final PersistenceFactory persistenceFactory;
     /**
      * 元数据持久化服务
      */
-    protected MetadataPersistence metadataPersistence;
+    protected final MetadataPersistence metadataPersistence;
 
     private URI localUri;
 
@@ -112,13 +112,6 @@ public class StateActor implements RaftState{
         this.partialSnapshot = new PartialSnapshot(partialSnapshotPath());
 
         this.actor.addScheduler(config.<Long>get("flush_interval_ms"), TimeUnit.MILLISECONDS, "flush", this::flush);
-
-//        TODO: 设计这部分拦截器的实现
-//        state.addInterceptor(InternalEntryType.TYPE_SCALE_PARTITIONS, this::scalePartitions);
-//        state.addInterceptor(InternalEntryType.TYPE_LEADER_ANNOUNCEMENT, this::announceLeader);
-//        state.addInterceptor(InternalEntryType.TYPE_CREATE_SNAPSHOT, this::createSnapShot);
-//        state.addInterceptor(InternalEntryType.TYPE_RECOVER_SNAPSHOT, this::recoverSnapShot);
-
     }
 
 
@@ -142,27 +135,6 @@ public class StateActor implements RaftState{
     protected Path partialSnapshotPath() {
         return workingDir().resolve(PARTIAL_SNAPSHOT_PATH);
     }
-
-//    private void createSnapshot() {
-//        long lastApplied = state.lastApplied();
-//        logger.info("Creating snapshot at index: {}...", lastApplied);
-//        Path snapshotPath = snapshotsPath().resolve(String.valueOf(lastApplied));
-//        try {
-//            FileUtils.deleteFolder(snapshotPath);
-//            state.dump(snapshotPath);
-//            Snapshot.markComplete(snapshotPath);
-//            Snapshot snapshot = new Snapshot(stateFactory, metadataPersistence);
-//            snapshot.recover(snapshotPath, properties);
-//            snapshot.createSnapshot(journal);
-//
-//            snapshots.put(snapshot.lastApplied(), snapshot);
-//            logger.info("Snapshot at index: {} created, {}.", lastApplied, snapshot);
-//
-//        } catch (IOException e) {
-//            logger.warn("Create snapshot exception! Snapshot: {}.", snapshotPath, e);
-//        }
-//    }
-
 
     //Receiver implementation:
     //1. Reply immediately if term < currentTerm
@@ -467,7 +439,7 @@ public class StateActor implements RaftState{
     /**
      * 如果请求位置存在对应的快照，直接从快照中读取状态返回；如果请求位置不存在对应的快照，那么需要找到最近快照日志，以这个最近快照日志对应的快照为输入，从最近快照日志开始（不含）直到请求位置（含）依次在状态机中执行这些日志，执行完毕后得到的快照就是请求位置的对应快照，读取这个快照的状态返回给客户端即可。
      * 实现流程：
-     *
+     * <p>
      * 对比logIndex与在属性snapshots数组的上下界，检查请求位置是否越界，如果越界返回INDEX_OVERFLOW/INDEX_UNDERFLOW错误。
      * 查询snapshots[logIndex]是否存在，如果存在快照中读取状态返回，否则下一步；
      * 找到snapshots中距离logIndex最近且小于logIndex的快照位置和快照，记为nearestLogIndex和nearestSnapshot；
@@ -642,17 +614,17 @@ public class StateActor implements RaftState{
     }
 
     @ActorListener
-    private void maybeUpdateLeaderConfig(UpdateClusterStateRequest request) throws Exception {
+    private void maybeUpdateLeaderConfig(UpdateClusterStateRequest request) {
         UpdateRequest updateRequest;
         if (request.getRequests().size() == 1 && (updateRequest = request.getRequests().get(0)).getPartition() == INTERNAL_PARTITION) {
             InternalEntryType entryType = InternalEntriesSerializeSupport.parseEntryType(updateRequest.getEntry());
             if (entryType == TYPE_UPDATE_VOTERS_S1) {
                 UpdateVotersS1Entry updateVotersS1Entry = InternalEntriesSerializeSupport.parse(updateRequest.getEntry());
-                state.getConfigState().toJointConsensus(updateVotersS1Entry.getConfigOld(), updateVotersS1Entry.getConfigNew(), null);
+                state.getConfigState().toJointConsensus(updateVotersS1Entry.getConfigOld(), updateVotersS1Entry.getConfigNew());
                 actor.pub("onConfigToJointConsensus", state.getConfigState().voters());
 
             } else if(entryType == TYPE_UPDATE_VOTERS_S2) {
-                state.getConfigState().toNewConfig(null);
+                state.getConfigState().toNewConfig();
                 actor.pub("onConfigToNewConfig", state.getConfigState().voters());
             }
         }
@@ -680,7 +652,7 @@ public class StateActor implements RaftState{
         }
     }
     @ActorListener
-    private void maybeUpdateNonLeaderConfig(List<byte[]> entries) throws Exception {
+    private void maybeUpdateNonLeaderConfig(List<byte[]> entries) {
         ConfigState voterStateMachine = state.getConfigState();
 
         for (byte[] rawEntry : entries) {
@@ -691,10 +663,9 @@ public class StateActor implements RaftState{
                 if (entryType == TYPE_UPDATE_VOTERS_S1) {
                     UpdateVotersS1Entry updateVotersS1Entry = InternalEntriesSerializeSupport.parse(rawEntry, headerLength, rawEntry.length - headerLength);
 
-                    voterStateMachine.toJointConsensus(updateVotersS1Entry.getConfigOld(), updateVotersS1Entry.getConfigNew(),
-                            () -> null);
+                    voterStateMachine.toJointConsensus(updateVotersS1Entry.getConfigOld(), updateVotersS1Entry.getConfigNew());
                 } else if (entryType == TYPE_UPDATE_VOTERS_S2) {
-                    voterStateMachine.toNewConfig(() -> null);
+                    voterStateMachine.toNewConfig();
                 }
             }
         }

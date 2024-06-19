@@ -1,7 +1,5 @@
 package io.journalkeeper.utils.actor;
 
-import io.journalkeeper.utils.actor.annotation.ActorScheduler;
-
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 

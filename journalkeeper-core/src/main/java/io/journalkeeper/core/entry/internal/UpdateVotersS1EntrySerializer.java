@@ -27,7 +27,7 @@ import static io.journalkeeper.core.entry.internal.UriSerializeSupport.serialize
 /**
  * @author LiYue
  * Date: 2019-05-09
- *
+ * <p>
  * Type:                                    1 byte
  * epoch                                    8 bytes
  * Size of the Old Config List:             2 bytes

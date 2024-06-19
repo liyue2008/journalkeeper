@@ -20,7 +20,6 @@ import io.journalkeeper.core.api.UpdateRequest;
 import io.journalkeeper.core.api.transaction.JournalKeeperTransactionContext;
 import io.journalkeeper.core.api.transaction.UUIDTransactionId;
 import io.journalkeeper.exceptions.TransactionException;
-import io.journalkeeper.core.journal.Journal;
 import io.journalkeeper.rpc.client.ClientServerRpc;
 import io.journalkeeper.rpc.client.UpdateClusterStateRequest;
 import io.journalkeeper.rpc.client.UpdateClusterStateResponse;
@@ -67,8 +66,8 @@ class JournalTransactionState extends ServerStateMachine {
     private final DelayQueue<CompleteTransactionRetry> retryCompleteTransactions = new DelayQueue<>();
     private final ScheduledExecutorService scheduledExecutor;
     private final long transactionTimeoutMs;
-    private ScheduledFuture retryCompleteTransactionScheduledFuture = null;
-    private ScheduledFuture checkOutdatedTransactionsScheduledFuture = null;
+    private ScheduledFuture<?> retryCompleteTransactionScheduledFuture = null;
+    private ScheduledFuture<?> checkOutdatedTransactionsScheduledFuture = null;
     private final Actor actor;
 
     JournalTransactionState(RaftJournal journal, long transactionTimeoutMs, ClientServerRpc server, ScheduledExecutorService scheduledExecutor) {
@@ -144,7 +143,7 @@ class JournalTransactionState extends ServerStateMachine {
                 if (transactionEntry.getType() == TransactionEntryType.TRANSACTION_START) {
                     long transactionCreateTimestamp = transactionEntry.getTimestamp();
                     if (transactionCreateTimestamp + transactionTimeoutMs < currentTimestamp) {
-                        logger.info("Abort outdated transaction: {}.", transactionId.toString());
+                        logger.info("Abort outdated transaction: {}.", transactionId);
                         writeTransactionCompleteEntry(transactionId, false, partition);
                     }
                     break;
@@ -302,7 +301,7 @@ class JournalTransactionState extends ServerStateMachine {
 
             final AtomicInteger unFinishedRequests = new AtomicInteger(entryCount);
 
-            List<CompletableFuture> futures = new ArrayList<>(entryCount);
+            List<CompletableFuture<?>> futures = new ArrayList<>(entryCount);
 
             for (Map.Entry<Integer, List<TransactionEntry>> me : transactionEntriesByPartition.entrySet()) {
                 int bizPartition = me.getKey();
@@ -325,7 +324,7 @@ class JournalTransactionState extends ServerStateMachine {
                                                 unFinishedRequests.decrementAndGet();
                                             } else {
                                                 logger.warn("Transaction commit {} failed! Cause: {}.",
-                                                        transactionId.toString(),
+                                                        transactionId,
                                                         response.errorString());
                                             }
                                         })

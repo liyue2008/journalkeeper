@@ -33,8 +33,6 @@ import java.net.URI;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
@@ -105,13 +103,7 @@ public class KvTest {
         for (int i = 0; i < nodes; i++) {
             URI uri = URI.create("local://test" + i);
             serverURIs.add(uri);
-            Path workingDir = path.resolve("server" + i);
-            Properties properties = new Properties();
-            properties.setProperty("working_dir", workingDir.toString());
-            properties.setProperty("persistence.journal.file_data_size", String.valueOf(128 * 1024));
-            properties.setProperty("persistence.index.file_data_size", String.valueOf(16 * 1024));
-            properties.setProperty("disable_logo", "true");
-            properties.setProperty("server_name", String.valueOf(i));
+            Properties properties = getProperties1(path, i);
 
             propertiesList.add(properties);
         }
@@ -156,6 +148,17 @@ public class KvTest {
 
         stopServers(kvServers);
         TestPathUtils.destroyBaseDir(path.toFile());
+    }
+
+    private static Properties getProperties1(Path path, int i) {
+        Path workingDir = path.resolve("server" + i);
+        Properties properties = new Properties();
+        properties.setProperty("working_dir", workingDir.toString());
+        properties.setProperty("persistence.journal.file_data_size", String.valueOf(128 * 1024));
+        properties.setProperty("persistence.index.file_data_size", String.valueOf(16 * 1024));
+        properties.setProperty("disable_logo", "true");
+        properties.setProperty("server_name", String.valueOf(i));
+        return properties;
     }
 
     /**
@@ -235,7 +238,7 @@ public class KvTest {
         return recoverServer(properties);
     }
 
-    private BootStrap recoverServer(Properties properties) throws IOException {
+    private BootStrap recoverServer(Properties properties) {
         BootStrap serverBootStrap =BootStrap.builder().roll(RaftServer.Roll.VOTER).stateFactory(new KvStateFactory()).properties(properties).build();
         serverBootStrap.getServer().recover();
         serverBootStrap.getServer().start();
@@ -324,15 +327,7 @@ public class KvTest {
         for (int i = oldServers.size(); i < oldServers.size() + newServerCount; i++) {
             URI uri = URI.create("local://test" + i);
             newConfig.add(uri);
-            Path workingDir = path.resolve("server" + i);
-            Properties properties = new Properties();
-            properties.setProperty("server_name", String.valueOf(i));
-            properties.setProperty("working_dir", workingDir.toString());
-            properties.setProperty("persistence.journal.file_data_size", String.valueOf(128 * 1024));
-            properties.setProperty("persistence.index.file_data_size", String.valueOf(16 * 1024));
-            properties.setProperty("disable_logo", "true");
-//            properties.setProperty("enable_metric", "true");
-//            properties.setProperty("print_metric_interval_sec", "3");
+            Properties properties = getProperties(path, i);
             properties.setProperty("observer.parents", String.join(",", oldConfig.stream().map(URI::toString).toArray(String[]::new)));
             BootStrap kvServer = BootStrap.builder().roll(RaftServer.Roll.OBSERVER)
                     .stateFactory(new KvStateFactory())
@@ -469,10 +464,7 @@ public class KvTest {
             properties.setProperty("persistence.index.file_data_size", String.valueOf(16 * 1024));
             properties.setProperty("observer.parents", String.join(",", oldConfig.stream().map(URI::toString).toArray(String[]::new)));
             properties.setProperty("disable_logo", "true");
-//            properties.setProperty("print_state_interval_sec", String.valueOf(5));
 
-//            properties.setProperty("enable_metric", "true");
-//            properties.setProperty("print_metric_interval_sec", "3");
             BootStrap kvServer = BootStrap.builder().roll(RaftServer.Roll.OBSERVER).stateFactory(new KvStateFactory()).properties(properties).build();
             newServers.add(kvServer);
             newServerUris.add(uri);
@@ -723,7 +715,7 @@ public class KvTest {
         }
 
         // 启动推荐Leader
-        logger.info("Set", "preferred leader to {}.", preferredLeader);
+        logger.info("Set preferred leader to {}.", preferredLeader);
         adminClient.setPreferredLeader(preferredLeader).get();
 
         // 重新启动Server
@@ -734,6 +726,7 @@ public class KvTest {
         logger.info("Checking preferred leader...");
         long t0 = System.currentTimeMillis();
         while (System.currentTimeMillis() - t0 < timeoutMs && !(preferredLeader.equals(adminClient.getClusterConfiguration().get().getLeader()))) {
+            //noinspection BusyWait
             Thread.sleep(100L);
         }
         Assert.assertEquals(preferredLeader, adminClient.getClusterConfiguration().get().getLeader());
@@ -746,7 +739,7 @@ public class KvTest {
                 .findAny().orElse(null);
         Assert.assertNotNull(newPreferredLeader);
 
-        logger.info("Set", "preferred leader to {}.", newPreferredLeader);
+        logger.info("Set preferred leader to {}.", newPreferredLeader);
         adminClient.setPreferredLeader(newPreferredLeader).get();
 
         // 反复检查集群的Leader是否变更为推荐Leader
@@ -754,6 +747,7 @@ public class KvTest {
         logger.info("Checking preferred leader...");
         t0 = System.currentTimeMillis();
         while (System.currentTimeMillis() - t0 < timeoutMs && !(newPreferredLeader.equals(adminClient.getClusterConfiguration().get().getLeader()))) {
+            //noinspection BusyWait
             Thread.sleep(100L);
         }
 
@@ -854,10 +848,6 @@ public class KvTest {
         Collection<ServerMonitorInfo> monitorInfos = simpleMonitorCollector.collectAll();
         Assert.assertEquals(nodes, monitorInfos.size());
 
-//        for (ServerMonitorInfo monitorInfo : monitorInfos) {
-//            logger.info("ServerMonitorInfo: {}.", monitorInfo);
-//        }
-
         stopServers(servers);
 
     }
@@ -876,28 +866,33 @@ public class KvTest {
         return createServers(nodes, path, RaftServer.Roll.VOTER, true);
     }
 
-    private List<BootStrap> createServers(int nodes, Path path, RaftServer.Roll roll, boolean waitForLeader) throws IOException, ExecutionException, InterruptedException, TimeoutException {
+    private List<BootStrap> createServers(int nodes, Path path, RaftServer.Roll roll, boolean waitForLeader) throws IOException {
         logger.info("Create {} nodes servers", nodes);
         List<URI> serverURIs = new ArrayList<>(nodes);
         List<Properties> propertiesList = new ArrayList<>(nodes);
         for (int i = 0; i < nodes; i++) {
             URI uri = URI.create("local://test" + i);
             serverURIs.add(uri);
-            Path workingDir = path.resolve("server" + i);
-            Properties properties = new Properties();
-            properties.setProperty("server_name", String.valueOf(i));
-            properties.setProperty("working_dir", workingDir.toString());
-            properties.setProperty("persistence.journal.file_data_size", String.valueOf(128 * 1024));
-            properties.setProperty("persistence.index.file_data_size", String.valueOf(16 * 1024));
-            properties.setProperty("disable_logo", "true");
+            Properties properties = getProperties(path, i);
             propertiesList.add(properties);
         }
         return createServers(serverURIs, propertiesList, roll, waitForLeader);
 
     }
 
+    private static Properties getProperties(Path path, int i) {
+        Path workingDir = path.resolve("server" + i);
+        Properties properties = new Properties();
+        properties.setProperty("server_name", String.valueOf(i));
+        properties.setProperty("working_dir", workingDir.toString());
+        properties.setProperty("persistence.journal.file_data_size", String.valueOf(128 * 1024));
+        properties.setProperty("persistence.index.file_data_size", String.valueOf(16 * 1024));
+        properties.setProperty("disable_logo", "true");
+        return properties;
+    }
 
-    private List<BootStrap> createServers(List<URI> serverURIs, List<Properties> propertiesList, RaftServer.Roll roll, boolean waitForLeader) throws IOException, ExecutionException, InterruptedException, TimeoutException {
+
+    private List<BootStrap> createServers(List<URI> serverURIs, List<Properties> propertiesList, RaftServer.Roll roll, boolean waitForLeader) throws IOException {
 
         List<BootStrap> serverBootStraps = new ArrayList<>(serverURIs.size());
         for (int i = 0; i < serverURIs.size(); i++) {

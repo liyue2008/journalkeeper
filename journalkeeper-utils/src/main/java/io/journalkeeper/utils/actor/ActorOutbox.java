@@ -9,6 +9,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
+@SuppressWarnings("UnusedReturnValue")
 class ActorOutbox {
     private static final Logger logger = LoggerFactory.getLogger( ActorOutbox.class );
 

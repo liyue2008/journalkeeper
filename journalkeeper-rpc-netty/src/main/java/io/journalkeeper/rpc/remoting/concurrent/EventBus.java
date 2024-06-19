@@ -30,17 +30,18 @@ import java.util.concurrent.atomic.AtomicReference;
  * @author hexiaofeng
  * @since 2013-12-09
  */
+@SuppressWarnings("UnusedReturnValue")
 public class EventBus<E> {
     // 监听器
-    protected CopyOnWriteArrayList<EventListener<E>> listeners = new CopyOnWriteArrayList<EventListener<E>>();
+    protected final CopyOnWriteArrayList<EventListener<E>> listeners = new CopyOnWriteArrayList<>();
     // 事件队里
-    protected BlockingQueue<Ownership> events;
+    protected final BlockingQueue<Ownership> events;
     // 线程名称
-    protected String name;
+    protected final String name;
     // 事件派发处理器
     protected EventDispatcher dispatcher;
     // 启动标示
-    protected AtomicBoolean started = new AtomicBoolean(false);
+    protected final AtomicBoolean started = new AtomicBoolean(false);
     // 事件的间隔（毫秒），并合并事件
     protected long interval;
     // 触发空闲事件的时间
@@ -63,9 +64,9 @@ public class EventBus<E> {
     public EventBus(String name, int capacity) {
         this.name = name;
         if (capacity > 0) {
-            events = new ArrayBlockingQueue<Ownership>(capacity);
+            events = new ArrayBlockingQueue<>(capacity);
         } else {
-            events = new LinkedBlockingDeque<Ownership>();
+            events = new LinkedBlockingDeque<>();
         }
     }
 
@@ -261,25 +262,9 @@ public class EventBus<E> {
     }
 
     /**
-     * 同步通知事件
-     *
-     * @param event 事件
-     */
-    public void inform(final E event) {
-        if (event == null) {
-            return;
-        }
-        for (EventListener<E> listener : listeners) {
-            try {
-                listener.onEvent(event);
-            } catch (Throwable e) {
-            }
-        }
-    }
-
-    /**
      * 空闲事件
      */
+    @SuppressWarnings("EmptyMethod")
     protected void onIdle() {
 
     }
@@ -346,8 +331,8 @@ public class EventBus<E> {
      * 事件
      */
     protected class Ownership {
-        public E event;
-        public EventListener<E> owner;
+        public final E event;
+        public final EventListener<E> owner;
 
         public Ownership(E event, EventListener<E> owner) {
             this.event = event;
@@ -360,8 +345,8 @@ public class EventBus<E> {
      */
     protected class EventDispatcher implements Runnable {
 
-        private CountDownLatch latch = new CountDownLatch(1);
-        private AtomicReference<State> state = new AtomicReference<State>(State.STARTED);
+        private final CountDownLatch latch = new CountDownLatch(1);
+        private final AtomicReference<State> state = new AtomicReference<>(State.STARTED);
 
         /**
          * 关闭
@@ -420,7 +405,7 @@ public class EventBus<E> {
                         // 合并事件
                         if (interval > 0) {
                             // 获取当前所有事件
-                            List<Ownership> currents = new ArrayList<Ownership>();
+                            List<Ownership> currents = new ArrayList<>();
                             currents.add(event);
                             while (!events.isEmpty()) {
                                 event = events.poll();
@@ -453,6 +438,7 @@ public class EventBus<E> {
                     }
                     if (sleeping && status == State.STARTED) {
                         // 休息间隔时间
+                        //noinspection BusyWait
                         Thread.sleep(interval);
                     }
                 } catch (InterruptedException e) {
@@ -462,9 +448,7 @@ public class EventBus<E> {
                     // 忽略异常
                 }
             }
-            if (latch != null) {
-                latch.countDown();
-            }
+            latch.countDown();
 
         }
     }

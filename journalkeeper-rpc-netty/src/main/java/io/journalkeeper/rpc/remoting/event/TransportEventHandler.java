@@ -24,14 +24,14 @@ import io.netty.channel.ChannelInboundHandlerAdapter;
 /**
  * 通信事件处理
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/8/15
  */
 @ChannelHandler.Sharable
 public class TransportEventHandler extends ChannelInboundHandlerAdapter {
 
-    private RequestBarrier requestBarrier;
-    private EventBus<TransportEvent> eventBus;
+    private final RequestBarrier requestBarrier;
+    private final EventBus<TransportEvent> eventBus;
 
     public TransportEventHandler(RequestBarrier requestBarrier, EventBus<TransportEvent> eventBus) {
         this.requestBarrier = requestBarrier;

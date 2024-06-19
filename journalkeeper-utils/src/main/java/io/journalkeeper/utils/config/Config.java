@@ -115,7 +115,7 @@ public class Config {
             return key;
         }
 
-        public Class getType() {
+        public Class<?> getType() {
             return type;
         }
 

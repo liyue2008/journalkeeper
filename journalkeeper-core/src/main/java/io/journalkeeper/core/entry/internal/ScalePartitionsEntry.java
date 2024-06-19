@@ -13,7 +13,6 @@
  */
 package io.journalkeeper.core.entry.internal;
 
-import java.io.Serializable;
 import java.util.Set;
 
 import static io.journalkeeper.core.entry.internal.InternalEntryType.TYPE_SCALE_PARTITIONS;

@@ -21,13 +21,13 @@ import io.journalkeeper.rpc.remoting.transport.codec.Encoder;
 /**
  * 默认编解码器工厂
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/8/13
  */
 public class DefaultCodecFactory implements CodecFactory {
 
-    private Decoder decoder;
-    private Encoder encoder;
+    private final Decoder decoder;
+    private final Encoder encoder;
 
     public DefaultCodecFactory(Decoder decoder, Encoder encoder) {
         this.decoder = decoder;

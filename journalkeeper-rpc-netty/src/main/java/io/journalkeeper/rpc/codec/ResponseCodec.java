@@ -24,7 +24,7 @@ import io.netty.buffer.ByteBuf;
  */
 public abstract class ResponseCodec<R extends BaseResponse> extends GenericPayloadCodec<R> {
     @Override
-    public final R decodePayload(JournalKeeperHeader header, ByteBuf buffer) throws Exception {
+    public final R decodePayload(JournalKeeperHeader header, ByteBuf buffer) {
 
         R response = decodeResponse(header, buffer);
         response.setStatusCode(StatusCode.valueOf(header.getStatus()));
@@ -33,11 +33,11 @@ public abstract class ResponseCodec<R extends BaseResponse> extends GenericPaylo
     }
 
     @Override
-    public final void encodePayload(JournalKeeperHeader header, R response, ByteBuf buffer) throws Exception {
+    public final void encodePayload(JournalKeeperHeader header, R response, ByteBuf buffer) {
         encodeResponse(header, response, buffer);
     }
 
-    protected abstract void encodeResponse(JournalKeeperHeader header, R response, ByteBuf buffer) throws Exception;
+    protected abstract void encodeResponse(JournalKeeperHeader header, R response, ByteBuf buffer);
 
-    protected abstract R decodeResponse(JournalKeeperHeader header, ByteBuf buffer) throws Exception;
+    protected abstract R decodeResponse(JournalKeeperHeader header, ByteBuf buffer);
 }

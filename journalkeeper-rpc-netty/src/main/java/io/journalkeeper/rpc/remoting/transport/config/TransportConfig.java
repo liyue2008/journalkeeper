@@ -19,7 +19,7 @@ import io.journalkeeper.rpc.remoting.transport.IpUtil;
 /**
  * 通信服务配置
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/8/13
  */
 public class TransportConfig {

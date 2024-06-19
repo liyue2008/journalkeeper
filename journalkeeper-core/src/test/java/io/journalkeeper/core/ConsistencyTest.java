@@ -81,24 +81,14 @@ public class ConsistencyTest {
         return createServers(nodes, path, RaftServer.Roll.VOTER, true);
     }
 
-    private List<BootStrap> createServers(int nodes, Path path, RaftServer.Roll roll, boolean waitForLeader) throws IOException, ExecutionException, InterruptedException, TimeoutException {
+    private List<BootStrap> createServers(int nodes, Path path, RaftServer.Roll roll, boolean waitForLeader) throws IOException {
         logger.info("Create {} nodes servers", nodes);
         List<URI> serverURIs = new ArrayList<>(nodes);
         List<Properties> propertiesList = new ArrayList<>(nodes);
         for (int i = 0; i < nodes; i++) {
             URI uri = URI.create("local://test" + i);
             serverURIs.add(uri);
-            Path workingDir = path.resolve("server" + i);
-            Properties properties = new Properties();
-            properties.setProperty("working_dir", workingDir.toString());
-            properties.setProperty("persistence.journal.file_data_size", String.valueOf(128 * 1024));
-            properties.setProperty("persistence.index.file_data_size", String.valueOf(16 * 1024));
-            properties.setProperty("disable_logo", "true");
-            properties.setProperty("server_name", String.valueOf(i));
-
-//            properties.setProperty("enable_metric", "true");
-//            properties.setProperty("print_metric_interval_sec", "3");
-            properties.setProperty("print_state_interval_sec", String.valueOf(5));
+            Properties properties = getProperties(path, i);
 
             propertiesList.add(properties);
         }
@@ -106,8 +96,20 @@ public class ConsistencyTest {
 
     }
 
+    private static Properties getProperties(Path path, int i) {
+        Path workingDir = path.resolve("server" + i);
+        Properties properties = new Properties();
+        properties.setProperty("working_dir", workingDir.toString());
+        properties.setProperty("persistence.journal.file_data_size", String.valueOf(128 * 1024));
+        properties.setProperty("persistence.index.file_data_size", String.valueOf(16 * 1024));
+        properties.setProperty("disable_logo", "true");
+        properties.setProperty("server_name", String.valueOf(i));
+        properties.setProperty("print_state_interval_sec", String.valueOf(5));
+        return properties;
+    }
 
-    private List<BootStrap> createServers(List<URI> serverURIs, List<Properties> propertiesList, RaftServer.Roll roll, boolean waitForLeader) throws IOException, ExecutionException, InterruptedException, TimeoutException {
+
+    private List<BootStrap> createServers(List<URI> serverURIs, List<Properties> propertiesList, RaftServer.Roll roll, boolean waitForLeader) throws IOException {
 
         List<BootStrap> serverBootStraps = new ArrayList<>(serverURIs.size());
         for (int i = 0; i < serverURIs.size(); i++) {
@@ -140,7 +142,7 @@ public class ConsistencyTest {
             registerExecuteCommandHandler(this::doExecute);
         }
         @Override
-        public void recover(Path path, Properties properties) throws IOException {
+        public void recover(Path path, Properties properties) {
 
         }
     }

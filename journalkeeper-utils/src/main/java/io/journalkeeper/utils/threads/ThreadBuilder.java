@@ -69,7 +69,7 @@ public class ThreadBuilder {
     public AsyncLoopThread build() {
         LoopThread loopThread = new LoopThread() {
             @Override
-            void doWork() throws Throwable {
+            void doWork() {
                 worker.doWork();
             }
 

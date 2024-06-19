@@ -1,6 +1,5 @@
 package io.journalkeeper.utils.actor;
 
-import io.journalkeeper.utils.actor.annotation.ActorMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

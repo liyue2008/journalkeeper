@@ -24,7 +24,7 @@ import org.slf4j.LoggerFactory;
 /**
  * jmq解码
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/8/21
  */
 public class DefaultDecoder implements Decoder {
@@ -32,8 +32,8 @@ public class DefaultDecoder implements Decoder {
     protected static final Logger logger = LoggerFactory.getLogger(DefaultDecoder.class);
     // LENGTH
     private static final int LENGTH_FIELD_LENGTH = 4;
-    private Codec headerCodec;
-    private PayloadCodecFactory payloadCodecFactory;
+    private final Codec headerCodec;
+    private final PayloadCodecFactory payloadCodecFactory;
 
     public DefaultDecoder(Codec headerCodec, PayloadCodecFactory payloadCodecFactory) {
         this.headerCodec = headerCodec;
@@ -59,8 +59,8 @@ public class DefaultDecoder implements Decoder {
         }
     }
 
-    @SuppressWarnings("unchecked")
-    public Object doDecode(ByteBuf buffer) throws Exception {
+    @SuppressWarnings({"unchecked","rawtypes"})
+    public Object doDecode(ByteBuf buffer) {
         Header header = (Header) headerCodec.decode(buffer);
         if (header == null) {
             return null;

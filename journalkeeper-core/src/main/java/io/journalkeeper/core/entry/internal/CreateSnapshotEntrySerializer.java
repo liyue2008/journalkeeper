@@ -13,8 +13,6 @@
  */
 package io.journalkeeper.core.entry.internal;
 
-import io.journalkeeper.base.Serializer;
-
 import java.nio.ByteBuffer;
 
 /**

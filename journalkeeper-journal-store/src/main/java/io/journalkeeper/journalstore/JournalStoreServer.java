@@ -22,7 +22,6 @@ import io.journalkeeper.utils.state.StateServer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
 import java.net.URI;
 import java.util.List;
 import java.util.Properties;
@@ -71,15 +70,15 @@ public class JournalStoreServer implements StateServer {
 
     }
 
-    public void init(URI uri, List<URI> voters) throws IOException {
+    public void init(URI uri, List<URI> voters) {
         bootStrap.getServer().init(uri, voters);
     }
 
-    public void init(URI uri, List<URI> voters, Set<Integer> partitions) throws IOException {
+    public void init(URI uri, List<URI> voters, Set<Integer> partitions) {
         bootStrap.getServer().init(uri, voters, partitions);
     }
 
-    public void init(URI uri, List<URI> voters, Set<Integer> partitions, URI preferredleader) throws IOException {
+    public void init(URI uri, List<URI> voters, Set<Integer> partitions, URI preferredleader) {
         bootStrap.getServer().init(uri, voters, partitions, preferredleader);
     }
 
@@ -87,7 +86,7 @@ public class JournalStoreServer implements StateServer {
         return bootStrap.getServer().isInitialized();
     }
 
-    public void recover() throws IOException {
+    public void recover() {
         bootStrap.getServer().recover();
     }
 

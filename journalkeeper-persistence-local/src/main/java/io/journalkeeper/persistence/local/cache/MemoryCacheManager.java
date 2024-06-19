@@ -1,7 +1,5 @@
 package io.journalkeeper.persistence.local.cache;
 
-import io.journalkeeper.utils.spi.Singleton;
-
 import java.io.Closeable;
 import java.nio.ByteBuffer;
 import java.util.Collection;

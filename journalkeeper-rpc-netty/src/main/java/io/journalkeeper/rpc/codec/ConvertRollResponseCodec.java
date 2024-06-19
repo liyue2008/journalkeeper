@@ -30,12 +30,12 @@ public class ConvertRollResponseCodec extends ResponseCodec<ConvertRollResponse>
     }
 
     @Override
-    protected void encodeResponse(JournalKeeperHeader header, ConvertRollResponse response, ByteBuf buffer) throws Exception {
+    protected void encodeResponse(JournalKeeperHeader header, ConvertRollResponse response, ByteBuf buffer) {
 
     }
 
     @Override
-    protected ConvertRollResponse decodeResponse(JournalKeeperHeader header, ByteBuf buffer) throws Exception {
+    protected ConvertRollResponse decodeResponse(JournalKeeperHeader header, ByteBuf buffer) {
         return new ConvertRollResponse();
     }
 }

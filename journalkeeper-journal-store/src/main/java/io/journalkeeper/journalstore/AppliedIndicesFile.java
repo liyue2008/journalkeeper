@@ -32,7 +32,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class AppliedIndicesFile extends DoubleCopy implements Map<Integer, Long> {
     private static final Logger logger = LoggerFactory.getLogger(AppliedIndicesFile.class);
-    private Map<Integer, Long> appliedIndices = new ConcurrentHashMap<>();
+    private final Map<Integer, Long> appliedIndices = new ConcurrentHashMap<>();
 
     /**
      * 构造函数

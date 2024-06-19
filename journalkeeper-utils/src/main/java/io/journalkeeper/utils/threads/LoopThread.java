@@ -35,12 +35,12 @@ abstract class LoopThread implements AsyncLoopThread {
     private String name;
     private boolean daemon;
     private volatile ServerState serverState = ServerState.STOPPED;
-    private AtomicBoolean needToWakeUp = new AtomicBoolean(false);
+    private final AtomicBoolean needToWakeUp = new AtomicBoolean(false);
 
     /**
      * 每次循环需要执行的代码。
      */
-    abstract void doWork() throws Throwable;
+    abstract void doWork();
 
     @Override
     public String getName() {
@@ -88,6 +88,7 @@ abstract class LoopThread implements AsyncLoopThread {
             while (serverState != ServerState.STOPPED) {
                 try {
                     wakeup();
+                    //noinspection BusyWait
                     Thread.sleep(10L);
                 } catch (InterruptedException ignored) {
                 }
@@ -118,8 +119,6 @@ abstract class LoopThread implements AsyncLoopThread {
                     doWork();
                 }
 
-            } catch (InterruptedException i) {
-                Thread.currentThread().interrupt();
             } catch (Throwable t) {
                 if (!handleException(t)) {
                     break;
@@ -134,6 +133,7 @@ abstract class LoopThread implements AsyncLoopThread {
                     wakeupLock.lock();
                     try {
                         needToWakeUp.set(true);
+                        //noinspection ResultOfMethodCallIgnored
                         wakeupCondition.await(minSleep < maxSleep ? ThreadLocalRandom.current().nextLong(minSleep, maxSleep) : minSleep, TimeUnit.MILLISECONDS);
 
                     } finally {
@@ -168,6 +168,7 @@ abstract class LoopThread implements AsyncLoopThread {
      * 处理doWork()捕获的异常
      * @return true：继续循环，false：结束线程
      */
+    @SuppressWarnings("BooleanMethodIsAlwaysInverted")
     protected boolean handleException(Throwable t) {
         return true;
     }

@@ -27,7 +27,7 @@ import java.util.Map;
 /**
  * @author LiYue
  * Date: 2019-05-09
- *
+ * <p>
  * Cmd : 1 Byte
  * Code: 1 Byte
  * Index: 8 Bytes
@@ -36,7 +36,7 @@ import java.util.Map;
  *  JournalEntry: Variable
  *  JournalEntry: Variable
  *  ...
- *
+ * <p>
  * Boundaries
  *  Boundaries size: 2 Bytes
  *  Bourdary: 18 Bytes

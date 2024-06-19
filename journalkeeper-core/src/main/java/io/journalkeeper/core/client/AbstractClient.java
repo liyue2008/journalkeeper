@@ -63,6 +63,7 @@ public abstract class AbstractClient implements ClusterReadyAware, ServerConfigA
         return response;
     }
 
+    @SuppressWarnings("BusyWait")
     @Override
     public void waitForClusterReady(long maxWaitMs) throws TimeoutException {
         long t0 = System.currentTimeMillis();
@@ -80,6 +81,7 @@ public abstract class AbstractClient implements ClusterReadyAware, ServerConfigA
                 logger.info("Query servers failed. Error: {}", e.getMessage());
             }
             try {
+                //noinspection BusyWait
                 Thread.sleep(ThreadLocalRandom.current().nextLong(100L));
             } catch (InterruptedException e) {
                 throw new CompletionException(e);

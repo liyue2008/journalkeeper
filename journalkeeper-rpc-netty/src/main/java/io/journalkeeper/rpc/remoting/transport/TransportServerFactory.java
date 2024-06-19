@@ -18,7 +18,7 @@ import io.journalkeeper.rpc.remoting.transport.config.ServerConfig;
 /**
  * 通信工厂
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/8/13
  */
 public interface TransportServerFactory {

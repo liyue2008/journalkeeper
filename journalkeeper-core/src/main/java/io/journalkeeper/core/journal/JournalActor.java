@@ -37,10 +37,7 @@ import static io.journalkeeper.core.journal.Journal.INDEX_STORAGE_SIZE;
 
 public class JournalActor {
 private static final Logger logger = LoggerFactory.getLogger( JournalActor.class );
-    private final PersistenceFactory persistenceFactory;
     private final Journal journal;
-
-    private final BufferPool bufferPool;
 
     private final Properties properties;
 
@@ -58,8 +55,8 @@ private static final Logger logger = LoggerFactory.getLogger( JournalActor.class
     public JournalActor(JournalEntryParser journalEntryParser, Config config, MetricProvider metricProvider, Properties properties) {
         this.config = config;
         this.properties = properties;
-        persistenceFactory = ServiceSupport.load(PersistenceFactory.class);
-        bufferPool = ServiceSupport.load(BufferPool.class);
+        PersistenceFactory persistenceFactory = ServiceSupport.load(PersistenceFactory.class);
+        BufferPool bufferPool = ServiceSupport.load(BufferPool.class);
         this.journal = new Journal(persistenceFactory, bufferPool, journalEntryParser);
         this.monitoredJournal = new MonitoredJournalImpl();
         this.actor = Actor.builder().addr("Journal").setHandlerInstance(this).privatePostman(config.get("performance_mode")).build();

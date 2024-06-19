@@ -23,7 +23,6 @@ import io.journalkeeper.rpc.payload.GenericPayload;
 import io.journalkeeper.rpc.payload.VoidPayload;
 import io.journalkeeper.rpc.remoting.transport.Transport;
 import io.journalkeeper.rpc.remoting.transport.command.Command;
-import io.journalkeeper.rpc.remoting.transport.command.CommandCallback;
 import io.journalkeeper.rpc.remoting.transport.command.Direction;
 import io.journalkeeper.rpc.remoting.transport.command.Header;
 

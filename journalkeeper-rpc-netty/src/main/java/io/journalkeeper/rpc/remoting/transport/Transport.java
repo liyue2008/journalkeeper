@@ -19,12 +19,11 @@ import io.journalkeeper.rpc.remoting.transport.exception.TransportException;
 
 import java.net.SocketAddress;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Future;
 
 /**
  * 通信
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/8/13
  */
 public interface Transport {

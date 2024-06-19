@@ -28,14 +28,14 @@ import java.net.SocketAddress;
 /**
  * FailoverTransportClient
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/10/30
  */
 public class FailoverTransportClient implements TransportClient {
 
-    private TransportClient delegate;
-    private TransportConfig config;
-    private EventBus<TransportEvent> transportEventBus;
+    private final TransportClient delegate;
+    private final TransportConfig config;
+    private final EventBus<TransportEvent> transportEventBus;
 
     public FailoverTransportClient(TransportClient delegate, TransportConfig config, EventBus<TransportEvent> transportEventBus) {
         this.delegate = delegate;

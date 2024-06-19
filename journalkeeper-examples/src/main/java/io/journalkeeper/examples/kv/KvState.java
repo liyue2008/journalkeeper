@@ -67,7 +67,7 @@ public class KvState extends JkState implements Flushable {
                     }.getType());
             int keys = stateMap == null ? -1 : stateMap.size();
             isDirty.set(false);
-            logger.info("State map recovered from {}, keys {} ", statePath.toString(), keys);
+            logger.info("State map recovered from {}, keys {} ", statePath, keys);
         } catch (NoSuchFileException e) {
             stateMap = new HashMap<>();
         } catch (IOException e) {

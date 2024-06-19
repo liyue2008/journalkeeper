@@ -33,7 +33,7 @@ import java.util.Map;
  */
 @Singleton
 public class SimpleMonitorCollector implements MonitorCollector {
-    private Map<URI, MonitoredServer> monitoredServers = new HashMap<>();
+    private final Map<URI, MonitoredServer> monitoredServers = new HashMap<>();
 
     @Override
     public synchronized void addServer(MonitoredServer server) {
@@ -55,11 +55,9 @@ public class SimpleMonitorCollector implements MonitorCollector {
 
     public Collection<ServerMonitorInfo> collectAll() {
         List<ServerMonitorInfo> monitorInfos = new ArrayList<>();
-        if (null != monitoredServers) {
-            for (MonitoredServer monitoredServer : monitoredServers.values()) {
-                ServerMonitorInfo serverMonitorInfo = monitoredServer.collect();
-                monitorInfos.add(serverMonitorInfo);
-            }
+        for (MonitoredServer monitoredServer : monitoredServers.values()) {
+            ServerMonitorInfo serverMonitorInfo = monitoredServer.collect();
+            monitorInfos.add(serverMonitorInfo);
         }
         return monitorInfos;
     }

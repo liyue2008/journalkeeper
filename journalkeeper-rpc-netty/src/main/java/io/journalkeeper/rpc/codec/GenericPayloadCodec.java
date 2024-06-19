@@ -24,17 +24,17 @@ import io.netty.buffer.ByteBuf;
  */
 public abstract class GenericPayloadCodec<P> implements PayloadCodec<JournalKeeperHeader, GenericPayload<P>> {
     @Override
-    public final Object decode(JournalKeeperHeader header, ByteBuf buffer) throws Exception {
+    public final Object decode(JournalKeeperHeader header, ByteBuf buffer) {
 
         return new GenericPayload<>(decodePayload(header, buffer));
     }
 
     @Override
-    public final void encode(GenericPayload<P> payload, ByteBuf buffer, JournalKeeperHeader header) throws Exception {
+    public final void encode(GenericPayload<P> payload, ByteBuf buffer, JournalKeeperHeader header) {
         encodePayload(header, payload.getPayload(), buffer);
     }
 
-    protected abstract void encodePayload(JournalKeeperHeader header, P payload, ByteBuf buffer) throws Exception;
+    protected abstract void encodePayload(JournalKeeperHeader header, P payload, ByteBuf buffer);
 
-    protected abstract P decodePayload(JournalKeeperHeader header, ByteBuf buffer) throws Exception;
+    protected abstract P decodePayload(JournalKeeperHeader header, ByteBuf buffer);
 }

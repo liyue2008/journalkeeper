@@ -25,7 +25,7 @@ public enum TransactionEntryType {
     TRANSACTION_PRE_COMPLETE(2),
     TRANSACTION_COMPLETE(3);
 
-    private int value;
+    private final int value;
 
     TransactionEntryType(int value) {
         this.value = value;

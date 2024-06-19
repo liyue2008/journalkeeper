@@ -7,7 +7,7 @@ import java.nio.ByteBuffer;
 /**
  * Header(Legacy):
  *      Entry type      1 byte
- *
+ * <p>
  * Header
  *      ENTRY_HEADER_MAGIC_CODE     1 byte // 为了兼容老版本header，使用固定值作为区分
  *      Entry type      2 bytes

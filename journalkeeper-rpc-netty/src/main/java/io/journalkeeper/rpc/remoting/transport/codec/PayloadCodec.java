@@ -19,7 +19,7 @@ import io.journalkeeper.rpc.remoting.transport.command.Payload;
 /**
  * jmq消息体编解码器
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/8/21
  */
 public interface PayloadCodec<H extends Header, T extends Payload> extends PayloadDecoder<H>, PayloadEncoder<H, T> {

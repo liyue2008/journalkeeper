@@ -25,14 +25,14 @@ import io.netty.buffer.ByteBuf;
  */
 public class CompleteTransactionRequestCodec extends GenericPayloadCodec<CompleteTransactionRequest> implements Type {
     @Override
-    protected void encodePayload(JournalKeeperHeader header, CompleteTransactionRequest request, ByteBuf buffer) throws Exception {
+    protected void encodePayload(JournalKeeperHeader header, CompleteTransactionRequest request, ByteBuf buffer) {
 
         CodecSupport.encodeUUID(buffer, request.getTransactionId());
         CodecSupport.encodeBoolean(buffer, request.isCommitOrAbort());
     }
 
     @Override
-    protected CompleteTransactionRequest decodePayload(JournalKeeperHeader header, ByteBuf buffer) throws Exception {
+    protected CompleteTransactionRequest decodePayload(JournalKeeperHeader header, ByteBuf buffer) {
         return new CompleteTransactionRequest(
                 CodecSupport.decodeUUID(buffer),
                 CodecSupport.decodeBoolean(buffer)

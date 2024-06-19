@@ -24,34 +24,35 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * 应答Future
  */
+@SuppressWarnings("UnusedReturnValue")
 public class ResponseFuture extends CompletableFuture<Command> {
-    protected static Logger logger = LoggerFactory.getLogger(ResponseFuture.class);
+    protected static final Logger logger = LoggerFactory.getLogger(ResponseFuture.class);
     // 开始事件
     private final long beginTime = System.currentTimeMillis();
     // 请求
-    private Command request;
+    private final Command request;
     // 应答
     private Command response;
     // 异常
     private Throwable cause;
     // 超时
-    private long timeout;
+    private final long timeout;
     // 请求ID
     private int requestId;
     // 通道
-    private Transport transport;
+    private final Transport transport;
     // 回调
-    private CommandCallback callback;
+    private final CommandCallback callback;
     // 是否成功
     private boolean success;
     // 回调一次
-    private AtomicBoolean onceCallback = new AtomicBoolean(false);
+    private final AtomicBoolean onceCallback = new AtomicBoolean(false);
     // 是否释放
-    private AtomicBoolean released = new AtomicBoolean(false);
+    private final AtomicBoolean released = new AtomicBoolean(false);
     // 门闩
-    private CountDownLatch latch;
+    private final CountDownLatch latch;
     // 信号量
-    private Semaphore semaphore;
+    private final Semaphore semaphore;
     // 是否完成
     private volatile boolean isDone = false;
     // 是否取消
@@ -74,7 +75,7 @@ public class ResponseFuture extends CompletableFuture<Command> {
         }
         this.transport = transport;
         this.request = request;
-        if (request != null && request.getHeader() != null) {
+        if (request.getHeader() != null) {
             this.requestId = request.getHeader().getRequestId();
         }
         this.timeout = timeout;
@@ -148,6 +149,7 @@ public class ResponseFuture extends CompletableFuture<Command> {
      */
     public Command await() throws InterruptedException {
         if (latch != null) {
+            //noinspection ResultOfMethodCallIgnored
             latch.await(timeout, TimeUnit.MILLISECONDS);
         }
         return response;
@@ -162,6 +164,7 @@ public class ResponseFuture extends CompletableFuture<Command> {
      */
     public Command await(long timeout) throws InterruptedException {
         if (latch != null) {
+            //noinspection ResultOfMethodCallIgnored
             latch.await(timeout, TimeUnit.MILLISECONDS);
         }
         return response;
@@ -183,8 +186,8 @@ public class ResponseFuture extends CompletableFuture<Command> {
                 } else {
                     logger.error("bigbug: success and exception confused! {}", request);
                 }
-            } catch (Throwable ignored) {
-                logger.error("callback error", ignored);
+            } catch (Throwable t) {
+                logger.error("callback error", t);
             }
         }
     }

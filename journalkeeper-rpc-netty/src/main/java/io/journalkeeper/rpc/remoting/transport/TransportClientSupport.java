@@ -40,14 +40,14 @@ import java.net.UnknownHostException;
 /**
  * 通信服务支持
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/8/13
  */
 public abstract class TransportClientSupport extends Service {
 
     protected static final Logger logger = LoggerFactory.getLogger(TransportClientSupport.class);
 
-    private ClientConfig config;
+    private final ClientConfig config;
     private EventLoopGroup ioEventGroup;
     private Bootstrap bootstrap;
 
@@ -137,7 +137,7 @@ public abstract class TransportClientSupport extends Service {
             long timeout = connectionTimeout > 0 ? connectionTimeout : config.getConnectionTimeout();
             String addr = IpUtil.toAddress(address);
             ChannelFuture channelFuture;
-            Channel channel = null;
+            Channel channel;
             channelFuture = bootstrap.connect(address);
             if (!channelFuture.await(timeout)) {
                 throw TransportException.ConnectionTimeoutException.build(addr);

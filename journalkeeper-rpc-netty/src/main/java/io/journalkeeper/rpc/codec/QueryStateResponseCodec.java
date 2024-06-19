@@ -25,13 +25,13 @@ import io.netty.buffer.ByteBuf;
  */
 public class QueryStateResponseCodec extends LeaderResponseCodec<QueryStateResponse> implements Types {
     @Override
-    protected void encodeLeaderResponse(JournalKeeperHeader header, QueryStateResponse response, ByteBuf buffer) throws Exception {
+    protected void encodeLeaderResponse(JournalKeeperHeader header, QueryStateResponse response, ByteBuf buffer) {
         CodecSupport.encodeLong(buffer, response.getLastApplied());
         CodecSupport.encodeBytes(buffer, response.getResult());
     }
 
     @Override
-    protected QueryStateResponse decodeLeaderResponse(JournalKeeperHeader header, ByteBuf buffer) throws Exception {
+    protected QueryStateResponse decodeLeaderResponse(JournalKeeperHeader header, ByteBuf buffer) {
         long lastApplied = CodecSupport.decodeLong(buffer);
         byte[] result = CodecSupport.decodeBytes(buffer);
         return new QueryStateResponse(result, lastApplied);

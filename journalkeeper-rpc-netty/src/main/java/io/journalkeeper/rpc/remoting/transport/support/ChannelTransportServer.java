@@ -20,12 +20,12 @@ import io.netty.channel.ChannelHandler;
 /**
  * 自定义channelHandler
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/9/25
  */
 public class ChannelTransportServer extends TransportServerSupport {
 
-    private ChannelHandler channelHandler;
+    private final ChannelHandler channelHandler;
 
     public ChannelTransportServer(ChannelHandler channelHandler, ServerConfig serverConfig) {
         super(serverConfig);

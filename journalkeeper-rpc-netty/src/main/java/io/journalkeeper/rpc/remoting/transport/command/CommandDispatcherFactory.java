@@ -18,7 +18,7 @@ import io.journalkeeper.rpc.remoting.protocol.Protocol;
 /**
  * 命令调度器工厂
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/8/16
  */
 public interface CommandDispatcherFactory {

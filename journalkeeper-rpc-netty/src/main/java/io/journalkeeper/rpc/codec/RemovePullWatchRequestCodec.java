@@ -25,13 +25,13 @@ import io.netty.buffer.ByteBuf;
  */
 public class RemovePullWatchRequestCodec extends GenericPayloadCodec<RemovePullWatchRequest> implements Type {
     @Override
-    protected void encodePayload(JournalKeeperHeader header, RemovePullWatchRequest request, ByteBuf buffer) throws Exception {
+    protected void encodePayload(JournalKeeperHeader header, RemovePullWatchRequest request, ByteBuf buffer) {
         CodecSupport.encodeLong(buffer, request.getPullWatchId());
 
     }
 
     @Override
-    protected RemovePullWatchRequest decodePayload(JournalKeeperHeader header, ByteBuf buffer) throws Exception {
+    protected RemovePullWatchRequest decodePayload(JournalKeeperHeader header, ByteBuf buffer) {
         return new RemovePullWatchRequest(
                 CodecSupport.decodeLong(buffer)
         );

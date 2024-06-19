@@ -25,14 +25,14 @@ import io.netty.buffer.ByteBuf;
  */
 public class PullEventsRequestCodec extends GenericPayloadCodec<PullEventsRequest> implements Type {
     @Override
-    protected void encodePayload(JournalKeeperHeader header, PullEventsRequest request, ByteBuf buffer) throws Exception {
+    protected void encodePayload(JournalKeeperHeader header, PullEventsRequest request, ByteBuf buffer) {
         CodecSupport.encodeLong(buffer, request.getPullWatchId());
         CodecSupport.encodeLong(buffer, request.getAckSequence());
 
     }
 
     @Override
-    protected PullEventsRequest decodePayload(JournalKeeperHeader header, ByteBuf buffer) throws Exception {
+    protected PullEventsRequest decodePayload(JournalKeeperHeader header, ByteBuf buffer) {
         return new PullEventsRequest(
                 CodecSupport.decodeLong(buffer),
                 CodecSupport.decodeLong(buffer)

@@ -19,7 +19,7 @@ import io.journalkeeper.rpc.remoting.transport.command.handler.CommandHandlerFac
 /**
  * 协议
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/8/13
  */
 public interface Protocol {

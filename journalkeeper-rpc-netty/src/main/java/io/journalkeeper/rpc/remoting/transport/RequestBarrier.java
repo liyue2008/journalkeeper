@@ -28,16 +28,17 @@ import java.util.concurrent.TimeUnit;
  * 请求并发控制
  * Created by hexiaofeng on 16-6-23.
  */
+@SuppressWarnings("UnusedReturnValue")
 public class RequestBarrier {
 
-    protected static Logger logger = LoggerFactory.getLogger(RequestBarrier.class);
+    protected static final Logger logger = LoggerFactory.getLogger(RequestBarrier.class);
     // 单向信号量
-    public Semaphore onewaySemaphore;
+    public final Semaphore onewaySemaphore;
     // 异步信号量
-    public Semaphore asyncSemaphore;
+    public final Semaphore asyncSemaphore;
     // 存放同步和异步命令应答
-    public Map<Integer, ResponseFuture> futures = new ConcurrentHashMap<Integer, ResponseFuture>(200);
-    private TransportConfig config;
+    public final Map<Integer, ResponseFuture> futures = new ConcurrentHashMap<>(200);
+    private final TransportConfig config;
 
 
     public RequestBarrier(TransportConfig config) {

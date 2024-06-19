@@ -34,7 +34,7 @@ public abstract class Activity {
     // 是否启动
     protected final AtomicBoolean started = new AtomicBoolean(false);
     // 服务状态
-    protected final AtomicReference<ServiceState> serviceState = new AtomicReference<ServiceState>();
+    protected final AtomicReference<ServiceState> serviceState = new AtomicReference<>();
     // 信号量
     protected final Object signal = new Object();
     private final Logger logger = LoggerFactory.getLogger(Activity.class);
@@ -75,9 +75,9 @@ public abstract class Activity {
     /**
      * 启动前
      *
-     * @throws Exception 异常
      */
-    protected void beforeStart() throws Exception {
+    @SuppressWarnings("EmptyMethod")
+    protected void beforeStart() {
 
     }
 
@@ -86,6 +86,7 @@ public abstract class Activity {
      *
      * @throws Exception 异常
      */
+    @SuppressWarnings("EmptyMethod")
     protected void validate() throws Exception {
 
     }
@@ -102,9 +103,9 @@ public abstract class Activity {
     /**
      * 启动后
      *
-     * @throws Exception 异常
      */
-    protected void afterStart() throws Exception {
+    @SuppressWarnings("EmptyMethod")
+    protected void afterStart() {
 
     }
 
@@ -163,6 +164,7 @@ public abstract class Activity {
     /**
      * 停止前
      */
+    @SuppressWarnings("EmptyMethod")
     protected void beforeStop() {
 
     }
@@ -177,6 +179,7 @@ public abstract class Activity {
     /**
      * 停止后
      */
+    @SuppressWarnings("EmptyMethod")
     protected void afterStop() {
 
     }
@@ -197,14 +200,13 @@ public abstract class Activity {
      * 是否启动
      * @return 是否启动
      */
+    @SuppressWarnings("BooleanMethodIsAlwaysInverted")
     protected boolean isStarted() {
         if (started.get()) {
             switch (serviceState.get()) {
                 case WILL_STOP:
-                    return false;
-                case STOPPING:
-                    return false;
                 case STOPPED:
+                case STOPPING:
                     return false;
                 default:
                     return true;
@@ -221,12 +223,9 @@ public abstract class Activity {
     protected boolean isStopped() {
         switch (serviceState.get()) {
             case START_FAILED:
-                return true;
-            case WILL_STOP:
-                return true;
-            case STOPPING:
-                return true;
             case STOPPED:
+            case STOPPING:
+            case WILL_STOP:
                 return true;
             default:
                 return false;

@@ -24,13 +24,13 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  * 默认通信属性
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/8/14
  */
 @SuppressWarnings("unchecked")
 public class DefaultTransportAttribute implements TransportAttribute {
 
-    private volatile AtomicReference<ConcurrentMap<Object, Object>> attributes = new AtomicReference();
+    private final AtomicReference<ConcurrentMap<Object, Object>> attributes = new AtomicReference<>();
 
     @Override
     public <T> T set(Object key, Object value) {

@@ -18,12 +18,10 @@ import io.journalkeeper.exceptions.StateExecutionException;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Properties;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
 
 /**
  * 状态机接口。
- *
+ * <p>
  * 可选实现：
  * {@link java.io.Flushable}：将状态机中未持久化的输入写入磁盘；
  *

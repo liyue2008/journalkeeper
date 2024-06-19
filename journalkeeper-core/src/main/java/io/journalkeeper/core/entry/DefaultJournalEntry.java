@@ -139,6 +139,7 @@ public class DefaultJournalEntry implements JournalEntry {
         return Arrays.hashCode(serializedBytes);
     }
 
+    @SuppressWarnings("SameReturnValue")
     private short magicCode() {
         return MAGIC_CODE;
     }

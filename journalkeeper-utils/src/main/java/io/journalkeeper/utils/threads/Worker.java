@@ -18,5 +18,5 @@ package io.journalkeeper.utils.threads;
  * Date: 2019-06-21
  */
 public interface Worker {
-    void doWork() throws Throwable;
+    void doWork();
 }

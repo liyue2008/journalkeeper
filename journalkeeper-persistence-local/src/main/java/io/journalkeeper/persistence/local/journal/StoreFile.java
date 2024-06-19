@@ -18,6 +18,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
 
+@SuppressWarnings("UnusedReturnValue")
 public interface StoreFile extends Timed {
 
     /**

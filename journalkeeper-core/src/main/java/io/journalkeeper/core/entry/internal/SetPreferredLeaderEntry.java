@@ -13,7 +13,6 @@
  */
 package io.journalkeeper.core.entry.internal;
 
-import java.io.Serializable;
 import java.net.URI;
 
 import static io.journalkeeper.core.entry.internal.InternalEntryType.TYPE_SET_PREFERRED_LEADER;

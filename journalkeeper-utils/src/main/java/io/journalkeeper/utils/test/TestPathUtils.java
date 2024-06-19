@@ -15,15 +15,15 @@ package io.journalkeeper.utils.test;
 
 
 import java.io.File;
-import java.io.IOException;
 import java.nio.file.Path;
 
 /**
  * @author LiYue
  * Date: 2018/8/29
  */
+@SuppressWarnings("ResultOfMethodCallIgnored")
 public class TestPathUtils {
-    public static Path prepareBaseDir(String basePath) throws IOException {
+    public static Path prepareBaseDir(String basePath) {
         String property = "java.io.tmpdir";
         String tempDir = System.getProperty(property);
         File tempDirFile = new File(tempDir);
@@ -38,7 +38,7 @@ public class TestPathUtils {
         return base.toPath();
     }
 
-    public static Path prepareBaseDir() throws IOException {
+    public static Path prepareBaseDir() {
         return prepareBaseDir("journalkeeper");
     }
 

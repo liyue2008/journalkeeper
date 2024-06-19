@@ -3,7 +3,6 @@ package io.journalkeeper.core.raft;
 import io.journalkeeper.core.api.*;
 import io.journalkeeper.core.config.ServerConfigDeclaration;
 import io.journalkeeper.core.journal.JournalActor;
-import io.journalkeeper.core.metric.MetricProvider;
 import io.journalkeeper.core.metric.MetricProviderImpl;
 import io.journalkeeper.core.state.StateActor;
 import io.journalkeeper.exceptions.JournalException;
@@ -11,7 +10,6 @@ import io.journalkeeper.exceptions.RecoverException;
 import io.journalkeeper.monitor.MonitorCollector;
 import io.journalkeeper.persistence.LockablePersistence;
 import io.journalkeeper.persistence.PersistenceFactory;
-import io.journalkeeper.rpc.client.*;
 import io.journalkeeper.rpc.server.*;
 import io.journalkeeper.utils.actor.*;
 import io.journalkeeper.utils.actor.annotation.ActorListener;
@@ -27,8 +25,6 @@ import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
-
-import static io.journalkeeper.core.api.RaftJournal.INTERNAL_PARTITION;
 
 public class RaftServerActor implements  RaftServer {
     private static final Logger logger = LoggerFactory.getLogger( RaftServerActor.class );
@@ -86,7 +82,7 @@ public class RaftServerActor implements  RaftServer {
     }
 
     @Override
-    public void init(URI uri, List<URI> voters, Set<Integer> partitions, URI preferredLeader) throws IOException {
+    public void init(URI uri, List<URI> voters, Set<Integer> partitions, URI preferredLeader) {
         try {
             actor.sendThen("State", "init", uri, voters, partitions, preferredLeader).get();
         } catch (InterruptedException | ExecutionException e) {
@@ -100,7 +96,7 @@ public class RaftServerActor implements  RaftServer {
     }
 
     @Override
-    public void recover() throws IOException {
+    public void recover() {
         acquireFileLock();
         try {
             actor.<JournalActor.RecoverJournalRequest>sendThen("State", "recover")
@@ -190,7 +186,7 @@ public class RaftServerActor implements  RaftServer {
     /**
      * 持久化实现接入点
      */
-    protected PersistenceFactory persistenceFactory;
+    protected final PersistenceFactory persistenceFactory;
     private void acquireFileLock() {
         if (null == this.lockablePersistence) {
             this.lockablePersistence = persistenceFactory.createLock(lockFilePath());
@@ -206,11 +202,7 @@ public class RaftServerActor implements  RaftServer {
 
     private void releaseFileLock() {
         if (null != this.lockablePersistence) {
-            try {
-                this.lockablePersistence.unlock();
-            } catch (IOException e) {
-                logger.warn("Unlock file {} failed, cause: {}.", lockFilePath(), e.getMessage());
-            }
+            this.lockablePersistence.unlock();
             this.lockablePersistence = null;
         }
     }
@@ -221,13 +213,6 @@ public class RaftServerActor implements  RaftServer {
         // TODO 维护Raft集群和Observer的心跳。
         return Collections.emptyList();
     }
-
-    @ActorListener
-    private GetServersResponse getServers() {
-        // TODO
-        return null;
-    }
-
 
 
     public ServerRpc getServerRpc() {

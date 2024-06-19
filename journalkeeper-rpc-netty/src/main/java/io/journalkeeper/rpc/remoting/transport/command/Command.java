@@ -27,7 +27,7 @@ public class Command {
     // 数据包
     protected Object payload;
     // 是否已经是否了
-    protected AtomicBoolean released = new AtomicBoolean(false);
+    protected final AtomicBoolean released = new AtomicBoolean(false);
     // 附加属性
     protected Object attachment;
 

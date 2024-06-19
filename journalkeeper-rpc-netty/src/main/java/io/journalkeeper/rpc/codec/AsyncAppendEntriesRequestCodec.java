@@ -25,7 +25,7 @@ import io.netty.buffer.ByteBuf;
  */
 public class AsyncAppendEntriesRequestCodec extends GenericPayloadCodec<AsyncAppendEntriesRequest> implements Type {
     @Override
-    protected void encodePayload(JournalKeeperHeader header, AsyncAppendEntriesRequest request, ByteBuf buffer) throws Exception {
+    protected void encodePayload(JournalKeeperHeader header, AsyncAppendEntriesRequest request, ByteBuf buffer) {
         CodecSupport.encodeInt(buffer, request.getTerm());
         CodecSupport.encodeUri(buffer, request.getLeader());
         CodecSupport.encodeLong(buffer, request.getPrevLogIndex());
@@ -38,7 +38,7 @@ public class AsyncAppendEntriesRequestCodec extends GenericPayloadCodec<AsyncApp
     }
 
     @Override
-    protected AsyncAppendEntriesRequest decodePayload(JournalKeeperHeader header, ByteBuf buffer) throws Exception {
+    protected AsyncAppendEntriesRequest decodePayload(JournalKeeperHeader header, ByteBuf buffer) {
         return new AsyncAppendEntriesRequest(
                 CodecSupport.decodeInt(buffer),
                 CodecSupport.decodeUri(buffer),

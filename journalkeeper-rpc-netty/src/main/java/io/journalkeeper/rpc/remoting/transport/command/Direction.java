@@ -27,19 +27,17 @@ public enum Direction {
      */
     RESPONSE(1);
 
-    private int value;
+    private final int value;
 
     Direction(int value) {
         this.value = value;
     }
 
     public static Direction valueOf(final int value) {
-        switch (value) {
-            case 0:
-                return REQUEST;
-            default:
-                return RESPONSE;
+        if (value == 0) {
+            return REQUEST;
         }
+        return RESPONSE;
     }
 
     public int getValue() {

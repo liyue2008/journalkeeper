@@ -31,7 +31,7 @@ public class GetServerStateResponseCodec extends ResponseCodec<GetServerStateRes
     }
 
     @Override
-    protected void encodeResponse(JournalKeeperHeader header, GetServerStateResponse response, ByteBuf buffer) throws Exception {
+    protected void encodeResponse(JournalKeeperHeader header, GetServerStateResponse response, ByteBuf buffer) {
         //long lastIncludedIndex, int lastIncludedTerm, long offset, byte[] data, boolean done
         CodecSupport.encodeLong(buffer, response.getLastIncludedIndex());
         CodecSupport.encodeInt(buffer, response.getLastIncludedTerm());
@@ -43,7 +43,7 @@ public class GetServerStateResponseCodec extends ResponseCodec<GetServerStateRes
     }
 
     @Override
-    protected GetServerStateResponse decodeResponse(JournalKeeperHeader header, ByteBuf buffer) throws Exception {
+    protected GetServerStateResponse decodeResponse(JournalKeeperHeader header, ByteBuf buffer) {
         return new GetServerStateResponse(
                 CodecSupport.decodeLong(buffer),
                 CodecSupport.decodeInt(buffer),

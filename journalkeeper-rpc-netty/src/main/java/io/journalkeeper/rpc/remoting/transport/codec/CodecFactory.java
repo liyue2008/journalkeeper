@@ -16,10 +16,10 @@ package io.journalkeeper.rpc.remoting.transport.codec;
 /**
  * 编解码器工厂
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/8/13
  */
 public interface CodecFactory {
 
-    public Codec getCodec();
+    Codec getCodec();
 }

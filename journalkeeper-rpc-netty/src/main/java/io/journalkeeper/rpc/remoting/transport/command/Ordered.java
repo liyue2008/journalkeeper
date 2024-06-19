@@ -16,7 +16,7 @@ package io.journalkeeper.rpc.remoting.transport.command;
 /**
  * 排序
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/8/27
  */
 public interface Ordered {

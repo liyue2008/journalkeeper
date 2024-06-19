@@ -1,6 +1,5 @@
 package io.journalkeeper.core.raft;
 
-import io.journalkeeper.core.api.RaftServer;
 import io.journalkeeper.core.state.ConfigState;
 import io.journalkeeper.core.state.Snapshot;
 

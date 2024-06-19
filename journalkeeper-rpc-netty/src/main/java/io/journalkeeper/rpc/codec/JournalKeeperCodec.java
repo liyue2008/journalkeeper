@@ -28,16 +28,15 @@ import io.netty.buffer.ByteBuf;
  * Date: 2019-04-01
  */
 public class JournalKeeperCodec implements Codec {
-    private Codec headerCodec;
-    private PayloadCodecFactory payloadCodecFactory;
+    private final PayloadCodecFactory payloadCodecFactory;
 
-    private Decoder decoder;
-    private Encoder encoder;
+    private final Decoder decoder;
+    private final Encoder encoder;
 
     public JournalKeeperCodec() {
         PayloadCodecFactory payloadCodecFactory = new PayloadCodecFactory();
         PayloadCodecRegistry.register(payloadCodecFactory);
-        this.headerCodec = new JournalKeeperHeaderCodec();
+        Codec headerCodec = new JournalKeeperHeaderCodec();
         this.payloadCodecFactory = payloadCodecFactory;
         this.decoder = new DefaultDecoder(headerCodec, payloadCodecFactory);
         this.encoder = new DefaultEncoder(headerCodec, payloadCodecFactory);

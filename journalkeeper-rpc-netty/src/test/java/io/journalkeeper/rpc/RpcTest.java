@@ -100,7 +100,7 @@ import static org.mockito.Mockito.when;
  */
 public class RpcTest {
     private static final Logger logger = LoggerFactory.getLogger(RpcTest.class);
-    private ServerRpc serverRpcMock = mock(ServerRpc.class);
+    private final ServerRpc serverRpcMock = mock(ServerRpc.class);
     private ClientServerRpcAccessPoint clientServerRpcAccessPoint;
     private ServerRpcAccessPoint serverRpcAccessPoint;
     private StateServer server;
@@ -399,12 +399,11 @@ public class RpcTest {
                 .getStackTrace()[1]
                 .getMethodName());
         URI leader = URI.create("jk://leader_host:8888");
-        List<URI> observers = null;
         List<URI> voters = Arrays.asList(
                 URI.create("jk://voter1_host:8888"),
                 URI.create("jk://leader_host:8888"),
                 URI.create("jk://192.168.8.8:8888"));
-        ClusterConfiguration clusterConfiguration = new ClusterConfiguration(leader, voters, observers);
+        ClusterConfiguration clusterConfiguration = new ClusterConfiguration(leader, voters, null);
         ClientServerRpc clientServerRpc = clientServerRpcAccessPoint.getClintServerRpc(serverRpcMock.serverUri());
         GetServersResponse response;
 
@@ -630,7 +629,7 @@ public class RpcTest {
                                 r.getLastLogIndex() == request.getLastLogIndex() &&
                                 r.getLastLogTerm() == request.getLastLogTerm() &&
                                 r.isFromPreferredLeader() == request.isFromPreferredLeader() &&
-                                r.isPreVote() == false
+                                !r.isPreVote()
                 ));
 
     }
@@ -780,17 +779,7 @@ public class RpcTest {
         // so follower can redirect clients
         final URI leaderId = URI.create("jk://localhost:8888");
         // the snapshot replaces all entries up through and including this index
-        final long lastIncludedIndex = -1L;
-        // term of lastIncludedIndex
-        final int lastIncludedTerm = -1;
-        // byte offset where chunk is positioned in the snapshot file
-        final int offset = 0;
-        // raw bytes of the snapshot chunk, starting at offset
-        final byte[] data = ByteUtils.createFixedSizeBytes(1024);
-        // true if this is the last chunk
-        final boolean done = false;
-
-        InstallSnapshotRequest request = new InstallSnapshotRequest(term, leaderId, lastIncludedIndex, lastIncludedTerm, offset, data, done);
+        InstallSnapshotRequest request = getInstallSnapshotRequest(term, leaderId);
 
         ServerRpc serverRpc = serverRpcAccessPoint.getServerRpcAgent(serverRpcMock.serverUri());
         InstallSnapshotResponse response, serverResponse;
@@ -804,6 +793,20 @@ public class RpcTest {
         verify(serverRpcMock).installSnapshot(
                 argThat((InstallSnapshotRequest r) -> Objects.equals(request, r)
                 ));
+    }
+
+    private static InstallSnapshotRequest getInstallSnapshotRequest(int term, URI leaderId) {
+        final long lastIncludedIndex = -1L;
+        // term of lastIncludedIndex
+        final int lastIncludedTerm = -1;
+        // byte offset where chunk is positioned in the snapshot file
+        final int offset = 0;
+        // raw bytes of the snapshot chunk, starting at offset
+        final byte[] data = ByteUtils.createFixedSizeBytes(1024);
+        // true if this is the last chunk
+        final boolean done = false;
+
+        return new InstallSnapshotRequest(term, leaderId, lastIncludedIndex, lastIncludedTerm, offset, data, done);
     }
 
     @Test
@@ -892,7 +895,7 @@ public class RpcTest {
         ServerRpc serverRpc = serverRpcAccessPoint.getServerRpcAgent(serverRpcMock.serverUri());
         GetSnapshotsResponse response, serverResponse;
 
-        SnapshotsEntry entry = new SnapshotsEntry(Arrays.asList(new SnapshotEntry(0, 0)));
+        SnapshotsEntry entry = new SnapshotsEntry(Collections.singletonList(new SnapshotEntry(0, 0)));
         serverResponse = new GetSnapshotsResponse(entry);
 
         // Test success response

@@ -21,8 +21,7 @@ import io.journalkeeper.rpc.remoting.serialize.CodecSupport;
 import io.journalkeeper.rpc.remoting.transport.command.Type;
 import io.netty.buffer.ByteBuf;
 
-import java.util.List;
-import java.util.stream.Collectors;
+import java.util.ArrayList;
 
 /**
  * GetSnapshostsResponseCodec
@@ -32,7 +31,7 @@ import java.util.stream.Collectors;
 public class GetSnapshotsResponseCodec extends LeaderResponseCodec<GetSnapshotsResponse> implements Type {
 
     @Override
-    protected void encodeLeaderResponse(JournalKeeperHeader header, GetSnapshotsResponse leaderResponse, ByteBuf buffer) throws Exception {
+    protected void encodeLeaderResponse(JournalKeeperHeader header, GetSnapshotsResponse leaderResponse, ByteBuf buffer) {
         CodecSupport.encodeCollection(buffer, leaderResponse.getSnapshots().getSnapshots(),
                 (obj, entryBuffer) -> {
                     SnapshotEntry entry = (SnapshotEntry) obj;
@@ -42,12 +41,12 @@ public class GetSnapshotsResponseCodec extends LeaderResponseCodec<GetSnapshotsR
     }
 
     @Override
-    protected GetSnapshotsResponse decodeLeaderResponse(JournalKeeperHeader header, ByteBuf buffer) throws Exception {
+    protected GetSnapshotsResponse decodeLeaderResponse(JournalKeeperHeader header, ByteBuf buffer) {
         return new GetSnapshotsResponse(
-                new SnapshotsEntry((List) CodecSupport.decodeCollection(buffer, entryBuffer -> new SnapshotEntry(
+                new SnapshotsEntry( new ArrayList<>(CodecSupport.decodeCollection(buffer, entryBuffer -> new SnapshotEntry(
                         CodecSupport.decodeLong(entryBuffer),
                         CodecSupport.decodeLong(entryBuffer)
-                )).stream().collect(Collectors.toList())));
+                )))));
     }
 
     @Override

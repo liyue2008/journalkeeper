@@ -1,12 +1,12 @@
 /**
  * Copyright 2019 The JoyQueue Authors.
- *
+ * <p>
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
+ * <p>
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -27,7 +27,7 @@ import java.nio.channels.FileChannel;
 import java.nio.file.Path;
 
 /**
- * from: https://gist.github.com/bmchae/1344404 by Burhan Uddin
+ * from: <a href="https://gist.github.com/bmchae/1344404">...</a> by Burhan Uddin
  *
  * @author modified by liyue25
  * Date: 2018/10/10
@@ -49,6 +49,7 @@ public class FileLock implements LockablePersistence {
             );
         }
         // Try to get the lock
+        //noinspection resource
         channel = new RandomAccessFile(lockFile, "rw").getChannel();
 
         lock = channel.tryLock();

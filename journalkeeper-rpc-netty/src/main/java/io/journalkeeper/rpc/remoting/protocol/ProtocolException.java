@@ -16,7 +16,7 @@ package io.journalkeeper.rpc.remoting.protocol;
 /**
  * 协议异常
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/9/14
  */
 public class ProtocolException extends RuntimeException {

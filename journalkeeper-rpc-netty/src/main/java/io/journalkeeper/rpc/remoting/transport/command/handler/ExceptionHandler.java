@@ -19,7 +19,7 @@ import io.journalkeeper.rpc.remoting.transport.command.Command;
 /**
  * 异常处理器
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/8/13
  */
 public interface ExceptionHandler {

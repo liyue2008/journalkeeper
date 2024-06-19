@@ -21,12 +21,12 @@ import io.netty.channel.ChannelHandler;
 /**
  * 自定义channelhandler
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/9/25
  */
 public class ChannelTransportServerFactory implements TransportServerFactory {
 
-    private ChannelHandler channelHandler;
+    private final ChannelHandler channelHandler;
 
     public ChannelTransportServerFactory(ChannelHandler channelHandler) {
         this.channelHandler = channelHandler;

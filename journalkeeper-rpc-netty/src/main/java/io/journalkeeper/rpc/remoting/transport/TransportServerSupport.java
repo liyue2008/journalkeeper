@@ -35,19 +35,18 @@ import java.net.InetSocketAddress;
 /**
  * 通信服务支持
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/8/13
  */
 public abstract class TransportServerSupport extends Service implements TransportServer {
 
     protected static final Logger logger = LoggerFactory.getLogger(TransportServerSupport.class);
 
-    private ServerConfig serverConfig;
-    private String host;
-    private int port;
+    private final ServerConfig serverConfig;
+    private final String host;
+    private final int port;
     private EventLoopGroup acceptEventGroup;
     private EventLoopGroup ioEventGroup;
-    private ServerBootstrap serverBootstrap;
     private Channel channel;
 
     public TransportServerSupport(ServerConfig serverConfig) {
@@ -78,7 +77,6 @@ public abstract class TransportServerSupport extends Service implements Transpor
 
         this.acceptEventGroup = acceptEventGroup;
         this.ioEventGroup = ioEventGroup;
-        this.serverBootstrap = serverBootstrap;
         this.channel = channel;
     }
 
@@ -108,7 +106,7 @@ public abstract class TransportServerSupport extends Service implements Transpor
         return false;
     }
 
-    protected ServerBootstrap newBootstrap(ChannelHandler channelHandler, EventLoopGroup acceptEventGroup, EventLoopGroup ioEventGroup) throws Exception {
+    protected ServerBootstrap newBootstrap(ChannelHandler channelHandler, EventLoopGroup acceptEventGroup, EventLoopGroup ioEventGroup) {
         ServerBootstrap serverBootstrap = new ServerBootstrap();
         serverBootstrap.channel(Epoll.isAvailable() ? EpollServerSocketChannel.class : NioServerSocketChannel.class)
                 .group(acceptEventGroup, ioEventGroup)

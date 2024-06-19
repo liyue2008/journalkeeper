@@ -18,7 +18,7 @@ import java.util.Map;
 /**
  * Transaction context.
  * The context of a transaction is provided by user while create the transaction,
- * and it will be write into the transaction prepare log.
+ * and it will write into the transaction prepare log.
  *
  * @author LiYue
  * Date: 2019/11/29

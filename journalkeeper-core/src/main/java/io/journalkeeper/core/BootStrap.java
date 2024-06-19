@@ -116,7 +116,6 @@ public class BootStrap implements ClusterAccessPoint {
 
         if (null != roll) {
             return new RaftServerActor(roll, stateFactory, journalEntryParser, properties);
-//            return new Server(roll, stateFactory, journalEntryParser, serverScheduledExecutor, serverAsyncExecutor, properties);
         }
         return null;
     }

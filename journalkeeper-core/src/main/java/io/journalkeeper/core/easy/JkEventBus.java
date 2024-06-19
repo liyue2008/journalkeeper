@@ -9,7 +9,6 @@ import io.journalkeeper.utils.event.EventType;
 import io.journalkeeper.utils.event.EventWatcher;
 import io.journalkeeper.utils.spi.ServiceSupport;
 
-import java.io.IOException;
 import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
@@ -81,7 +80,7 @@ public class JkEventBus {
                 // nothing to do
         }
     };
-    public void close() throws IOException {
+    public void close() {
         if (listenerCounter.get() > 0) {
             this.raftClient.unWatch(eventWatcher);
             this.stateChangeListeners.clear();

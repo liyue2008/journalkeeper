@@ -37,17 +37,17 @@ import io.netty.channel.ChannelInitializer;
 /**
  * 默认通信服务
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/8/22
  */
 public class DefaultTransportServer extends TransportServerSupport {
 
-    private Codec codec;
-    private ExceptionHandler exceptionHandler;
-    private RequestBarrier requestBarrier;
-    private RequestHandler requestHandler;
-    private ResponseHandler responseHandler;
-    private EventBus<TransportEvent> transportEventBus;
+    private final Codec codec;
+    private final ExceptionHandler exceptionHandler;
+    private final RequestBarrier requestBarrier;
+    private final RequestHandler requestHandler;
+    private final ResponseHandler responseHandler;
+    private final EventBus<TransportEvent> transportEventBus;
 
     public DefaultTransportServer(ServerConfig serverConfig, String host, int port, Codec codec, ExceptionHandler exceptionHandler,
                                   RequestBarrier requestBarrier, RequestHandler requestHandler, ResponseHandler responseHandler,
@@ -66,7 +66,7 @@ public class DefaultTransportServer extends TransportServerSupport {
         final CommandDispatcher commandDispatcher = new DefaultCommandDispatcher(requestBarrier, requestHandler, responseHandler);
         return new ChannelInitializer<Channel>() {
             @Override
-            protected void initChannel(Channel channel) throws Exception {
+            protected void initChannel(Channel channel) {
                 channel.pipeline()
                         .addLast(new NettyDecoder(codec))
                         .addLast(new NettyEncoder(codec))

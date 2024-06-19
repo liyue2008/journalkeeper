@@ -32,7 +32,7 @@ public class KvExampleApplicationMain {
 
     public static void main(String[] args) throws Exception {
         int nodes = 1;
-        logger.info("Usage: java " + KvExampleApplicationMain.class.getName() + " [nodes(default 3)]");
+        logger.info("Usage: java {} [nodes(default 3)]", KvExampleApplicationMain.class.getName());
         if (args.length > 0) {
             nodes = Integer.parseInt(args[0]);
         }

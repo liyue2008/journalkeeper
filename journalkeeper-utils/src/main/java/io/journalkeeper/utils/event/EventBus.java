@@ -36,14 +36,14 @@ import java.util.stream.Collectors;
  * 1. 客户端调用 {@link #watch(EventWatcher)}添加一个监听器；
  * 2. 当有事件产生时直接触发事件监听器 {@link EventWatcher}；
  * 3. 客户端调用 {@link #unWatch(EventWatcher)} 删除监听器，不再监听事件。
- *
+ * <p>
  * pull模式下，客户端需要主动拉取事件，一般用于远程监听。
  * 1. 首先客户端调用 {@link #addPullWatch()} 创建一个监听，返回监听ID；
  * 2. 客户端调用 {@link #pullIntervalMs()} 获取pull间隔时间；
  * 3. 客户端启动一个定时器，每隔{@link #pullIntervalMs()}时间，调用 {@link #pullEvents(long)}拉取事件；
  * 4. 客户端收到事件后，调用 {@link #ackPullEvents(long, long)}  确认。
  * 5. 重复步骤4，直到调用 {@link #removePullWatch(long)} 取消订阅。
- *
+ * <p>
  * 注意：客户端需要按照服务端给出的时间间隔拉取事件，如果客户端长时间不来拉取事件，服务端将认为客户端已经宕机，自动取消订阅。
  *
  * @author LiYue

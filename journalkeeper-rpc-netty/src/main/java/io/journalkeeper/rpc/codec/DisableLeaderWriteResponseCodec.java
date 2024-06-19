@@ -26,13 +26,13 @@ import io.netty.buffer.ByteBuf;
 public class DisableLeaderWriteResponseCodec extends LeaderResponseCodec<DisableLeaderWriteResponse> implements Type {
 
     @Override
-    protected void encodeLeaderResponse(JournalKeeperHeader header, DisableLeaderWriteResponse leaderResponse, ByteBuf buffer) throws Exception {
+    protected void encodeLeaderResponse(JournalKeeperHeader header, DisableLeaderWriteResponse leaderResponse, ByteBuf buffer) {
         CodecSupport.encodeInt(buffer, leaderResponse.getTerm());
 
     }
 
     @Override
-    protected DisableLeaderWriteResponse decodeLeaderResponse(JournalKeeperHeader header, ByteBuf buffer) throws Exception {
+    protected DisableLeaderWriteResponse decodeLeaderResponse(JournalKeeperHeader header, ByteBuf buffer) {
         return new DisableLeaderWriteResponse(
                 CodecSupport.decodeInt(buffer));
     }

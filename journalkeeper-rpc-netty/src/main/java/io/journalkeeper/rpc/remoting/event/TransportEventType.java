@@ -16,7 +16,7 @@ package io.journalkeeper.rpc.remoting.event;
 /**
  * 通信事件类型
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/8/15
  */
 public enum TransportEventType {

@@ -14,6 +14,7 @@ import java.util.function.*;
  * Actor 消息处理都是单线程的。
  * 要尽量避免在处理消息的方法中有长时间的IO操作。
  */
+@SuppressWarnings("UnusedReturnValue")
 public class Actor {
     // 地址
     private final String addr;

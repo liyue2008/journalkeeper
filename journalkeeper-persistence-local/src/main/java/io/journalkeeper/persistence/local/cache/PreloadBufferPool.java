@@ -70,7 +70,6 @@ public class PreloadBufferPool implements MemoryCacheManager {
     private final static String CORE_RATIO_KEY = "memory_cache.core_ratio";
     private static final String WRITE_PAGE_EXTRA_WEIGHT_MS_KEY="memory_cache.write.weight.ms";
 
-    private static final PreloadBufferPool instance = null;
     private final Threads threads = ThreadsFactory.create();
     // 可用的堆外内存上限，这个上限可以用JVM参数"PreloadBufferPool.MaxMemory"指定，
     // 默认为虚拟机最大内存（VM.maxDirectMemory()）的90%。
@@ -89,7 +88,7 @@ public class PreloadBufferPool implements MemoryCacheManager {
     private final AtomicLong usedSize = new AtomicLong(0L);
     private final Set<BufferHolder> directBufferHolders = ConcurrentHashMap.newKeySet();
     private final Set<BufferHolder> mMapBufferHolders = ConcurrentHashMap.newKeySet();
-    private Map<Integer, PreLoadCache> bufferCache = new ConcurrentHashMap<>();
+    private final Map<Integer, PreLoadCache> bufferCache = new ConcurrentHashMap<>();
 
     public PreloadBufferPool() {
 
@@ -275,7 +274,7 @@ public class PreloadBufferPool implements MemoryCacheManager {
         try {
             while (isOutOfMemory()) {
                 PreLoadCache preLoadCache = bufferCache.values().stream()
-                        .filter(p -> p.cache.size() > 0)
+                        .filter(p -> !p.cache.isEmpty())
                         .findAny().orElse(null);
                 if (null != preLoadCache) {
                     destroyOne(preLoadCache.cache.remove());
@@ -290,6 +289,7 @@ public class PreloadBufferPool implements MemoryCacheManager {
                 // 等待5x10ms，如果还不足抛出异常
                 for (int i = 0; i < 5 && isOutOfMemory(); i++) {
                     try {
+                        //noinspection BusyWait
                         Thread.sleep(10);
                     } catch (InterruptedException e) {
                         logger.warn("Interrupted: ", e);
@@ -401,13 +401,13 @@ public class PreloadBufferPool implements MemoryCacheManager {
     @Override
     public long getDirectUsedMemorySize() {
         return directBufferHolders.stream().mapToLong(BufferHolder::size).sum() +
-                bufferCache.values().stream().mapToLong(c -> c.getBufferSize() * c.getCachedCount()).sum();
+                bufferCache.values().stream().mapToLong(c -> (long) c.getBufferSize() * c.getCachedCount()).sum();
     }
 
 
     /**
      * 计算可供缓存使用的最大堆外内存。
-     *
+     * <p>
      * 1. 如果PreloadBufferPool.MaxMemory设置为数值，直接使用设置值。
      * 2. 如果PreloadBufferPool.MaxMemory设置为百分比，比如：90%，最大堆外内存 = 物理内存 * 90% - 最大堆内存（由JVM参数-Xmx配置）
      * 3. 如果PreloadBufferPool.MaxMemory未设置或者设置了非法值，最大堆外内存 = VM.maxDirectMemory() * 90%。
@@ -444,24 +444,7 @@ public class PreloadBufferPool implements MemoryCacheManager {
 
     @Override
     public void close() {
-        if (null != PreloadBufferPool.instance) {
-            PreloadBufferPool.instance.threads.stop();
-            PreloadBufferPool.instance.bufferCache.values().forEach(p -> {
-                while (!p.cache.isEmpty()) {
-                    PreloadBufferPool.instance.destroyOne(p.cache.remove());
-
-                }
-            });
-            PreloadBufferPool.instance.directBufferHolders.parallelStream().forEach(BufferHolder::evict);
-            PreloadBufferPool.instance.mMapBufferHolders.parallelStream().forEach(BufferHolder::evict);
-            PreloadBufferPool.instance.bufferCache.values().forEach(p -> {
-                while (!p.cache.isEmpty()) {
-                    PreloadBufferPool.instance.destroyOne(p.cache.remove());
-
-                }
-            });
-        }
-        PreloadBufferPool.logger.info("Preload buffer pool closed.");
+        logger.info("Preload buffer pool closed.");
     }
     @Override
     public long getMapUsedMemorySize() {

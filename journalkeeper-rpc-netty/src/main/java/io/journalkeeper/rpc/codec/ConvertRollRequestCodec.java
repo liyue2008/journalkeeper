@@ -26,13 +26,13 @@ import io.netty.buffer.ByteBuf;
  */
 public class ConvertRollRequestCodec extends GenericPayloadCodec<ConvertRollRequest> implements Type {
     @Override
-    protected void encodePayload(JournalKeeperHeader header, ConvertRollRequest request, ByteBuf buffer) throws Exception {
+    protected void encodePayload(JournalKeeperHeader header, ConvertRollRequest request, ByteBuf buffer) {
 //        long index, int maxSize
         CodecSupport.encodeString(buffer, request.getRoll() == null ? "" : request.getRoll().name());
     }
 
     @Override
-    protected ConvertRollRequest decodePayload(JournalKeeperHeader header, ByteBuf buffer) throws Exception {
+    protected ConvertRollRequest decodePayload(JournalKeeperHeader header, ByteBuf buffer) {
         String str = CodecSupport.decodeString(buffer);
         if (!str.isEmpty()) {
             return new ConvertRollRequest(RaftServer.Roll.valueOf(str));

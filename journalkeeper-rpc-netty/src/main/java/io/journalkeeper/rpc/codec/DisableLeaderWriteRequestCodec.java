@@ -25,14 +25,14 @@ import io.netty.buffer.ByteBuf;
  */
 public class DisableLeaderWriteRequestCodec extends GenericPayloadCodec<DisableLeaderWriteRequest> implements Type {
     @Override
-    protected void encodePayload(JournalKeeperHeader header, DisableLeaderWriteRequest request, ByteBuf buffer) throws Exception {
+    protected void encodePayload(JournalKeeperHeader header, DisableLeaderWriteRequest request, ByteBuf buffer) {
         CodecSupport.encodeLong(buffer, request.getTimeoutMs());
         CodecSupport.encodeInt(buffer, request.getTerm());
 
     }
 
     @Override
-    protected DisableLeaderWriteRequest decodePayload(JournalKeeperHeader header, ByteBuf buffer) throws Exception {
+    protected DisableLeaderWriteRequest decodePayload(JournalKeeperHeader header, ByteBuf buffer) {
         return new DisableLeaderWriteRequest(
                 CodecSupport.decodeLong(buffer),
                 CodecSupport.decodeInt(buffer)

@@ -49,7 +49,7 @@ public class BytesFragment {
         this.length = length;
     }
 
-    private static int hashCode(byte a[], int offset, int length) {
+    private static int hashCode(byte[] a, int offset, int length) {
         if (a == null)
             return 0;
 

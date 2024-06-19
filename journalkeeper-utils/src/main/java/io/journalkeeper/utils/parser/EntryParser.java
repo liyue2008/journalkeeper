@@ -45,9 +45,9 @@ public class EntryParser {
 
         byte b = getByte(messageBuffer, byteOffset);
         if (bitValue) {
-            b |= 1 << bitOffset;
+            b |= (byte) (1 << bitOffset);
         } else {
-            b &= ~(1 << bitOffset);
+            b &= (byte) ~(1 << bitOffset);
         }
         setByte(messageBuffer, byteOffset, b);
     }

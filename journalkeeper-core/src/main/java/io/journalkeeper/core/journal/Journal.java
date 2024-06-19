@@ -96,7 +96,7 @@ public class Journal implements RaftJournal, Flushable, Closeable {
     // Journal 读写锁。
     // 所有对Journal的Read、Append、Flush操作加读锁
     // 其它对Journal的写操作加写锁
-    private ReadWriteLock readWriteLock = new ReentrantReadWriteLock();
+    private final ReadWriteLock readWriteLock = new ReentrantReadWriteLock();
 
     public Journal(PersistenceFactory persistenceFactory, BufferPool bufferPool, JournalEntryParser journalEntryParser) {
         this.indexPersistence = persistenceFactory.createJournalPersistenceInstance();
@@ -618,7 +618,7 @@ public class Journal implements RaftJournal, Flushable, Closeable {
 
         flush();
         logger.debug("Journal recovered, minIndex: {}, maxIndex: {}, partitions: {}, path: {}.",
-                minIndex(), maxIndex(), partitionMap.keySet(), path.toAbsolutePath().toString());
+                minIndex(), maxIndex(), partitionMap.keySet(), path.toAbsolutePath());
     }
 
     private void checkAndSetCommitIndex(long commitIndex) {
@@ -842,6 +842,7 @@ public class Journal implements RaftJournal, Flushable, Closeable {
     }
 
     long flushOnce() {
+        //noinspection MappingBeforeCount
         return Stream.concat(Stream.of(journalPersistence, indexPersistence), partitionMap.values().stream())
                 .filter(p -> p.flushed() < p.max())
                 .peek(p -> {
@@ -888,7 +889,7 @@ public class Journal implements RaftJournal, Flushable, Closeable {
                     removePartition(partition);
                 }
                 logger.debug("Journal repartitioned, partitions: {}, path: {}.",
-                        partitionMap.keySet(), basePath.toAbsolutePath().toString());
+                        partitionMap.keySet(), basePath.toAbsolutePath());
 
             }
         } catch (IOException e) {
@@ -983,7 +984,7 @@ public class Journal implements RaftJournal, Flushable, Closeable {
         synchronized (partitionMap) {
             JournalPersistence removedPersistence;
             if ((removedPersistence = partitionMap.remove(partition)) != null) {
-                logger.info("Partition removed: {}, journal: {}.", partition, basePath.toAbsolutePath().toString());
+                logger.info("Partition removed: {}, journal: {}.", partition, basePath.toAbsolutePath());
                 removedPersistence.close();
                 removedPersistence.delete();
             }

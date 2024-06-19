@@ -22,19 +22,19 @@ import io.netty.handler.codec.MessageToByteEncoder;
 /**
  * netty编码器
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/8/14
  */
-public class NettyEncoder extends MessageToByteEncoder {
+public class NettyEncoder extends MessageToByteEncoder<Object> {
 
-    private Codec codec;
+    private final Codec codec;
 
     public NettyEncoder(Codec codec) {
         this.codec = codec;
     }
 
     @Override
-    protected void encode(ChannelHandlerContext ctx, Object msg, ByteBuf out) throws Exception {
+    protected void encode(ChannelHandlerContext ctx, Object msg, ByteBuf out) {
         try {
             codec.encode(msg, out);
         } catch (Exception e) {

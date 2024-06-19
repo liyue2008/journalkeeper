@@ -26,8 +26,8 @@ import java.util.Map;
  * Date: 2019-08-27
  */
 public class InternalEntriesSerializeSupport {
-    private static Map<Class<? extends InternalEntry>, Serializer<? extends InternalEntry>> serializerMap = new HashMap<>();
-    private static Map<InternalEntryType, Class<? extends InternalEntry>> typeMap = new HashMap<>();
+    private static final Map<Class<? extends InternalEntry>, Serializer<? extends InternalEntry>> serializerMap = new HashMap<>();
+    private static final Map<InternalEntryType, Class<? extends InternalEntry>> typeMap = new HashMap<>();
 
     static {
         registerType(InternalEntryType.TYPE_LEADER_ANNOUNCEMENT, LeaderAnnouncementEntry.class, new LeaderAnnouncementEntrySerializer());
@@ -90,7 +90,7 @@ public class InternalEntriesSerializeSupport {
         @SuppressWarnings("unchecked")
         Serializer<E> serializer = (Serializer<E>) serializerMap.get(entry.getClass());
         if (serializer == null) {
-            throw new SerializeException(String.format("Unknown entry class type: %s", entry.getClass().toString()));
+            throw new SerializeException(String.format("Unknown entry class type: %s", entry.getClass()));
         }
 
         return serializer.serialize(entry);

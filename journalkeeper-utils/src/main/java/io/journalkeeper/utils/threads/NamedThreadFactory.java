@@ -22,17 +22,15 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @author hexiaofeng
  * @since 2013-12-09
  */
+@SuppressWarnings("ConstantValue")
 public class NamedThreadFactory implements ThreadFactory {
-    private AtomicInteger counter = new AtomicInteger(0);
+    private final AtomicInteger counter = new AtomicInteger(0);
 
-    private String name;
-    private boolean daemon;
+    private final String name;
+    private final boolean daemon;
 
     public NamedThreadFactory(String name) {
-        if (name == null || name.isEmpty()) {
-            throw new IllegalArgumentException("name is empty");
-        }
-        this.name = name;
+        this(name, false);
     }
 
     public NamedThreadFactory(String name, boolean daemon) {

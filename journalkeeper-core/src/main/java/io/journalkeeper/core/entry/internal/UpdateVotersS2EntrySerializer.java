@@ -13,7 +13,6 @@
  */
 package io.journalkeeper.core.entry.internal;
 
-import io.journalkeeper.base.Serializer;
 import io.journalkeeper.core.state.ConfigState;
 
 import java.net.URI;
@@ -28,7 +27,7 @@ import static io.journalkeeper.core.entry.internal.UriSerializeSupport.serialize
 /**
  * @author LiYue
  * Date: 2019-05-09
- *
+ * <p>
  * Type:                                    1 byte
  * Size of the Old Config List:             2 bytes
  *  URI String

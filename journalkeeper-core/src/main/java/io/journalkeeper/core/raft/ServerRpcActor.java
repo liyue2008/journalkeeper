@@ -106,6 +106,7 @@ public class ServerRpcActor implements ServerRpc {
         return forwardRequest(request,"State", "querySnapshot");
     }
 
+    // TODO: 在返回值中补充Observers信息
     @Override
     public CompletableFuture<GetServersResponse> getServers() {
         if (serverState != StateServer.ServerState.RUNNING) {
@@ -116,8 +117,7 @@ public class ServerRpcActor implements ServerRpc {
         final ClusterConfiguration clusterConfiguration = new ClusterConfiguration();
         return CompletableFuture.allOf(
                 actor.<URI>sendThen("Voter", "getLeaderUri", ActorRejectPolicy.BLOCK).thenAccept(clusterConfiguration::setLeader),
-                actor.<List<URI>>sendThen("State", "getVoters", ActorRejectPolicy.BLOCK).thenAccept(clusterConfiguration::setVoters),
-                actor.<List<URI>>sendThen("RaftServer", "getObservers", ActorRejectPolicy.BLOCK).thenAccept(clusterConfiguration::setObservers)
+                actor.<List<URI>>sendThen("State", "getVoters", ActorRejectPolicy.BLOCK).thenAccept(clusterConfiguration::setVoters)
         ).thenApply(any -> new GetServersResponse(clusterConfiguration));
     }
 

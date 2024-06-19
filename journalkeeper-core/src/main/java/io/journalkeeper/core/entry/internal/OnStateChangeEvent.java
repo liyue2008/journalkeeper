@@ -1,7 +1,5 @@
 package io.journalkeeper.core.entry.internal;
 
-import java.io.Serializable;
-
 import static io.journalkeeper.core.entry.internal.InternalEntryType.TYPE_ON_STATE_CHANGE_EVENT;
 
 public class OnStateChangeEvent extends InternalEntry {

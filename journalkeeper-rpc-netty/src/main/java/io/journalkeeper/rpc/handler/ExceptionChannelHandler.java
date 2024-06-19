@@ -24,64 +24,59 @@ import org.slf4j.LoggerFactory;
 /**
  * ExceptionChannelHandler
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2019/4/5
  */
 public class ExceptionChannelHandler implements ChannelInboundHandler {
     private static final Logger logger = LoggerFactory.getLogger(ExceptionChannelHandler.class);
-    private ExceptionHandler exceptionHandler;
-    private RequestBarrier requestBarrier;
 
     public ExceptionChannelHandler(ExceptionHandler exceptionHandler, RequestBarrier requestBarrier) {
-        this.exceptionHandler = exceptionHandler;
-        this.requestBarrier = requestBarrier;
     }
 
-    public void channelRegistered(ChannelHandlerContext ctx) throws Exception {
+    public void channelRegistered(ChannelHandlerContext ctx) {
         ctx.fireChannelRegistered();
     }
 
-    public void channelUnregistered(ChannelHandlerContext ctx) throws Exception {
+    public void channelUnregistered(ChannelHandlerContext ctx) {
         ctx.fireChannelUnregistered();
     }
 
-    public void channelActive(ChannelHandlerContext ctx) throws Exception {
+    public void channelActive(ChannelHandlerContext ctx) {
         ctx.fireChannelActive();
     }
 
-    public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+    public void channelInactive(ChannelHandlerContext ctx) {
         ctx.fireChannelInactive();
     }
 
-    public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+    public void channelRead(ChannelHandlerContext ctx, Object msg) {
         ctx.fireChannelRead(msg);
     }
 
-    public void channelReadComplete(ChannelHandlerContext ctx) throws Exception {
+    public void channelReadComplete(ChannelHandlerContext ctx) {
         ctx.fireChannelReadComplete();
     }
 
-    public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
+    public void userEventTriggered(ChannelHandlerContext ctx, Object evt) {
         ctx.fireUserEventTriggered(evt);
     }
 
-    public void channelWritabilityChanged(ChannelHandlerContext ctx) throws Exception {
+    public void channelWritabilityChanged(ChannelHandlerContext ctx) {
         ctx.fireChannelWritabilityChanged();
     }
 
     @Override
-    public void handlerAdded(ChannelHandlerContext channelHandlerContext) throws Exception {
+    public void handlerAdded(ChannelHandlerContext channelHandlerContext) {
 
     }
 
     @Override
-    public void handlerRemoved(ChannelHandlerContext channelHandlerContext) throws Exception {
+    public void handlerRemoved(ChannelHandlerContext channelHandlerContext) {
 
     }
 
-    @SuppressWarnings("deprecation")
     @Override
-    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
         if (TransportException.isClosed(cause)) {
             logger.warn("channel close, address: {}, message: {}", ctx.channel().remoteAddress(), cause.getMessage());
         } else {

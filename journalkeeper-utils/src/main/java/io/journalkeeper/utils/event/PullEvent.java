@@ -14,8 +14,6 @@
 package io.journalkeeper.utils.event;
 
 
-import java.util.Map;
-
 /**
  * @author LiYue
  * Date: 2019-04-12

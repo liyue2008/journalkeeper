@@ -13,7 +13,6 @@
  */
 package io.journalkeeper.core;
 
-import io.journalkeeper.core.server.Server;
 import io.journalkeeper.rpc.client.ClientServerRpc;
 import io.journalkeeper.rpc.client.ClientServerRpcAccessPoint;
 import io.journalkeeper.rpc.server.ServerRpc;

@@ -7,7 +7,6 @@ import io.journalkeeper.core.api.JournalEntry;
 import io.journalkeeper.core.api.RaftJournal;
 import io.journalkeeper.core.api.StateFactory;
 import io.journalkeeper.core.api.StateResult;
-import io.journalkeeper.core.journal.Journal;
 import io.journalkeeper.exceptions.StateQueryException;
 import io.journalkeeper.exceptions.StateRecoverException;
 import io.journalkeeper.persistence.MetadataPersistence;
@@ -33,7 +32,7 @@ import java.util.stream.Collectors;
 public class Snapshot extends JournalKeeperState implements Replicable {
 private static final Logger logger = LoggerFactory.getLogger(Snapshot.class);
     private static final String SNAPSHOT_FILE = "snapshot";
-    private AtomicBoolean isUserStateAvailable = new AtomicBoolean(false);
+    private final AtomicBoolean isUserStateAvailable = new AtomicBoolean(false);
     private static final int MAX_TRUNK_SIZE = 1024 * 1024;
 
     public Snapshot(StateFactory userStateFactory, MetadataPersistence metadataPersistence) {
@@ -45,7 +44,7 @@ private static final Logger logger = LoggerFactory.getLogger(Snapshot.class);
         File snapshotFile = path.resolve(SNAPSHOT_FILE).toFile();
         if (!snapshotFile.isFile()) {
             throw new StateRecoverException(
-                    String.format("Incomplete snapshot: %s!", path.toString())
+                    String.format("Incomplete snapshot: %s!", path)
             );
         }
         super.recover(path, properties, false);

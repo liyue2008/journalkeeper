@@ -24,19 +24,19 @@ import java.util.List;
 /**
  * netty解码器
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/8/14
  */
 public class NettyDecoder extends ByteToMessageDecoder {
 
-    private Codec codec;
+    private final Codec codec;
 
     public NettyDecoder(Codec codec) {
         this.codec = codec;
     }
 
     @Override
-    protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
+    protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) {
         try {
             Object payload = codec.decode(in);
             if (payload != null) {

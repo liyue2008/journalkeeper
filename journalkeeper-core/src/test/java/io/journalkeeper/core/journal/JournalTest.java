@@ -64,8 +64,8 @@ public class JournalTest {
     private static final Logger logger = LoggerFactory.getLogger(JournalTest.class);
     private Path path = null;
     private Journal journal = null;
-    private Set<Integer> partitions = Stream.of(0, 4, 5, 6).collect(Collectors.toSet());
-    private JournalEntryParser journalEntryParser = new DefaultJournalEntryParser();
+    private final Set<Integer> partitions = Stream.of(0, 4, 5, 6).collect(Collectors.toSet());
+    private final JournalEntryParser journalEntryParser = new DefaultJournalEntryParser();
 
     private static File findLastFile(Path parent) {
 
@@ -98,7 +98,7 @@ public class JournalTest {
         // 构建测试的entry
         List<byte[]> rawEntries =
                 entries.stream()
-                        .map(entry -> journalEntryParser.createJournalEntry(entry))
+                        .map(journalEntryParser::createJournalEntry)
                         .peek(entry -> entry.setTerm(term))
                         .peek(entry -> entry.setPartition(partition))
                         .map(this::serialize)
@@ -170,7 +170,7 @@ public class JournalTest {
         // 构建测试的entry
         List<JournalEntry> storageEntries =
                 entries.stream()
-                        .map(entry -> journalEntryParser.createJournalEntry(entry))
+                        .map(journalEntryParser::createJournalEntry)
                         .peek(entry -> entry.setTerm(term))
                         .peek(entry -> entry.setPartition(partition))
                         .collect(Collectors.toList());
@@ -241,7 +241,7 @@ public class JournalTest {
         // 构建测试的entry
         List<JournalEntry> storageEntries =
                 entries.stream()
-                        .map(entry -> journalEntryParser.createJournalEntry(entry))
+                        .map(journalEntryParser::createJournalEntry)
                         .peek(entry -> entry.setTerm(term))
                         .peek(entry -> entry.setPartition(partition))
                         .collect(Collectors.toList());
@@ -330,7 +330,7 @@ public class JournalTest {
         List<byte[]> entries = ByteUtils.createRandomSizeByteList(maxLength, size);
         List<JournalEntry> storageEntries =
                 entries.stream()
-                        .map(entry -> journalEntryParser.createJournalEntry(entry))
+                        .map(journalEntryParser::createJournalEntry)
                         .peek(entry -> entry.setTerm(term))
                         .peek(entry -> entry.setPartition(partition))
                         .collect(Collectors.toList());
@@ -368,7 +368,7 @@ public class JournalTest {
         List<byte[]> entries = ByteUtils.createRandomSizeByteList(maxLength, size);
         List<JournalEntry> storageEntries =
                 entries.stream()
-                        .map(entry -> journalEntryParser.createJournalEntry(entry))
+                        .map(journalEntryParser::createJournalEntry)
                         .peek(entry -> entry.setTerm(term))
                         .peek(entry -> entry.setPartition(partition))
                         .collect(Collectors.toList());
@@ -403,7 +403,7 @@ public class JournalTest {
         List<byte[]> entries = ByteUtils.createRandomSizeByteList(maxLength, size);
         List<JournalEntry> storageEntries =
                 entries.stream()
-                        .map(entry -> journalEntryParser.createJournalEntry(entry))
+                        .map(journalEntryParser::createJournalEntry)
                         .collect(Collectors.toList());
 
         Map<Integer, List<JournalEntry>> partitionEntries =
@@ -451,7 +451,7 @@ public class JournalTest {
         List<byte[]> entries = ByteUtils.createRandomSizeByteList(maxLength, size);
         List<JournalEntry> storageEntries =
                 entries.stream()
-                        .map(entry -> journalEntryParser.createJournalEntry(entry))
+                        .map(journalEntryParser::createJournalEntry)
                         .peek(entry -> entry.setTerm(term))
                         .peek(entry -> entry.setPartition(partition))
                         .peek(entry -> entry.setBatchSize(batchSize))
@@ -480,7 +480,7 @@ public class JournalTest {
         List<byte[]> entries = ByteUtils.createRandomSizeByteList(maxLength, size);
         List<byte[]> storageEntries =
                 entries.stream()
-                        .map(entry -> journalEntryParser.createJournalEntry(entry))
+                        .map(journalEntryParser::createJournalEntry)
                         .peek(entry -> entry.setTerm(term))
                         .peek(entry -> entry.setPartition(0))
                         .map(this::serialize)
@@ -513,7 +513,7 @@ public class JournalTest {
         List<byte[]> entries = ByteUtils.createRandomSizeByteList(maxLength, terms.length);
         List<JournalEntry> storageEntries =
                 entries.stream()
-                        .map(entry -> journalEntryParser.createJournalEntry(entry))
+                        .map(journalEntryParser::createJournalEntry)
                         .peek(entry -> entry.setTerm(0))
                         .peek(entry -> entry.setPartition(0))
                         .collect(Collectors.toList());
@@ -533,7 +533,7 @@ public class JournalTest {
         List<byte[]> appendEntries = ByteUtils.createRandomSizeByteList(maxLength, appendTerms.length);
         List<JournalEntry> appendStorageEntries =
                 appendEntries.stream()
-                        .map(entry -> journalEntryParser.createJournalEntry(entry))
+                        .map(journalEntryParser::createJournalEntry)
                         .peek(entry -> entry.setTerm(0))
                         .peek(entry -> entry.setPartition(0))
                         .collect(Collectors.toList());
@@ -566,7 +566,7 @@ public class JournalTest {
         List<byte[]> entries = ByteUtils.createRandomSizeByteList(maxLength, size);
         List<byte[]> storageEntries =
                 entries.stream()
-                        .map(entry -> journalEntryParser.createJournalEntry(entry))
+                        .map(journalEntryParser::createJournalEntry)
                         .peek(entry -> entry.setTerm(term))
                         .peek(entry -> entry.setPartition(0))
                         .map(this::serialize)
@@ -610,7 +610,7 @@ public class JournalTest {
         List<byte[]> entries = ByteUtils.createFixedSizeByteList(entrySize, size);
         List<byte[]> storageEntries =
                 entries.stream()
-                        .map(entry -> journalEntryParser.createJournalEntry(entry))
+                        .map(journalEntryParser::createJournalEntry)
                         .peek(entry -> entry.setTerm(term))
                         .peek(entry -> entry.setPartition(0))
                         .map(this::serialize)
@@ -625,7 +625,8 @@ public class JournalTest {
 
         // 测试多余数据是否能自动删除
 
-        File lastFile = findLastFile(path);
+        findLastFile(path);
+        File lastFile;
 //        FileUtils.write(lastFile, "Extra bytes", StandardCharsets.UTF_8, true);
 
         journal = createJournal(properties);
@@ -694,7 +695,7 @@ public class JournalTest {
         List<byte[]> entries = ByteUtils.createFixedSizeByteList(entrySize, size);
         List<JournalEntry> storageEntries =
                 entries.stream()
-                        .map(entry -> journalEntryParser.createJournalEntry(entry))
+                        .map(journalEntryParser::createJournalEntry)
                         .peek(entry -> entry.setTerm(term))
                         .peek(entry -> entry.setPartition(0))
                         .collect(Collectors.toList());
@@ -735,7 +736,7 @@ public class JournalTest {
 
     }
 
-    private Journal createJournal(long commitIndex) throws IOException, InterruptedException {
+    private Journal createJournal(long commitIndex) throws IOException {
 //        System.setProperty("PreloadBufferPool.PrintMetricIntervalMs", "500");
         Properties properties = new Properties();
         return createJournal(commitIndex, properties);
@@ -745,11 +746,11 @@ public class JournalTest {
         return createJournal(0L);
     }
 
-    private Journal createJournal(Properties properties) throws IOException, InterruptedException {
+    private Journal createJournal(Properties properties) throws IOException {
         return createJournal(0L, properties);
     }
 
-    private Journal createJournal(long commitIndex, Properties properties) throws IOException, InterruptedException {
+    private Journal createJournal(long commitIndex, Properties properties) throws IOException {
         PersistenceFactory persistenceFactory = ServiceSupport.load(PersistenceFactory.class);
         BufferPool bufferPool = ServiceSupport.load(BufferPool.class);
         Journal journal = new Journal(

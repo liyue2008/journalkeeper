@@ -13,8 +13,6 @@
  */
 package io.journalkeeper.core.entry.internal;
 
-import io.journalkeeper.base.Serializer;
-
 import java.nio.ByteBuffer;
 import java.util.HashSet;
 import java.util.Set;
@@ -22,7 +20,7 @@ import java.util.Set;
 /**
  * @author LiYue
  * Date: 2019-05-09
- *
+ * <p>
  * Type: 1 byte
  * Partition: 2 bytes
  * Partition: 2 bytes

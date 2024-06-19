@@ -46,7 +46,7 @@ public enum StatusCode {
     INDEX_UNDERFLOW(201, "INDEX_UNDERFLOW"),
     INDEX_OVERFLOW(202, "INDEX_OVERFLOW");
 
-    private static Map<Integer, StatusCode> codes = new HashMap<>();
+    private static final Map<Integer, StatusCode> codes = new HashMap<>();
 
     static {
         for (StatusCode jmqCode : StatusCode.values()) {
@@ -54,8 +54,8 @@ public enum StatusCode {
         }
     }
 
-    private int code;
-    private String message;
+    private final int code;
+    private final String message;
 
     StatusCode(int code, String message) {
         this.code = code;

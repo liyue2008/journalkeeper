@@ -35,7 +35,7 @@ public class CompletableRetry<D/* 对端地址类型 */> {
     private static final Logger logger = LoggerFactory.getLogger(CompletableRetry.class);
     private final RetryPolicy retryPolicy;
     private final DestinationSelector<D> destinationSelector;
-    private AtomicReference<D> destination = new AtomicReference<>(null);
+    private final AtomicReference<D> destination = new AtomicReference<>(null);
 
 
     public CompletableRetry(RetryPolicy retryPolicy, DestinationSelector<D> destinationSelector) {

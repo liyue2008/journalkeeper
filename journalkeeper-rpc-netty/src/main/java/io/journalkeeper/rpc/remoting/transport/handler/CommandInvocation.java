@@ -22,20 +22,20 @@ import io.netty.channel.SimpleChannelInboundHandler;
 /**
  * 命令调用器
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/8/13
  */
 @ChannelHandler.Sharable
 public class CommandInvocation extends SimpleChannelInboundHandler<Command> {
 
-    private CommandDispatcher commandDispatcher;
+    private final CommandDispatcher commandDispatcher;
 
     public CommandInvocation(CommandDispatcher commandDispatcher) {
         this.commandDispatcher = commandDispatcher;
     }
 
     @Override
-    protected void channelRead0(ChannelHandlerContext ctx, Command command) throws Exception {
+    protected void channelRead0(ChannelHandlerContext ctx, Command command) {
         commandDispatcher.dispatch(ctx.channel(), command);
         if (ctx.pipeline().last() != this) {
             ctx.fireChannelRead(command);

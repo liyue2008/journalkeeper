@@ -24,11 +24,11 @@ import io.netty.buffer.ByteBuf;
  */
 public class UpdateVotersResponseCodec extends LeaderResponseCodec<UpdateVotersResponse> implements Type {
     @Override
-    protected void encodeLeaderResponse(JournalKeeperHeader header, UpdateVotersResponse leaderResponse, ByteBuf buffer) throws Exception {
+    protected void encodeLeaderResponse(JournalKeeperHeader header, UpdateVotersResponse leaderResponse, ByteBuf buffer) {
     }
 
     @Override
-    protected UpdateVotersResponse decodeLeaderResponse(JournalKeeperHeader header, ByteBuf buffer) throws Exception {
+    protected UpdateVotersResponse decodeLeaderResponse(JournalKeeperHeader header, ByteBuf buffer) {
         return new UpdateVotersResponse();
     }
 

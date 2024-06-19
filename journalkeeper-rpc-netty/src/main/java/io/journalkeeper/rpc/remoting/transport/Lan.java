@@ -15,6 +15,7 @@ package io.journalkeeper.rpc.remoting.transport;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.StringTokenizer;
 
 /**
@@ -27,11 +28,11 @@ import java.util.StringTokenizer;
  */
 public class Lan {
     // 多个网段
-    private List<Segment> segments = new ArrayList<Segment>();
+    private final List<Segment> segments = new ArrayList<>();
     // ID
-    private int id;
+    private final int id;
     // 名称
-    private String name;
+    private final String name;
 
     public Lan(String ips) {
         this(0, null, ips);
@@ -74,11 +75,9 @@ public class Lan {
         if (ip == null || ip.isEmpty()) {
             return false;
         }
-        if (segments != null) {
-            for (Segment segment : segments) {
-                if (segment.contains(ip)) {
-                    return true;
-                }
+        for (Segment segment : segments) {
+            if (segment.contains(ip)) {
+                return true;
             }
         }
         return false;
@@ -98,16 +97,16 @@ public class Lan {
         if (id != lan.id) {
             return false;
         }
-        if (segments != null ? !segments.equals(lan.segments) : lan.segments != null) {
+        if (!segments.equals(lan.segments)) {
             return false;
         }
-        return name != null ? name.equals(lan.name) : lan.name == null;
+        return Objects.equals(name, lan.name);
 
     }
 
     @Override
     public int hashCode() {
-        int result = segments != null ? segments.hashCode() : 0;
+        int result = segments.hashCode();
         result = 31 * result + id;
         result = 31 * result + (name != null ? name.hashCode() : 0);
         return result;

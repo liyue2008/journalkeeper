@@ -19,15 +19,15 @@ import io.journalkeeper.rpc.remoting.transport.Transport;
 /**
  * 通信事件
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/8/15
  */
 public class TransportEvent {
 
     // 类型
-    private TransportEventType type;
+    private final TransportEventType type;
     // 通道
-    private Transport transport;
+    private final Transport transport;
 
     public TransportEvent(TransportEventType type, Transport transport) {
         this.type = type;

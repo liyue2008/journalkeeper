@@ -24,6 +24,7 @@ import java.util.Properties;
  * @author LiYue
  * Date: 2019-03-14
  */
+@SuppressWarnings("UnusedReturnValue")
 public interface JournalPersistence extends Closeable {
     /**
      * 最小位置，初始化为0
@@ -57,8 +58,6 @@ public interface JournalPersistence extends Closeable {
      */
     default void flush() throws IOException {
     }
-
-    ;
 
     /**
      * 截断最新的日志。

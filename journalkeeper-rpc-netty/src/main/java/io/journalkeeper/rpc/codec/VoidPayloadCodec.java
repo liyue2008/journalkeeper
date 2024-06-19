@@ -25,12 +25,12 @@ import io.netty.buffer.ByteBuf;
 public class VoidPayloadCodec implements PayloadCodec<JournalKeeperHeader, VoidPayload> {
 
     @Override
-    public Object decode(JournalKeeperHeader header, ByteBuf buffer) throws Exception {
+    public Object decode(JournalKeeperHeader header, ByteBuf buffer) {
         return null;
     }
 
     @Override
-    public void encode(VoidPayload payload, ByteBuf buffer, JournalKeeperHeader header) throws Exception {
+    public void encode(VoidPayload payload, ByteBuf buffer, JournalKeeperHeader header) {
 
     }
 }

@@ -29,7 +29,7 @@ public enum InternalEntryType {
 
     ;
 
-    private int value;
+    private final int value;
 
     InternalEntryType(int value) {
         this.value = value;

@@ -18,7 +18,7 @@ import io.netty.channel.ChannelHandler;
 /**
  * 通道处理提供
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/8/16
  */
 public interface ChannelHandlerProvider {

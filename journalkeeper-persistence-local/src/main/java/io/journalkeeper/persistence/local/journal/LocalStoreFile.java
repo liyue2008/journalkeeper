@@ -37,6 +37,7 @@ import java.util.concurrent.locks.StampedLock;
 /**
  * 支持并发、带缓存页、顺序写入的文件
  */
+@SuppressWarnings("ResultOfMethodCallIgnored")
 public class LocalStoreFile implements StoreFile, BufferHolder {
     private static final Logger logger = LoggerFactory.getLogger(LocalStoreFile.class);
     // 缓存页类型
@@ -62,7 +63,7 @@ public class LocalStoreFile implements StoreFile, BufferHolder {
     private ByteBuffer pageBuffer = null;
     private int bufferType = NO_BUFFER;
 
-    private MemoryCacheManager bufferPool;
+    private final MemoryCacheManager bufferPool;
     private final int capacity;
     private long lastAccessTime = System.currentTimeMillis();
 
@@ -72,7 +73,7 @@ public class LocalStoreFile implements StoreFile, BufferHolder {
     private int writePosition = 0;
 
     private long timestamp = -1L;
-    private AtomicBoolean forced = new AtomicBoolean(false);
+    private final AtomicBoolean forced = new AtomicBoolean(false);
     private volatile boolean writeClosed = true;
     private FileChannel fileChannel;
     private RandomAccessFile raf;

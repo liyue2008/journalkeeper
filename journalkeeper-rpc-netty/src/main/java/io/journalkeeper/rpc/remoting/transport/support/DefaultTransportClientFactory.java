@@ -30,15 +30,15 @@ import io.journalkeeper.rpc.remoting.transport.config.ClientConfig;
 /**
  * 默认通信客户端工厂
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/8/24
  */
 public class DefaultTransportClientFactory implements TransportClientFactory {
 
-    private Codec codec;
-    private CommandHandlerFactory commandHandlerFactory;
-    private ExceptionHandler exceptionHandler;
-    private EventBus<TransportEvent> transportEventBus;
+    private final Codec codec;
+    private final CommandHandlerFactory commandHandlerFactory;
+    private final ExceptionHandler exceptionHandler;
+    private final EventBus<TransportEvent> transportEventBus;
 
     public DefaultTransportClientFactory(Codec codec) {
         this(codec, (CommandHandlerFactory) null);

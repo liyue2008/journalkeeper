@@ -24,7 +24,7 @@ import java.net.URI;
 
 /**
  * JournalKeeper协议头编解码器
- *
+ * <p>
  * MAGIC: 4 bytes
  * VERSION: 1 byte
  * IDENTITY: 1 byte, 8 bits (High to Low):
@@ -32,7 +32,7 @@ import java.net.URI;
  *      6: Unused
  *      5: Unused
  *      4: Unused
- *
+ * <p>
  *      3: Unused
  *      2: Unused
  *      1: ONE_WAY: 1: ONE_WAY 0: REQUEST_RESPONSE
@@ -44,7 +44,7 @@ import java.net.URI;
  * ERROR(Response only): variable
  * DESTINATION: variable
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/8/21
  */
 public class JournalKeeperHeaderCodec implements Codec {

@@ -24,12 +24,12 @@ import java.util.List;
 /**
  * 默认命令调用链工厂
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/8/16
  */
 public class DefaultCommandHandlerFilterFactory implements CommandHandlerFilterFactory {
 
-    private List<CommandHandlerFilter> commandHandlerFilters;
+    private final List<CommandHandlerFilter> commandHandlerFilters;
 
     public DefaultCommandHandlerFilterFactory() {
         this.commandHandlerFilters = initCommandHandlerFilters();

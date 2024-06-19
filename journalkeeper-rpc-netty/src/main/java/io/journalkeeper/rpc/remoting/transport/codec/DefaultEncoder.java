@@ -24,22 +24,22 @@ import org.slf4j.LoggerFactory;
 /**
  * jmq编码
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/8/21
  */
 public class DefaultEncoder implements Encoder {
 
     protected static final Logger logger = LoggerFactory.getLogger(DefaultEncoder.class);
 
-    private Codec headerCodec;
-    private PayloadCodecFactory payloadCodecFactory;
+    private final Codec headerCodec;
+    private final PayloadCodecFactory payloadCodecFactory;
 
     public DefaultEncoder(Codec headerCodec, PayloadCodecFactory payloadCodecFactory) {
         this.headerCodec = headerCodec;
         this.payloadCodecFactory = payloadCodecFactory;
     }
 
-    @SuppressWarnings("unchecked")
+    @SuppressWarnings({"unchecked", "rawtypes"})
     @Override
     public void encode(Object obj, ByteBuf buffer) throws TransportException.CodecException {
         try {

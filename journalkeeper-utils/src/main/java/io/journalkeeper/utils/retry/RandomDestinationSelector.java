@@ -38,10 +38,10 @@ public class RandomDestinationSelector<D> implements DestinationSelector<D> {
                 .filter(d -> !usedDestinations.contains(d))
                 .collect(Collectors.toList());
         // 如果都用过了，那就都可以选
-        if (forSelected.size() == 0) {
+        if (forSelected.isEmpty()) {
             forSelected = new ArrayList<>(allDestinations);
         }
-        if (forSelected.size() > 0) {
+        if (!forSelected.isEmpty()) {
             return forSelected.get(ThreadLocalRandom.current().nextInt(forSelected.size()));
         } else {
             return null;

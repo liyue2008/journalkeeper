@@ -10,6 +10,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
+@SuppressWarnings("ALL")
 public class ActorTest {
 
     @Test
@@ -137,6 +138,7 @@ public class ActorTest {
 
     // TOPIC 同名方法
 
+    @SuppressWarnings("SameReturnValue")
     private static class TopicNameHandlerFunctions {
         private final CountDownLatch latch;
 
@@ -236,6 +238,7 @@ public class ActorTest {
 
     // annotation
 
+    @SuppressWarnings("SameReturnValue")
     private static class AnnotationHandlerFunctions {
         private final CountDownLatch latch;
 
@@ -849,6 +852,7 @@ public class ActorTest {
         Assert.assertTrue(latch.await(10, TimeUnit.SECONDS));
     }
 
+    @SuppressWarnings("SameReturnValue")
     private static class ResponseManuallyCls {
         private Actor actor;
         @ActorListener

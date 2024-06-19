@@ -27,14 +27,14 @@ import java.net.URI;
  */
 public class UpdateVotersRequestCodec extends GenericPayloadCodec<UpdateVotersRequest> implements Type {
     @Override
-    protected void encodePayload(JournalKeeperHeader header, UpdateVotersRequest request, ByteBuf buffer) throws Exception {
+    protected void encodePayload(JournalKeeperHeader header, UpdateVotersRequest request, ByteBuf buffer) {
         CodecSupport.encodeList(buffer, request.getOldConfig(), (obj, buffer1) -> CodecSupport.encodeUri(buffer1, (URI) obj));
         CodecSupport.encodeList(buffer, request.getNewConfig(), (obj, buffer1) -> CodecSupport.encodeUri(buffer1, (URI) obj));
 
     }
 
     @Override
-    protected UpdateVotersRequest decodePayload(JournalKeeperHeader header, ByteBuf buffer) throws Exception {
+    protected UpdateVotersRequest decodePayload(JournalKeeperHeader header, ByteBuf buffer) {
         return new UpdateVotersRequest(
                 CodecSupport.decodeList(buffer, CodecSupport::decodeUri),
                 CodecSupport.decodeList(buffer, CodecSupport::decodeUri)

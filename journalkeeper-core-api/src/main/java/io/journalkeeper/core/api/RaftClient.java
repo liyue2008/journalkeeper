@@ -24,20 +24,20 @@ import java.util.concurrent.CompletableFuture;
  *
  * JournalKeeper RAFT API(JK-RAFT API)
  * Raft客户端。
- *
+ * <p>
  * {@link #update(java.util.List, boolean, io.journalkeeper.core.api.ResponseConfig)}方法用于写入操作命令，每条操作命令就是日志中的一个条目，
  * 操作命令在安全写入日志后，将在状态机中执行，
  * 执行的结果将会更新状态机中的状态。
- *
+ * <p>
  * {@link #query(byte[])}方法用于查询状态机中的数据。
- *
+ * <p>
  * 例如，状态机是一个关系型数据库（RDBMS），数据库中的数据就是“状态”，或者成为状态数据。
  * 在这里，可以把更新数据的SQL（UPDATE，INSERT, ALTER 等）作为操作命令，调用{@link #update(java.util.List, boolean, io.journalkeeper.core.api.ResponseConfig)}方法
  * 去在JournalKeeper集群中执行。JournalKeeper将操作命令复制到集群的每个节点上，
  * 并且可以保证在每个节点，用一样的顺序去执行这些SQL，更新每个节点的数据库，
  * 当这些操作命令都在每个节点的数据库中执行完成后，
  * 这些节点的数据库中必然有相同的数据。
- *
+ * <p>
  * 如果需要查询数据库中的数据，可以把查询SQL（SELECT）作为查询条件，
  * 调用{@link #query(byte[])}方法，JournalKeeper将查询命令发送给当前LEADER节点的状态机，
  * 也就是数据库，去执行查询SQL语句，然后将结果返回给客户端。
@@ -105,7 +105,7 @@ public interface RaftClient extends Watchable, ClusterReadyAware, ServerConfigAw
     default CompletableFuture<byte[]> update(UpdateRequest updateRequest, boolean includeHeader, ResponseConfig responseConfig) {
         return update(Collections.singletonList(updateRequest), includeHeader, responseConfig)
                 .thenApply(ers -> {
-                    if (null != ers && ers.size() > 0) {
+                    if (null != ers && !ers.isEmpty()) {
                         return ers.get(0);
                     }
                     return null;

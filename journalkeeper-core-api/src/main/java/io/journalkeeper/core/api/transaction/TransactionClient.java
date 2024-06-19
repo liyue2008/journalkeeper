@@ -24,7 +24,7 @@ import java.util.concurrent.CompletableFuture;
 /**
  * @author LiYue
  * Date: 2019/10/22
- *
+ * <p>
  * 日志事务确保一个事务内的所有日志，要么都写入成功，要么都写入失败。
  * 当事务成功提交后，这些日志将提交给状态机执行，如果事务未提交或者回滚，所有日志都不会被状态机执行。
  */

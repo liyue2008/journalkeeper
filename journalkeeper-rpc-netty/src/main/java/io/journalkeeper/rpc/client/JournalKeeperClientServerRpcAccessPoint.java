@@ -28,9 +28,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * Date: 2019-03-30
  */
 public class JournalKeeperClientServerRpcAccessPoint implements ClientServerRpcAccessPoint {
-    private final Properties properties;
     private final TransportClient transportClient;
-    private Map<URI, ClientServerRpcStub> serverInstances = new ConcurrentHashMap<>();
+    private final Map<URI, ClientServerRpcStub> serverInstances = new ConcurrentHashMap<>();
     public final String PROTOCOL_VERSION_KEY = "protocol.version";
     private final int protocolVersion;
 
@@ -41,7 +40,6 @@ public class JournalKeeperClientServerRpcAccessPoint implements ClientServerRpcA
         } catch (Exception e) {
             throw new RpcException(e);
         }
-        this.properties = properties;
         protocolVersion = Integer.parseInt(properties.getProperty(PROTOCOL_VERSION_KEY, String.valueOf(JournalKeeperHeader.DEFAULT_VERSION)));
 
     }

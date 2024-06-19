@@ -41,7 +41,7 @@ import java.util.concurrent.ExecutionException;
 /**
  * 默认通信
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/8/14
  */
 public class DefaultChannelTransport implements ChannelTransport {
@@ -300,7 +300,7 @@ public class DefaultChannelTransport implements ChannelTransport {
 
         protected static final Logger logger = LoggerFactory.getLogger(FutureListener.class);
 
-        protected ResponseFuture response;
+        protected final ResponseFuture response;
 
         public FutureListener(ResponseFuture response) {
             this.response = response;
@@ -316,9 +316,7 @@ public class DefaultChannelTransport implements ChannelTransport {
             String error = "send a request command to " + IpUtil.toAddress(channel.remoteAddress()) + " failed.";
             Throwable cause = response.getCause();
             if (cause != null) {
-                if (cause instanceof ClosedChannelException) {
-                    // 连接关闭了，则忽略该异常
-                } else {
+                if (!(cause instanceof ClosedChannelException)) {
                     logger.error(error, cause);
                 }
             } else {
@@ -341,7 +339,7 @@ public class DefaultChannelTransport implements ChannelTransport {
         }
 
         @Override
-        public void operationComplete(final ChannelFuture future) throws Exception {
+        public void operationComplete(final ChannelFuture future) {
             // 获取命令监听器
             response.setSuccess(future.isSuccess());
             if (response.isSuccess()) {
@@ -379,7 +377,7 @@ public class DefaultChannelTransport implements ChannelTransport {
         }
 
         @Override
-        public void operationComplete(final ChannelFuture future) throws Exception {
+        public void operationComplete(final ChannelFuture future) {
             // 获取命令监听器
             response.setSuccess(future.isSuccess());
             response.setCause(future.cause());
@@ -396,9 +394,9 @@ public class DefaultChannelTransport implements ChannelTransport {
 
     protected static class CallbackListener implements ChannelFutureListener {
 
-        private Command request;
-        private Command response;
-        private CommandCallback callback;
+        private final Command request;
+        private final Command response;
+        private final CommandCallback callback;
 
         public CallbackListener(Command request, Command response, CommandCallback callback) {
             this.request = request;
@@ -407,7 +405,7 @@ public class DefaultChannelTransport implements ChannelTransport {
         }
 
         @Override
-        public void operationComplete(ChannelFuture future) throws Exception {
+        public void operationComplete(ChannelFuture future) {
             if (callback != null) {
                 if (future.isSuccess()) {
                     callback.onSuccess(request, response);

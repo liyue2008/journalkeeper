@@ -21,7 +21,7 @@ import io.journalkeeper.rpc.remoting.transport.exception.TransportException;
 /**
  * 命令处理器抽象，具体的处理器实现类用于处理特定的命令类型。
  * 因此每种类型的命令应实现对应自己的处理器以实现具体的业务逻辑。
- *
+ * <p>
  * 以下是扩展接口，可以自定义线程池
  * @see ExecutorServiceProvider
  */

@@ -26,13 +26,13 @@ import io.netty.buffer.ByteBuf;
  */
 public class CreateTransactionResponseCodec extends LeaderResponseCodec<CreateTransactionResponse> implements Type {
     @Override
-    protected void encodeLeaderResponse(JournalKeeperHeader header, CreateTransactionResponse response, ByteBuf buffer) throws Exception {
+    protected void encodeLeaderResponse(JournalKeeperHeader header, CreateTransactionResponse response, ByteBuf buffer) {
         CodecSupport.encodeUUID(buffer, response.getTransactionId().getUuid());
         CodecSupport.encodeLong(buffer, response.getTimestamp());
     }
 
     @Override
-    protected CreateTransactionResponse decodeLeaderResponse(JournalKeeperHeader header, ByteBuf buffer) throws Exception {
+    protected CreateTransactionResponse decodeLeaderResponse(JournalKeeperHeader header, ByteBuf buffer) {
         return new CreateTransactionResponse(
                 new UUIDTransactionId(CodecSupport.decodeUUID(buffer)),
                 CodecSupport.decodeLong(buffer));

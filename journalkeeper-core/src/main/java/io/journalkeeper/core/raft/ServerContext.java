@@ -1,12 +1,10 @@
 package io.journalkeeper.core.raft;
 
 import io.journalkeeper.core.api.RaftJournal;
-import io.journalkeeper.core.api.ServerStatus;
 import io.journalkeeper.core.monitor.MonitoredJournal;
 import io.journalkeeper.core.monitor.MonitoredVoter;
 import io.journalkeeper.utils.actor.PostOffice;
 import io.journalkeeper.utils.config.Config;
-import io.journalkeeper.utils.config.PropertiesConfigProvider;
 import io.journalkeeper.utils.event.EventBus;
 import io.journalkeeper.utils.state.StateServer;
 

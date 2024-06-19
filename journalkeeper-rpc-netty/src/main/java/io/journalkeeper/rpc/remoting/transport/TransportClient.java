@@ -23,7 +23,7 @@ import java.net.SocketAddress;
 /**
  * 通信服务
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/8/13
  */
 public interface TransportClient extends LifeCycle {

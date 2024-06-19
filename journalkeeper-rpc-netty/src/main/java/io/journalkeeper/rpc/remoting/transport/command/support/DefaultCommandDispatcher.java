@@ -26,16 +26,16 @@ import org.slf4j.LoggerFactory;
 /**
  * 命令调度器
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/8/13
  */
 public class DefaultCommandDispatcher implements CommandDispatcher {
 
     protected static final Logger logger = LoggerFactory.getLogger(DefaultCommandDispatcher.class);
 
-    private RequestBarrier requestBarrier;
-    private RequestHandler requestHandler;
-    private ResponseHandler responseHandler;
+    private final RequestBarrier requestBarrier;
+    private final RequestHandler requestHandler;
+    private final ResponseHandler responseHandler;
 
     public DefaultCommandDispatcher(RequestBarrier requestBarrier, RequestHandler requestHandler, ResponseHandler responseHandler) {
         this.requestBarrier = requestBarrier;

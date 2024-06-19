@@ -25,7 +25,7 @@ import io.netty.buffer.ByteBuf;
  */
 public class AsyncAppendEntriesResponseCodec extends ResponseCodec<AsyncAppendEntriesResponse> implements Type {
     @Override
-    protected void encodeResponse(JournalKeeperHeader header, AsyncAppendEntriesResponse response, ByteBuf buffer) throws Exception {
+    protected void encodeResponse(JournalKeeperHeader header, AsyncAppendEntriesResponse response, ByteBuf buffer) {
         //boolean success, long journalIndex, int term, int entryCount
         CodecSupport.encodeBoolean(buffer, response.isSuccess());
         CodecSupport.encodeLong(buffer, response.getJournalIndex());
@@ -34,7 +34,7 @@ public class AsyncAppendEntriesResponseCodec extends ResponseCodec<AsyncAppendEn
     }
 
     @Override
-    protected AsyncAppendEntriesResponse decodeResponse(JournalKeeperHeader header, ByteBuf buffer) throws Exception {
+    protected AsyncAppendEntriesResponse decodeResponse(JournalKeeperHeader header, ByteBuf buffer) {
         return new AsyncAppendEntriesResponse(
                 CodecSupport.decodeBoolean(buffer),
                 CodecSupport.decodeLong(buffer),

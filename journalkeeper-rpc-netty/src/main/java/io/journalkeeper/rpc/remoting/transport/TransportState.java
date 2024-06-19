@@ -16,7 +16,7 @@ package io.journalkeeper.rpc.remoting.transport;
 /**
  * TransportState
  * author: gaohaoxiang
- *
+ * <p>
  * date: 2018/12/28
  */
 public enum TransportState {
@@ -25,5 +25,4 @@ public enum TransportState {
 
     DISCONNECTED,
 
-    ;
 }
