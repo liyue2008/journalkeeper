@@ -1,5 +1,6 @@
 package io.journalkeeper.utils.actor;
 
+import io.journalkeeper.utils.actor.annotation.ActorMessage;
 import io.journalkeeper.utils.actor.annotation.ActorResponseListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,15 +13,16 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
+import static io.journalkeeper.utils.actor.ActorMsg.RESPONSE;
+
 class ActorResponseSupport {
 
-    static final String RESPONSE = "actor_response";
 
     private static final Logger logger = LoggerFactory.getLogger( ActorResponseSupport.class );
 
-    private Consumer<ActorResponse> defaultResponseHandler;
+    private Consumer<ActorMsg> defaultResponseHandler;
 
-    private final Map<String /* topic */, Consumer<ActorResponse>> responseHandlers;
+    private final Map<String /* topic */, Consumer<ActorMsg>> responseHandlers;
 
     private Object handlerInstance;
 
@@ -31,18 +33,18 @@ class ActorResponseSupport {
     ActorResponseSupport(ActorInbox inbox, ActorOutbox outbox) {
         responseHandlers = new HashMap<>();
         this.outbox = outbox;
-        inbox.addTopicHandlerFunction(RESPONSE, this::processResponse);
+        inbox.addTopicHandlerFunction(RESPONSE, new ResponseMessageConsumer());
     }
 
     <T> CompletableFuture<T> send(String addr, String topic, ActorRejectPolicy rejectPolicy, Object... payloads){
         ActorCompletableFuture<T> future = new ActorCompletableFuture<>();
-        ActorMsg request = this.outbox.createMsg(addr, topic, ActorMsg.Response.REQUIRED, payloads);
+        ActorMsg request = this.outbox.createMsg(addr, topic, ActorMsg.Response.REQUIRED, rejectPolicy, payloads);
         responseFutures.put(request, future);
-        this.outbox.send(request,rejectPolicy);
+        this.outbox.send(request);
         return future;
     }
 
-    void addTopicHandlerFunction(String topic, Consumer<ActorResponse> handler) {
+    void addTopicHandlerFunction(String topic, Consumer<ActorMsg> handler) {
         responseHandlers.put(topic, handler);
     }
 
@@ -52,21 +54,22 @@ class ActorResponseSupport {
     }
 
     void replyException(ActorMsg request, Throwable throwable) {
-        this.outbox.send(request.getSender(), RESPONSE, new ActorResponse(request, throwable));
+        this.outbox.send(this.outbox.createResponse(request, null, throwable));
+
     }
 
     void reply(ActorMsg request, Object result) {
-        this.outbox.send(request.getSender(), RESPONSE, new ActorResponse(request, result));
+        this.outbox.send(this.outbox.createResponse(request, result, null));
     }
 
-    void setDefaultHandlerFunction(Consumer<ActorResponse> handler) {
+    void setDefaultHandlerFunction(Consumer<ActorMsg> handler) {
         this.defaultResponseHandler = handler;
     }
 
     private Map<String, Method> annotationListeners = new HashMap<>();
 
 
-    private void processResponse(ActorResponse response) {
+    private void processResponse(ActorMsg response) {
         ActorMsg request = response.getRequest();
         if (request != null) {
             // 调用future
@@ -81,7 +84,7 @@ class ActorResponseSupport {
                 return;
             }
             // 显式注册的
-            Consumer<ActorResponse> handler = responseHandlers.get(request.getTopic());
+            Consumer<ActorMsg> handler = responseHandlers.get(request.getTopic());
             if (handler != null) {
                 handler.accept(response);
                 return;
@@ -97,7 +100,7 @@ class ActorResponseSupport {
                         return;
                     }
                     // 默认的响应方法
-                    Method method = handlerInstance.getClass().getDeclaredMethod(request.getTopic() + "Response", ActorResponse.class);
+                    Method method = handlerInstance.getClass().getDeclaredMethod(request.getTopic() + "Response", ActorMsg.class);
                     method.setAccessible(true);
                     method.invoke(handlerInstance, response);
                     return;
@@ -114,6 +117,13 @@ class ActorResponseSupport {
             } else {
                 logger.warn("No ongoing request for response: {}", response);
             }
+        }
+    }
+
+    private class ResponseMessageConsumer implements Consumer<ActorMsg> {
+        @Override
+        public void accept(@ActorMessage ActorMsg actorMsg) {
+            processResponse(actorMsg);
         }
     }
 }

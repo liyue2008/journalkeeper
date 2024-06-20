@@ -32,10 +32,10 @@ public class Actor {
     // 是否独占线程，独占线程有更好的性能
     private final boolean privatePostman;
 
-    private Actor(String addr, int inboxCapacity, int outboxCapacity, Map<String, Integer> outboxQueueMpa, boolean privatePostman) {
+    private Actor(String addr, int inboxCapacity, int outboxCapacity, Map<String, Integer> topicQueueMap, boolean privatePostman) {
         this.addr = addr;
-        this.outbox = new ActorOutbox(outboxCapacity, addr, outboxQueueMpa);
-        this.inbox = new ActorInbox(inboxCapacity, addr, outbox);
+        this.outbox = new ActorOutbox(outboxCapacity, addr, topicQueueMap);
+        this.inbox = new ActorInbox(inboxCapacity, addr, topicQueueMap, outbox);
         this.responseSupport = new ActorResponseSupport(inbox, outbox);
         this.privatePostman = privatePostman;
     }
@@ -187,7 +187,7 @@ public class Actor {
         return responseSupport.send(addr, topic, rejectPolicy, payloads);
     }
 
-    private void addTopicResponseHandlerFunction(String topic, Consumer<ActorResponse> handler) {
+    private void addTopicResponseHandlerFunction(String topic, Consumer<ActorMsg> handler) {
         responseSupport.addTopicHandlerFunction(topic, handler);
     }
 
@@ -203,7 +203,7 @@ public class Actor {
         responseSupport.replyException(request, throwable);
     }
 
-    private void setDefaultResponseHandlerFunction(Consumer<ActorResponse> handler) {
+    private void setDefaultResponseHandlerFunction(Consumer<ActorMsg> handler) {
         responseSupport.setDefaultHandlerFunction(handler);
 
     }
@@ -237,14 +237,14 @@ public class Actor {
         private final Map<String, BiFunction<?, ?, ?>> topicHandlerBiFunctionMap = new HashMap<>(); // <topic, handler>
         private final Map<String, BiConsumer<?, ?>> topicHandlerBiConsumerMap = new HashMap<>(); // <topic, handler>
         private final Map<String, Consumer<?>> topicHandlerConsumerMap = new HashMap<>(); // <topic, handler>
-        private final Map<String, Consumer<ActorResponse>> topicHandlerResponseConsumerMap = new HashMap<>();
+        private final Map<String, Consumer<ActorMsg>> topicHandlerResponseConsumerMap = new HashMap<>();
         private Consumer<ActorMsg> defaultHandlerFunction = null; // <topic, handler>
         private Object handlerInstance = null;
         private Object responseHandlerInstance = null;
         private int inboxCapacity = -1;
         private int outBoxCapacity = -1;
-        private final Map<String, Integer> outboxQueueMap = new HashMap<>();
-        private Consumer<ActorResponse> defaultResponseHandlerFunction = null;
+        private final Map<String, Integer> topicQueueMap = new HashMap<>();
+        private Consumer<ActorMsg> defaultResponseHandlerFunction = null;
         private boolean privatePostman = false;
         private Builder() {}
 
@@ -288,7 +288,7 @@ public class Actor {
             return this;
         }
 
-        public Builder addResponseHandlerFunction(String topic, Consumer<ActorResponse> handler) {
+        public Builder addResponseHandlerFunction(String topic, Consumer<ActorMsg> handler) {
             this.topicHandlerResponseConsumerMap.put(topic, handler);
             return this;
         }
@@ -298,7 +298,7 @@ public class Actor {
             return this;
         }
 
-        public Builder setDefaultResponseHandlerFunction(Consumer<ActorResponse> handler) {
+        public Builder setDefaultResponseHandlerFunction(Consumer<ActorMsg> handler) {
             this.defaultResponseHandlerFunction = handler;
             return this;
         }
@@ -317,11 +317,11 @@ public class Actor {
         }
 
         public Builder addTopicQueue(String topic) {
-            this.outboxQueueMap.put(topic, -1);
+            this.topicQueueMap.put(topic, -1);
             return this;
         }
         public Builder addTopicQueue(String topic, int queueCapacity) {
-            this.outboxQueueMap.put(topic, queueCapacity);
+            this.topicQueueMap.put(topic, queueCapacity);
             return this;
         }
 
@@ -330,7 +330,7 @@ public class Actor {
             return this;
         }
         public Actor build() {
-            Actor actor = new Actor(addr, inboxCapacity, outBoxCapacity, outboxQueueMap, privatePostman);
+            Actor actor = new Actor(addr, inboxCapacity, outBoxCapacity, topicQueueMap, privatePostman);
             this.topicHandlerRunnableMap.forEach(actor::addTopicHandlerFunction);
             this.topicHandlerSupplierMap.forEach(actor::addTopicHandlerFunction);
             this.topicHandlerFunctionMap.forEach(actor::addTopicHandlerFunction);

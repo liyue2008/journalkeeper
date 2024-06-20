@@ -26,7 +26,7 @@ public class PubSubActor {
         if (subscribers == null) {
             return;
         }
-        if (msg.getResponse() == ActorMsg.Response.REQUIRED) {
+        if (msg.getContext().getResponseConfig() == ActorMsg.Response.REQUIRED) {
             List<CompletableFuture<?>> futures = new ArrayList<>(subscribers.size());
             for (String subscriber : subscribers) {
                 CompletableFuture<?> future = actor.sendThen(subscriber, msg.getTopic(), msg.getPayloads());

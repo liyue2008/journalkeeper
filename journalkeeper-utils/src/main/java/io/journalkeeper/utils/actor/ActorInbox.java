@@ -14,8 +14,6 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.function.*;
 import java.util.stream.Collectors;
 
-import static io.journalkeeper.utils.actor.ActorResponseSupport.RESPONSE;
-
 class ActorInbox {
     private static final Logger logger = LoggerFactory.getLogger( ActorInbox.class );
     // 收件箱队列
@@ -33,15 +31,30 @@ class ActorInbox {
 
     private final ActorOutbox outbox;
 
+    private final Map<String, BlockingQueue<ActorMsg>> topicQueueMap;
+    private final List<BlockingQueue<ActorMsg>> allMsgQueues;
+
     // 收到消息后，通知邮递员派送消息的响铃
     private Object ring;
 
-    ActorInbox(int capacity, String myAddr, ActorOutbox outbox) {
+    ActorInbox(int capacity, String myAddr, Map<String, Integer> topicQueueMap, ActorOutbox outbox) {
         this.myAddr = myAddr;
         msgQueue = new LinkedBlockingQueue<>(capacity < 0 ? DEFAULT_CAPACITY : capacity);
         this.outbox = outbox;
         this.defaultHandlerFunction = null;
         this.topicHandlerFunctions = new ConcurrentHashMap<>();
+        this.topicQueueMap = new HashMap<>();
+        if (null != topicQueueMap) {
+            for (Map.Entry<String, Integer> entry : topicQueueMap.entrySet()) {
+                this.topicQueueMap.put(entry.getKey(), new LinkedBlockingQueue<>(entry.getValue() < 0 ? DEFAULT_CAPACITY : entry.getValue()));
+            }
+        }
+
+        allMsgQueues = new ArrayList<>();
+        allMsgQueues.add(msgQueue);
+        for (Map.Entry<String, BlockingQueue<ActorMsg>> entry : this.topicQueueMap.entrySet()) {
+            allMsgQueues.add(entry.getValue());
+        }
     }
 
     String getMyAddr() {
@@ -149,18 +162,20 @@ class ActorInbox {
                     ret = method.invoke(instance, msg.getPayloads());
                 }
                 if (needResponse(msg, method)) {
-                    this.outbox.send(msg.getSender(), RESPONSE, new ActorResponse(msg, ret));
+                    this.outbox.send(this.outbox.createResponse(msg, ret, null));
                 }
             } catch (InvocationTargetException ite) {
                 if (needResponse(msg, method)) {
-                    this.outbox.send(msg.getSender(), RESPONSE, new ActorResponse(msg, ite.getCause()));
+                    this.outbox.send(this.outbox.createResponse(msg, null, ite.getCause()));
+
                 }
                 logger.info("Invoke message handler exception, handler: {}, msg: {}, exception: ", instance.getClass().getName() + "." + method.getName() + "(...)", msg, ite.getCause());
             } catch (IllegalArgumentException e) {
                 if (needResponse(msg, method)) {
-                    this.outbox.send(msg.getSender(), RESPONSE, new ActorResponse(msg, e));
+                    this.outbox.send(this.outbox.createResponse(msg, null, e));
+
                 }
-                logger.info("Invoke message handler exception, handler: {}, msg: {}, exception: {}.", instance.getClass().getName() + "." + method.getName() + "(...)", msg, e.toString());
+                logger.info("Invoke message handler failed, cause: illegal argument, handler: {}, msg: {}.", instance.getClass().getName() + "." + method.getName() + "(...)", msg);
 
             }
             return true;
@@ -169,8 +184,8 @@ class ActorInbox {
     }
 
     private boolean needResponse(ActorMsg msg, Method method) {
-        return (msg.getResponse() == ActorMsg.Response.REQUIRED
-                || (msg.getResponse() == ActorMsg.Response.DEFAULT && !void.class.equals(method.getReturnType()))) && !method.isAnnotationPresent(ResponseManually.class);
+        return (msg.getContext().getResponseConfig() == ActorMsg.Response.REQUIRED
+                || (msg.getContext().getResponseConfig() == ActorMsg.Response.DEFAULT && !void.class.equals(method.getReturnType()))) && !method.isAnnotationPresent(ResponseManually.class);
     }
 
     private void invokeAnnotationListener(ActorMsg msg, Method method) throws IllegalAccessException {
@@ -180,7 +195,7 @@ class ActorInbox {
                 method.invoke(handlerInstance);
             } catch (InvocationTargetException ite) {
                 if (!void.class.equals(method.getReturnType())) {
-                    this.outbox.send(msg.getSender(), RESPONSE, new ActorResponse(msg, ite.getCause()));
+                    this.outbox.send(this.outbox.createResponse(msg, null, ite.getCause()));
                 }
                 logger.info("Invoke message handler exception, handler: {}, msg: {}, exception: {}.", handlerInstance.getClass().getName() + "." + method.getName() + "(...)", msg, ite.getCause().toString());
             }
@@ -203,7 +218,16 @@ class ActorInbox {
      *  true：收件箱里有消息，且处理了一个消息，无论处理成功与否，都返回true；
      *  false：收件箱里没有消息，返回false。
      */
-    boolean processOneMsg(){
+    boolean processOneMsg() {
+        boolean hasMessage = false;
+        for (BlockingQueue<ActorMsg> queue : allMsgQueues) {
+            if (processOneMsgFromQueue(queue)) {
+                hasMessage = true;
+            }
+        }
+        return hasMessage;
+    }
+    private boolean processOneMsgFromQueue(BlockingQueue<ActorMsg> queue){
         ActorMsg msg = msgQueue.poll();
         if (msg != null) {
             try {
@@ -273,7 +297,8 @@ class ActorInbox {
 
 
     void receive(ActorMsg msg) {
-        msgQueue.add(msg);
+        BlockingQueue<ActorMsg> queue = topicQueueMap.getOrDefault(msg.getQueueName(), msgQueue);
+        queue.add(msg);
         ring();
     }
 

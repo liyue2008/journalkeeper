@@ -11,10 +11,7 @@ import io.journalkeeper.core.state.ApplyReservedEntryInterceptor;
 import io.journalkeeper.core.state.ConfigState;
 import io.journalkeeper.core.state.Snapshot;
 import io.journalkeeper.core.transaction.JournalTransactionManager;
-import io.journalkeeper.exceptions.IndexUnderflowException;
-import io.journalkeeper.exceptions.InstallSnapshotException;
-import io.journalkeeper.exceptions.NotLeaderException;
-import io.journalkeeper.exceptions.UpdateConfigurationException;
+import io.journalkeeper.exceptions.*;
 import io.journalkeeper.metric.JMetric;
 import io.journalkeeper.monitor.FollowerMonitorInfo;
 import io.journalkeeper.monitor.LeaderFollowerMonitorInfo;
@@ -25,6 +22,7 @@ import io.journalkeeper.rpc.client.*;
 import io.journalkeeper.rpc.server.*;
 import io.journalkeeper.utils.actor.Actor;
 import io.journalkeeper.utils.actor.ActorMsg;
+import io.journalkeeper.utils.actor.ActorRejectPolicy;
 import io.journalkeeper.utils.actor.annotation.*;
 import io.journalkeeper.utils.config.Config;
 import io.journalkeeper.utils.event.Event;
@@ -91,7 +89,6 @@ public class VoterActor {
 
     private boolean installSnapshotInProgress = false;
     private boolean firstSnapshotInstallationSucceeded = false;
-    // TODO 选择parent节点的逻辑，如果调用失败，更换parent节点；
     private StickySession<URI> parentSession = null; // 父节点URI
 
 
@@ -560,9 +557,11 @@ public class VoterActor {
                         }
                         actor.reply(msg, new AsyncAppendEntriesResponse(true, request.getPrevLogIndex() + 1,
                                 request.getTerm(), request.getEntries().size()));
+//                        logger.info("{} AppendEntries success, prevLogIndex:{}, leaderCommit:{}, maxIndex:{}", state.getLocalUri(), request.getPrevLogIndex(), request.getLeaderCommit(), request.getMaxIndex());
                     })
                     .exceptionally(t -> {
                         actor.reply(msg, new AsyncAppendEntriesResponse(t));
+                        logger.info("{} AppendEntries failed, prevLogIndex:{}, leaderCommit:{}, maxIndex:{}", state.getLocalUri(), request.getPrevLogIndex(), request.getLeaderCommit(), request.getMaxIndex());
                         return null;
                     });
         }
@@ -1152,7 +1151,7 @@ public class VoterActor {
             if (timestamp < deadline) {
                 actor.reply(requestMsg, new UpdateClusterStateResponse(new TimeoutException()));
                 this.metric.mark(System.nanoTime() - metricStartTimeNs, requestSize);
-                logger.info("Remove timeout request: {}", requestMsg);
+//                logger.info("Remove timeout request: {}", requestMsg);
                 return true;
             }
             return false;
@@ -1273,7 +1272,7 @@ public class VoterActor {
                             entries, state.commitIndex(), maxIndex);
 
             waitingForResponse = true;
-            actor.<AsyncAppendEntriesResponse>sendThen("Rpc", "asyncAppendEntries", new RpcMsg<>(this.uri, request))
+            actor.<AsyncAppendEntriesResponse>sendThen("Rpc", "asyncAppendEntries", ActorRejectPolicy.EXCEPTION,new RpcMsg<>(this.uri, request))
                     .thenAccept(resp -> handleAppendEntriesResponse(resp, entries.size(), fistSnapShotEntry.getKey()))
                     .exceptionally(e -> {
                         logger.warn("Replication execution exception, from {} to {}, cause: {}.", state.getLocalUri(), uri, null == e.getCause() ? e.getMessage() : e.getCause().getMessage());
@@ -1281,7 +1280,7 @@ public class VoterActor {
                     })
                     .whenComplete((c, r) -> {
                         waitingForResponse = false;
-                        if (nextIndex < journal.maxIndex()) {
+                        if (null != r && nextIndex < journal.maxIndex()) {
                             actor.send("Voter", "replication");
                         }
                     });
@@ -1458,7 +1457,9 @@ public class VoterActor {
                                                 firstSnapshotInstallationSucceeded = true;
                                             }
                                         }).exceptionally(t -> {
-                                            // TODO: 如果是网络错误更换parent节点。
+                                            if(t instanceof TransactionException || t instanceof RequestTimeoutException) {
+                                                parentSession.rebind();
+                                            }
                                             logger.warn("ObserverInstallSnapshot exception {}", t.getMessage());
                                             throw new InstallSnapshotException(t);
                                         });
@@ -1490,6 +1491,12 @@ public class VoterActor {
                     } else if (response.getStatusCode() != StatusCode.INDEX_OVERFLOW) {
                         logger.warn("Pull entry failed! {}", response.errorString());
                     }
+                }).exceptionally(t -> {
+                    if(t instanceof TransactionException || t instanceof RequestTimeoutException) {
+                        parentSession.rebind();
+                    }
+                    logger.warn("Pull entry failed!", t);
+                    throw new CompletionException(t);
                 });
     }
 

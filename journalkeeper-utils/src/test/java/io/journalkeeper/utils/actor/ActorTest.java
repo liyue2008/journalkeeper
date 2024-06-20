@@ -608,13 +608,13 @@ public class ActorTest {
         }
 
         @ActorResponseListener(topic = "my_topic1")
-        private void onResponse(ActorResponse response) {
+        private void onResponse(ActorMsg response) {
             Assert.assertEquals("result", response.getResult());
             Assert.assertNull(response.getThrowable());
             latch.countDown();
         }
         @ActorResponseListener(topic = "my_topic2")
-        private void onException(ActorResponse response) {
+        private void onException(ActorMsg response) {
             Assert.assertEquals("exception msg", response.getThrowable().getMessage());
             Assert.assertNull(response.getResult());
             latch.countDown();
@@ -660,7 +660,7 @@ public class ActorTest {
         }
 
 
-        private void topicResponse(ActorResponse response) {
+        private void topicResponse(ActorMsg response) {
             Assert.assertEquals("result", response.getResult());
             Assert.assertNull(response.getThrowable());
             latch.countDown();

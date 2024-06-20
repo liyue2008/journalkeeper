@@ -27,19 +27,19 @@ class ActorOutbox {
 
     private final List<BlockingQueue<ActorMsg>> allMsgQueues;
 
-    ActorOutbox(int capacity, String myAddr, Map<String, Integer> outboxQueueMap) {
+    ActorOutbox(int capacity, String myAddr, Map<String, Integer> topicQueueMap) {
         this.msgQueue = new LinkedBlockingQueue<>(capacity < 0 ? DEFAULT_CAPACITY : capacity);
         this.myAddr = myAddr;
         this.topicQueueMap = new HashMap<>();
-        if (null != outboxQueueMap) {
-            for (Map.Entry<String, Integer> entry : outboxQueueMap.entrySet()) {
-                topicQueueMap.put(entry.getKey(), new LinkedBlockingQueue<>(entry.getValue() < 0 ? DEFAULT_CAPACITY : entry.getValue()));
+        if (null != topicQueueMap) {
+            for (Map.Entry<String, Integer> entry : topicQueueMap.entrySet()) {
+                this.topicQueueMap.put(entry.getKey(), new LinkedBlockingQueue<>(entry.getValue() < 0 ? DEFAULT_CAPACITY : entry.getValue()));
             }
         }
 
         allMsgQueues = new ArrayList<>();
         allMsgQueues.add(msgQueue);
-        for (Map.Entry<String, BlockingQueue<ActorMsg>> entry : topicQueueMap.entrySet()) {
+        for (Map.Entry<String, BlockingQueue<ActorMsg>> entry : this.topicQueueMap.entrySet()) {
             allMsgQueues.add(entry.getValue());
         }
     }
@@ -47,16 +47,17 @@ class ActorOutbox {
         return send(addr, topic, ActorMsg.Response.DEFAULT, payloads);
     }
     ActorMsg send(String addr, String topic, ActorMsg.Response response, Object... payloads){
-        return send(createMsg(addr, topic,response, payloads), ActorRejectPolicy.EXCEPTION);
+        return send(createMsg(addr, topic,response,ActorRejectPolicy.EXCEPTION, payloads));
     }
 
     ActorMsg send(String addr, String topic, ActorMsg.Response response, ActorRejectPolicy rejectPolicy, Object... payloads){
-        return send(createMsg(addr, topic,response, payloads), rejectPolicy);
+        return send(createMsg(addr, topic,response , rejectPolicy, payloads)) ;
     }
 
-    ActorMsg send(ActorMsg actorMsg, ActorRejectPolicy rejectPolicy) {
+    ActorMsg send(ActorMsg actorMsg) {
         try {
-            BlockingQueue<ActorMsg> queue = topicQueueMap.getOrDefault(actorMsg.getTopic(), msgQueue);
+            ActorRejectPolicy rejectPolicy = actorMsg.getContext().getRejectPolicy();
+            BlockingQueue<ActorMsg> queue = topicQueueMap.getOrDefault(actorMsg.getQueueName(), msgQueue);
             ActorMsg ret = actorMsg;
             switch (rejectPolicy) {
                 case EXCEPTION:
@@ -77,15 +78,20 @@ class ActorOutbox {
             }
             ring();
             return ret;
-        } catch (InterruptedException e) {
+        } catch (IllegalStateException e) {
+            throw new ActorQueueFullException(e);
+        }catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
     }
 
-    ActorMsg createMsg(String addr, String topic, ActorMsg.Response response, Object... payloads){
-        return new ActorMsg(msgId.getAndIncrement(), myAddr, addr, topic,response, payloads);
+    ActorMsg createMsg(String addr, String topic, ActorMsg.Response response, ActorRejectPolicy rejectPolicy, Object... payloads){
+        return new ActorMsg(msgId.getAndIncrement(), myAddr, addr, topic,new ActorMsgCtx(response, ActorMsg.Type.REQUEST, rejectPolicy), payloads);
     }
 
+    ActorMsg createResponse(ActorMsg request, Object result, Throwable throwable) {
+        return new ActorMsg(msgId.getAndIncrement(), myAddr, request, result, throwable);
+    }
 
 
 

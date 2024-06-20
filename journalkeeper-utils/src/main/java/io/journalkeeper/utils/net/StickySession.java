@@ -20,13 +20,13 @@ public class StickySession <T>{
         return session;
     }
 
-    public T rebind() {
+    public void rebind() {
         T newSession = session;
         if (remotes.size() > 1) {
             while (Objects.equals(newSession, session)) {
                 newSession = remotes.get(ThreadLocalRandom.current().nextInt(remotes.size()));
             }
         }
-        return session = newSession;
+        session = newSession;
     }
 }
