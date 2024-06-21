@@ -228,7 +228,7 @@ class ActorInbox {
         return hasMessage;
     }
     private boolean processOneMsgFromQueue(BlockingQueue<ActorMsg> queue){
-        ActorMsg msg = msgQueue.poll();
+        ActorMsg msg = queue.poll();
         if (msg != null) {
             try {
                 if(msg.getTopic().startsWith("@")) {

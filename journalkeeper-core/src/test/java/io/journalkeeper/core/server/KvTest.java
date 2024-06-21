@@ -412,7 +412,7 @@ public class KvTest {
 
         // 读取数据，验证是否正确
         for (int i = 0; i < 10; i++) {
-            Assert.assertEquals(String.valueOf(i), kvClient.query("GET", "key" + i).get());
+            Assert.assertEquals(String.valueOf(i), kvClient.query("GET", "key" + i, QueryConsistency.STRICT).get());
         }
 
         oldAdminClient.stop();

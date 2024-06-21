@@ -110,12 +110,12 @@ public class ActorMsg {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         ActorMsg actorMsg = (ActorMsg) o;
-        return sequentialId == actorMsg.sequentialId && Objects.equals(sender, actorMsg.sender) && Objects.equals(receiver, actorMsg.receiver) && Objects.equals(topic, actorMsg.topic) && Objects.deepEquals(payloads, actorMsg.payloads) && Objects.equals(context, actorMsg.context);
+        return sequentialId == actorMsg.sequentialId && Objects.equals(sender, actorMsg.sender);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(sequentialId, sender, receiver, topic, Arrays.hashCode(payloads), context);
+        return Objects.hash(sequentialId, sender);
     }
 
     public ActorMsg getRequest() {
