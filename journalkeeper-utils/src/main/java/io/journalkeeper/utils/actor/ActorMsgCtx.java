@@ -6,6 +6,7 @@ public class ActorMsgCtx {
     private final ActorMsg.Response responseConfig;
     private final ActorMsg.Type type;
     private final ActorRejectPolicy rejectPolicy;
+    private final ActorMetric metric = new ActorMetric();
     public ActorMsgCtx() {
         this(ActorMsg.Response.DEFAULT, ActorMsg.Type.REQUEST, ActorRejectPolicy.EXCEPTION);
     }
@@ -47,5 +48,9 @@ public class ActorMsgCtx {
                 ", type=" + type +
                 ", rejectPolicy=" + rejectPolicy +
                 '}';
+    }
+
+    public ActorMetric getMetric() {
+        return metric;
     }
 }

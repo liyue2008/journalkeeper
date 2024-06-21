@@ -140,10 +140,9 @@ public class VoterActor {
     @ActorListener
     private RequestVoteResponse requestVote(RequestVoteRequest request) {
         logger.debug("RequestVoteRpc received: term: {}, candidate: {}, " +
-                        "lastLogIndex: {}, lastLogTerm: {}, fromPreferredLeader: {}, isPreVote: {}, {}.",
+                        "lastLogIndex: {}, lastLogTerm: {}, fromPreferredLeader: {}, isPreVote: {}.",
                 request.getTerm(), request.getCandidate(),
-                request.getLastLogIndex(), request.getLastLogTerm(), request.isFromPreferredLeader(), request.isPreVote(),
-                voterInfo());
+                request.getLastLogIndex(), request.getLastLogTerm(), request.isFromPreferredLeader(), request.isPreVote());
         String rejectMsg;
         int currentTerm = this.term;
 
@@ -191,9 +190,9 @@ public class VoterActor {
         }
 
         if(request.isPreVote()) {
-            logger.debug("Grant pre vote to candidate {}, {}.", request.getCandidate(), voterInfo());
+            logger.debug("Grant pre vote to candidate {}.", request.getCandidate());
         } else {
-            logger.debug("Grant vote to candidate {}, {}.", request.getCandidate(), voterInfo());
+            logger.debug("Grant vote to candidate {}.", request.getCandidate());
             this.votedFor = request.getCandidate();
         }
         return new RequestVoteResponse(currentTerm, true);
@@ -216,7 +215,7 @@ public class VoterActor {
     private boolean checkTerm(int term) {
         boolean isTermChanged;
             if (term > this.term) {
-                logger.info("Set current term from {} to {}, {}.", this.term, term, voterInfo());
+                logger.info("Set current term from {} to {}.", this.term, term);
                 this.term = term;
                 this.votedFor = null;
 
@@ -245,7 +244,7 @@ public class VoterActor {
     }
 
     private RequestVoteResponse rejectAndResponse(int term, URI candidate, String rejectMessage) {
-        logger.info("Reject vote request from candidate {}, cause: [{}], {}.", candidate, rejectMessage, voterInfo());
+        logger.info("Reject vote request from candidate {}, cause: [{}].", candidate, rejectMessage);
         return new RequestVoteResponse(term, false);
     }
 
@@ -274,7 +273,7 @@ public class VoterActor {
     private void convertToCandidate() {
         VoterState oldState = raftState.current();
         raftState.convertTo(VoterState.CANDIDATE);
-        logger.info("Convert voter state from {} to CANDIDATE, electionTimeout: {}, {}.", oldState, electionTimeoutMs, voterInfo());
+        logger.info("Convert voter state from {} to CANDIDATE, electionTimeout: {}.", oldState, electionTimeoutMs);
         if(isSingleNodeCluster()) {
             convertToLeader();
         }
@@ -284,7 +283,7 @@ public class VoterActor {
     private void convertToPreVoting() {
         VoterState oldState = raftState.current();
         raftState.convertTo(VoterState.PRE_VOTING);
-        logger.info("Convert voter state from {} to PRE_VOTING, electionTimeout: {}, {}.", oldState, electionTimeoutMs, voterInfo());
+        logger.info("Convert voter state from {} to PRE_VOTING, electionTimeout: {}.", oldState, electionTimeoutMs);
         if(isSingleNodeCluster()){
             convertToCandidate();
         }
@@ -304,7 +303,7 @@ public class VoterActor {
         actor.send("State", "addInterceptor", this.journalTransactionInterceptor);
         this.updateClusterStateMetric = metricProvider.getMetric(MetricNames.METRIC_UPDATE_CLUSTER_STATE);
         this.replicationDestinations.forEach(ReplicationDestination::reset);
-        logger.info("Convert voter state from {} to LEADER, {}.", oldState, voterInfo());
+        logger.info("Convert voter state from {} to LEADER.", oldState);
 
     }
 
@@ -317,17 +316,16 @@ public class VoterActor {
         if (raftState.current().equals(VoterState.FOLLOWER) && state.getLocalUri().equals(state.getPreferredLeader())  &&
                 leaderMaxIndex - journal.maxIndex() < PREFERRED_LEADER_IN_SYNC_THRESHOLD && leaderMaxIndex > 0) {
             // 给当前LEADER发RPC，停服。
-            logger.info("Send DisableLeaderWriteRequest to {}, {}", leaderUri, voterInfo());
+            logger.info("Send DisableLeaderWriteRequest to {}", leaderUri);
             actor.<DisableLeaderWriteResponse>sendThen("Rpc","disableLeaderWrite", new RpcMsg<>(leaderUri, new DisableLeaderWriteRequest(10 * config.<Long>get("election_timeout_ms"), term)))
                     .thenAccept(response -> {
                         if (response.success() && response.getTerm() == term &&
                                 raftState.current() == VoterState.FOLLOWER ) {
-                            logger.info("Received DisableLeaderWriteResponse code: SUCCESS, {}",
-                                    voterInfo());
+                            logger.info("Received DisableLeaderWriteResponse code: SUCCESS");
                             this.readyForStartPreferredLeaderElection = true;
                         } else {
-                            logger.info("Ignore DisableLeaderWriteResponse code: {}, term: {}, errString: {}, {}",
-                                    response.getStatusCode(), response.getTerm(), response.errorString(), voterInfo());
+                            logger.info("Ignore DisableLeaderWriteResponse code: {}, term: {}, errString: {}",
+                                    response.getStatusCode(), response.getTerm(), response.errorString());
                         }
                     });
         }
@@ -420,9 +418,9 @@ public class VoterActor {
         int requestTerm = this.term + 1;
         if (!isPreVote) {
             this.term ++;
-            logger.info("Start election, {}", voterInfo());
+            logger.info("Start election");
         } else {
-            logger.info("Start pre vote, {}", voterInfo());
+            logger.info("Start pre vote");
         }
 
 
@@ -443,10 +441,9 @@ public class VoterActor {
                 actor.<RequestVoteResponse>sendThen("Rpc","requestVote", new RpcMsg<>(destination, request))
                         .thenAccept(response -> {
                             if (null != response) {
-                                logger.info("Request vote result {}, target uri: {}, {}...",
+                                logger.info("Request vote result {}, target uri: {}...",
                                         response.isVoteGranted(),
-                                        destination,
-                                        voterInfo());
+                                        destination);
                                 if (!checkTerm(response.getTerm())  && response.isVoteGranted()) {
                                     updateVotes(isWinTheElection, votesGrantedInNewConfig, votesGrantedInOldConfig, destination);
                                 }
@@ -463,12 +460,6 @@ public class VoterActor {
                         });
             }
         }
-    }
-    private String voterInfo() {
-        return String.format("voterState: %s, currentTerm: %d, minIndex: %d, " +
-                        "maxIndex: %d, commitIndex: %d, lastApplied: %d, uri: %s",
-                raftState.current(), this.term, journal.minIndex(),
-                journal.maxIndex(), journal.commitIndex(), state.lastApplied(), state.getLocalUri().toString());
     }
     @ActorSubscriber
     private void onStart(ServerContext context) {
@@ -506,7 +497,6 @@ public class VoterActor {
         }
 
         if (raftState.current() != VoterState.FOLLOWER && request.getLeader().equals(this.votedFor) && this.term == request.getTerm()) {
-            this.votedFor = null;
             convertToFollower();
         }
         setLeaderUri(request.getLeader());
@@ -525,12 +515,16 @@ public class VoterActor {
                     request.getTerm(), request.getEntries().size()));
             return;
         }
-
+        long start = System.currentTimeMillis();
         if (null == request.getEntries() || request.getEntries().isEmpty()) { // 心跳
             actor.sendThen("Journal", "commit", request.getLeaderCommit())
                     .thenRun(() -> {
                         if (leaderMaxIndex < request.getMaxIndex()) {
                             leaderMaxIndex = request.getMaxIndex();
+                        }
+                        long now = System.currentTimeMillis();
+                        if (now - start > 100L) {
+                            logger.info("AppendEntries cost {}ms", now - start);
                         }
                         actor.reply(msg, new AsyncAppendEntriesResponse(true, request.getPrevLogIndex() + 1,
                                 request.getTerm(), request.getEntries().size()));
@@ -548,12 +542,30 @@ public class VoterActor {
                     // follow it (§5.3)
                     //4. Append any new entries not already in the log
                     .thenCompose(ignored -> actor.sendThen("Journal", "compareOrAppendRaw", entries, request.getPrevLogIndex() + 1))
+                    .thenApply(p -> {
+                        long now = System.currentTimeMillis();
+                        if (now - start > 100L) {
+                            logger.info("compareOrAppendRaw cost {}ms", now - start);
+                        }
+                        return p;
+                    })
                     .thenCompose(ignored -> actor.sendThen("State", "maybeUpdateNonLeaderConfig", entries))
+                    .thenApply(p -> {
+                        long now = System.currentTimeMillis();
+                        if (now - start > 100L) {
+                            logger.info("maybeUpdateNonLeaderConfig cost {}ms", now - start);
+                        }
+                        return p;
+                    })
                     //5. If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry)
                     .thenCompose(ignored -> actor.sendThen("Journal", "commit", request.getLeaderCommit()))
                     .thenRun(() -> {
                         if (leaderMaxIndex < request.getMaxIndex()) {
                             leaderMaxIndex = request.getMaxIndex();
+                        }
+                        long now = System.currentTimeMillis();
+                        if (now - start > 100L) {
+                            logger.info("AppendEntries cost {}ms", now - start);
                         }
                         actor.reply(msg, new AsyncAppendEntriesResponse(true, request.getPrevLogIndex() + 1,
                                 request.getTerm(), request.getEntries().size()));
@@ -729,7 +741,7 @@ public class VoterActor {
             long N = calculateN(isAnyFollowerNextIndexUpdated);
             if (N > journal.commitIndex() && getTerm(N - 1) == this.term) {
                 if (logger.isDebugEnabled()) {
-                    logger.debug("Set commitIndex {} to {}, {}.", journal.commitIndex(), N, voterInfo());
+                    logger.debug("Set commitIndex {} to {}.", journal.commitIndex(), N);
                 }
                 actor.send("Journal", "commit", N);
             }
@@ -1007,7 +1019,7 @@ public class VoterActor {
                 (sortedHeartbeatResponseTimes[sortedHeartbeatResponseTimes.length / 2]) + config.<Long>get("check_quorum_timeout_ms");
         long now = System.currentTimeMillis();
         if (leaderShipDeadLineMs > 0 && now > leaderShipDeadLineMs) {
-            logger.info("Leader check quorum failed, convert myself to follower, {}.", voterInfo());
+            logger.info("Leader check quorum failed, convert myself to follower.");
             convertToFollower();
         }
     }
@@ -1272,7 +1284,8 @@ public class VoterActor {
                             entries, state.commitIndex(), maxIndex);
 
             waitingForResponse = true;
-            actor.<AsyncAppendEntriesResponse>sendThen("Rpc", "asyncAppendEntries", ActorRejectPolicy.EXCEPTION,new RpcMsg<>(this.uri, request))
+            long start = System.currentTimeMillis();
+            actor.<AsyncAppendEntriesResponse>sendThen("Rpc", "asyncAppendEntries", ActorRejectPolicy.EXCEPTION ,new RpcMsg<>(this.uri, request))
                     .thenAccept(resp -> handleAppendEntriesResponse(resp, entries.size(), fistSnapShotEntry.getKey()))
                     .exceptionally(e -> {
                         logger.warn("Replication execution exception, from {} to {}, cause: {}.", state.getLocalUri(), uri, null == e.getCause() ? e.getMessage() : e.getCause().getMessage());
@@ -1280,6 +1293,10 @@ public class VoterActor {
                     })
                     .whenComplete((c, r) -> {
                         waitingForResponse = false;
+                        long now = System.currentTimeMillis();
+                        if (now - start > 300L) {
+                            logger.info("Replication takes: {}ms.).", now - start);
+                        }
                         if (null != r && nextIndex < journal.maxIndex()) {
                             actor.send("Voter", "replication");
                         }
@@ -1293,6 +1310,7 @@ public class VoterActor {
                 return;
             }
             lastHeartbeatResponseTime = System.currentTimeMillis();
+//            logger.info("Receive async append entries response from {}, response: {}.", this.getUri(), response);
             if(!response.success()) {
                 logger.warn("Receive async append entries response failed from {}, response: {}.", this.getUri(), response);
                 return;

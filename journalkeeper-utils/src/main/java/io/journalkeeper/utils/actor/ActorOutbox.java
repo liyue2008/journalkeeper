@@ -76,7 +76,11 @@ class ActorOutbox {
                 default:
                     throw new IllegalArgumentException("unknown rejectPolicy: " + rejectPolicy);
             }
+            if (actorMsg.getContext().getMetric() != null) {
+                actorMsg.getContext().getMetric().onOutboxIn(actorMsg.getQueueName(), queue.size());
+            }
             ring();
+
             return ret;
         } catch (IllegalStateException e) {
             throw new ActorQueueFullException(e);
