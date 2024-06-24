@@ -73,7 +73,7 @@ public class JournalStoreTest {
     private Path base = null;
 
     @Before
-    public void before() throws IOException {
+    public void before() {
         base = TestPathUtils.prepareBaseDir();
     }
 
@@ -101,7 +101,6 @@ public class JournalStoreTest {
         );
 
         Properties properties = new Properties();
-        properties.setProperty("performance_mode", "true");
 
         for (Set<Integer> partitions : partitionsList) {
             for (Integer nodes : nodesList) {
@@ -121,14 +120,8 @@ public class JournalStoreTest {
     @Test
     public void tempTest() throws Exception {
         // 单分区和多分区
-        List<Set<Integer>> partitionsList = Collections.singletonList(
-                Sets.newSet(0, 1, 2, 3, 4)
-        );
 
         Properties properties = new Properties();
-//        properties.setProperty("enable_metric", String.valueOf(true));
-//        properties.setProperty("print_metric_interval_sec", String.valueOf(5));
-        properties.setProperty("performance_mode", "true");
         writeReadTest(3, Sets.newSet(0, 1, 2, 3, 4), 1024, 10, 10L * 1024 * 1024, true, ResponseConfig.REPLICATION, true, properties);
     }
 
@@ -294,12 +287,10 @@ public class JournalStoreTest {
             long writeCount = 0L;
 
             while (currentBytes < totalBytes) {
-                long start = System.nanoTime();
                 CompletableFuture<List<Long>> resultFuture = client.append(entries, true, responseConfig);
                 if(!async && responseConfig != ResponseConfig.ONE_WAY) {
                     resultFuture.get();
                 }
-//                logger.info("takes: {} ns.", System.nanoTime() - start);
                 currentBytes += bytesOfRequest;
                 writeCount += batchSize;
             }
@@ -318,7 +309,7 @@ public class JournalStoreTest {
             URI leaderUri = adminClient.getClusterConfiguration().get().getLeader();
 
             if(async) {
-                while (adminClient.getServerStatus(leaderUri).get().getLastApplied() < startApplied + writeCount) {
+                while (adminClient.getServerStatus(leaderUri).get(1, TimeUnit.SECONDS).getLastApplied() < startApplied + writeCount) {
                     //noinspection BusyWait
                     Thread.sleep(1);
                 }
@@ -797,7 +788,7 @@ public class JournalStoreTest {
         return createServers(serverURIs, propertiesList, partitions);
     }
 
-    private List<JournalStoreServer> createServers(List<URI> serverURIs, List<Properties> propertiesList, Set<Integer> partitions) throws IOException {
+    private List<JournalStoreServer> createServers(List<URI> serverURIs, List<Properties> propertiesList, Set<Integer> partitions) {
         List<JournalStoreServer> journalStoreServers = new ArrayList<>(serverURIs.size());
         for (int i = 0; i < serverURIs.size(); i++) {
             JournalStoreServer journalStoreServer = new JournalStoreServer(propertiesList.get(i));

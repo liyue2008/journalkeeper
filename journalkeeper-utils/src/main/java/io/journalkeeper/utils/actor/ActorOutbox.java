@@ -43,9 +43,6 @@ class ActorOutbox {
             allMsgQueues.add(entry.getValue());
         }
     }
-    ActorMsg send(String addr, String topic, Object... payloads) {
-        return send(addr, topic, ActorMsg.Response.DEFAULT, payloads);
-    }
     ActorMsg send(String addr, String topic, ActorMsg.Response response, Object... payloads){
         return send(createMsg(addr, topic,response,ActorRejectPolicy.EXCEPTION, payloads));
     }
@@ -90,7 +87,7 @@ class ActorOutbox {
     }
 
     ActorMsg createMsg(String addr, String topic, ActorMsg.Response response, ActorRejectPolicy rejectPolicy, Object... payloads){
-        return new ActorMsg(msgId.getAndIncrement(), myAddr, addr, topic,new ActorMsgCtx(response, ActorMsg.Type.REQUEST, rejectPolicy), payloads);
+        return new ActorMsg(msgId.getAndIncrement(), myAddr, addr, topic, new ActorMsgCtx(response, ActorMsg.Type.REQUEST, rejectPolicy), payloads);
     }
 
     ActorMsg createResponse(ActorMsg request, Object result, Throwable throwable) {

@@ -59,7 +59,7 @@ private static final Logger logger = LoggerFactory.getLogger( JournalActor.class
         BufferPool bufferPool = ServiceSupport.load(BufferPool.class);
         this.journal = new Journal(persistenceFactory, bufferPool, journalEntryParser);
         this.monitoredJournal = new MonitoredJournalImpl();
-        this.actor = Actor.builder().addr("Journal").setHandlerInstance(this).privatePostman(config.get("performance_mode")).build();
+        this.actor = Actor.builder().addr("Journal").setHandlerInstance(this).build();
         this.metricProvider = metricProvider;
         this.appendJournalMetric = metricProvider.getMetric(MetricNames.METRIC_APPEND_JOURNAL);
     }
@@ -108,7 +108,6 @@ private static final Logger logger = LoggerFactory.getLogger( JournalActor.class
     @ActorListener
     private long append(List<JournalEntry> journalEntries) {
         this.appendJournalMetric.start();
-        long start = System.nanoTime();
         long position;
         if (journalEntries.size() == 1) {
             position = journal.append(journalEntries.get(0));

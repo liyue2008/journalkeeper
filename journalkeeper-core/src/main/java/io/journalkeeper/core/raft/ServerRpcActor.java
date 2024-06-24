@@ -27,6 +27,7 @@ public class ServerRpcActor implements ServerRpc {
             .addr("ServerRpc")
             .setHandlerInstance(this)
             .addTopicQueue("updateClusterState", 1024)
+            .addTopicQueue("asyncAppendEntries", 1024)
             .build();
 
     private StateServer.ServerState serverState = StateServer.ServerState.CREATED;

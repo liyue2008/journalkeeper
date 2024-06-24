@@ -7,7 +7,6 @@ import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
@@ -229,9 +228,6 @@ class ActorInbox {
         return hasMessage;
     }
 
-    private static final ThreadLocal<SimpleDateFormat> sdfHolder
-            = ThreadLocal.withInitial(() -> new SimpleDateFormat("HH:mm:ss.SSS"));
-
     private boolean processOneMsgFromQueue(BlockingQueue<ActorMsg> queue){
         ActorMsg msg = queue.poll();
         if (msg != null) {
@@ -298,50 +294,6 @@ class ActorInbox {
             } finally {
                 if (msg.getContext().getMetric() != null) {
                     msg.getContext().getMetric().onConsumed();
-                    
-                    if (msg.getContext().getMetric() != null) {
-                        if (msg.getContext().getType() == ActorMsg.Type.REQUEST && msg.getContext().getResponseConfig() != ActorMsg.Response.REQUIRED) {
-                            ActorMetric metric = msg.getContext().getMetric();
-                            if (metric.cost() > 100L) {
-                                logger.info("SlowMsg: {}-(+{}ms)->Outbox({})[{}]-(+{}ms)->Inbox({})[{}]->(+{}ms)->Consumer({}ms)",
-                                        sdfHolder.get().format(new Date(metric.getCreateTime())),
-                                        metric.getOutboxTime() - metric.getCreateTime(),
-                                        metric.getOutBoxQueueName(),
-                                        metric.getOutBoxQueueSize(),
-                                        metric.getInboxTime() - metric.getOutboxTime(),
-                                        metric.getInboxQueueName(),
-                                        metric.getInboxQueueSize(),
-                                        metric.getDeliverTime() - metric.getInboxTime(),
-                                        metric.getCreateTime() - metric.getOutboxTime()
-                                );
-                            }
-                        } else if (msg.getContext().getType() == ActorMsg.Type.RESPONSE){
-                            ActorMetric requestMetric = msg.getRequest().getContext().getMetric();
-                            ActorMetric responseMetric = msg.getContext().getMetric();
-                            if (responseMetric.getConsumedTime() - requestMetric.getCreateTime() > 100L) {
-                                logger.info("SlowResponse: {}-(+{}ms)->Outbox({})[{}]-(+{}ms)->Inbox({})[{}]->(+{}ms)->Consumer({}ms)-(+{}ms)->Outbox({})[{}]-(+{}ms)->Inbox({})[{}]->(+{}ms)->Sender({}ms)",
-                                        sdfHolder.get().format(new Date(requestMetric.getCreateTime())),
-                                        requestMetric.getOutboxTime() - requestMetric.getCreateTime(),
-                                        requestMetric.getOutBoxQueueName(),
-                                        requestMetric.getOutBoxQueueSize(),
-                                        requestMetric.getInboxTime() - requestMetric.getOutboxTime(),
-                                        requestMetric.getInboxQueueName(),
-                                        requestMetric.getInboxQueueSize(),
-                                        requestMetric.getDeliverTime() - requestMetric.getInboxTime(),
-                                        requestMetric.getCreateTime() - requestMetric.getOutboxTime(),
-
-                                        responseMetric.getOutboxTime() - requestMetric.getConsumedTime(),
-                                        responseMetric.getOutBoxQueueName(),
-                                        responseMetric.getOutBoxQueueSize(),
-                                        responseMetric.getInboxTime() - responseMetric.getOutboxTime(),
-                                        responseMetric.getInboxQueueName(),
-                                        responseMetric.getInboxQueueSize(),
-                                        responseMetric.getDeliverTime() - responseMetric.getInboxTime(),
-                                        responseMetric.getCreateTime() - responseMetric.getOutboxTime()
-                                );
-                            }
-                        }
-                    }
                 }
             }
 

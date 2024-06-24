@@ -6,14 +6,18 @@ public class ActorMsgCtx {
     private final ActorMsg.Response responseConfig;
     private final ActorMsg.Type type;
     private final ActorRejectPolicy rejectPolicy;
-    private final ActorMetric metric = new ActorMetric();
+    private final ActorMetric metric;
     public ActorMsgCtx() {
         this(ActorMsg.Response.DEFAULT, ActorMsg.Type.REQUEST, ActorRejectPolicy.EXCEPTION);
     }
-    public ActorMsgCtx(ActorMsg.Response responseConfig, ActorMsg.Type type, ActorRejectPolicy rejectPolicy) {
+    public ActorMsgCtx(ActorMsg.Response responseConfig, ActorMsg.Type type, ActorRejectPolicy rejectPolicy, boolean enableMetric) {
         this.responseConfig = responseConfig;
         this.type = type;
         this.rejectPolicy = rejectPolicy;
+        this.metric = enableMetric ? new ActorMetric() : null;
+    }
+    public ActorMsgCtx(ActorMsg.Response responseConfig, ActorMsg.Type type, ActorRejectPolicy rejectPolicy) {
+        this(responseConfig, type, rejectPolicy, false);
     }
 
     public ActorMsg.Response getResponseConfig() {

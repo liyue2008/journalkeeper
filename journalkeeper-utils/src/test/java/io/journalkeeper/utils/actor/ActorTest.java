@@ -2,8 +2,14 @@ package io.journalkeeper.utils.actor;
 
 import io.journalkeeper.utils.actor.annotation.*;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -12,7 +18,7 @@ import java.util.function.Consumer;
 
 @SuppressWarnings("ALL")
 public class ActorTest {
-
+private static final Logger logger = LoggerFactory.getLogger(ActorTest.class);
     @Test
     public void testAddTopicHandlerFunctionNoArg() throws InterruptedException {
 
@@ -884,5 +890,31 @@ public class ActorTest {
         String result = sender.<String>sendThen("receiver", "topic", ActorMsg.Response.REQUIRED, "Hello!").get();
         Assert.assertEquals("result1", result);
 
+    }
+
+    @Test
+    @Ignore
+    public void performanceTest() {
+        final int count = 1000000;
+        Actor sender = Actor.builder().addr("sender")
+                .privatePostman(true).build();
+        Actor receiver = Actor.builder()
+                .addr("receiver").privatePostman(true)
+                .addTopicHandlerFunction("topic", request -> "World").build();
+        PostOffice.builder()
+                .addActor(sender)
+                .addActor(receiver)
+                .build();
+
+        long start = System.currentTimeMillis();
+        List<CompletableFuture<Void>> futures = new ArrayList<>(count);
+        for (int i = 0; i < count; i++) {
+            futures.add(sender.sendThen("receiver", "topic", "Hello")
+                    .thenAccept(reply -> Assert.assertEquals("World", reply)));
+        }
+        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+        long end = System.currentTimeMillis();
+
+        logger.info("cost {} ms, {}/s", end - start, count * 1000 / (end - start));
     }
 }

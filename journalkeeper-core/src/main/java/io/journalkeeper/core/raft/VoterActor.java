@@ -102,7 +102,6 @@ public class VoterActor {
                 .addTopicQueue("updateClusterState", 1024)
                 .addTopicQueue("asyncAppendEntries", 1024)
                 .setHandlerInstance(this)
-                .privatePostman(config.get("performance_mode"))
                 .build();
         this.raftState = StateMachine.<VoterState>builder()
                 .initState(VoterState.FOLLOWER)
@@ -456,6 +455,7 @@ public class VoterActor {
                             if (pendingRequests.decrementAndGet() == 0 && !isWinTheElection.get()) {
                                 electionTimeoutMs = config.<Long>get("election_timeout_ms") + randomInterval(config.<Long>get("election_timeout_ms"));
                                 nextElectionTime = System.currentTimeMillis() + electionTimeoutMs;
+                                convertToFollower();
                             }
                         });
             }
@@ -515,16 +515,11 @@ public class VoterActor {
                     request.getTerm(), request.getEntries().size()));
             return;
         }
-        long start = System.currentTimeMillis();
         if (null == request.getEntries() || request.getEntries().isEmpty()) { // 心跳
             actor.sendThen("Journal", "commit", request.getLeaderCommit())
                     .thenRun(() -> {
                         if (leaderMaxIndex < request.getMaxIndex()) {
                             leaderMaxIndex = request.getMaxIndex();
-                        }
-                        long now = System.currentTimeMillis();
-                        if (now - start > 100L) {
-                            logger.info("AppendEntries cost {}ms", now - start);
                         }
                         actor.reply(msg, new AsyncAppendEntriesResponse(true, request.getPrevLogIndex() + 1,
                                 request.getTerm(), request.getEntries().size()));
@@ -542,30 +537,12 @@ public class VoterActor {
                     // follow it (§5.3)
                     //4. Append any new entries not already in the log
                     .thenCompose(ignored -> actor.sendThen("Journal", "compareOrAppendRaw", entries, request.getPrevLogIndex() + 1))
-                    .thenApply(p -> {
-                        long now = System.currentTimeMillis();
-                        if (now - start > 100L) {
-                            logger.info("compareOrAppendRaw cost {}ms", now - start);
-                        }
-                        return p;
-                    })
                     .thenCompose(ignored -> actor.sendThen("State", "maybeUpdateNonLeaderConfig", entries))
-                    .thenApply(p -> {
-                        long now = System.currentTimeMillis();
-                        if (now - start > 100L) {
-                            logger.info("maybeUpdateNonLeaderConfig cost {}ms", now - start);
-                        }
-                        return p;
-                    })
                     //5. If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry)
                     .thenCompose(ignored -> actor.sendThen("Journal", "commit", request.getLeaderCommit()))
                     .thenRun(() -> {
                         if (leaderMaxIndex < request.getMaxIndex()) {
                             leaderMaxIndex = request.getMaxIndex();
-                        }
-                        long now = System.currentTimeMillis();
-                        if (now - start > 100L) {
-                            logger.info("AppendEntries cost {}ms", now - start);
                         }
                         actor.reply(msg, new AsyncAppendEntriesResponse(true, request.getPrevLogIndex() + 1,
                                 request.getTerm(), request.getEntries().size()));
@@ -1086,7 +1063,7 @@ public class VoterActor {
             this.actor = actor;
             UpdateClusterStateRequest request = requestMsg.getPayload();
             this.requestSize = request.getRequests().stream().mapToLong(r -> r.getEntry().length).sum();
-            this.requestMsg = new ActorMsg(requestMsg.getSequentialId(), requestMsg.getSender(), requestMsg.getReceiver(), requestMsg.getTopic());
+            this.requestMsg = requestMsg;
             this.responseConfig = request.getResponseConfig();
             this.fromPosition = fromPosition;
             this.toPosition = toPosition;
@@ -1284,7 +1261,6 @@ public class VoterActor {
                             entries, state.commitIndex(), maxIndex);
 
             waitingForResponse = true;
-            long start = System.currentTimeMillis();
             actor.<AsyncAppendEntriesResponse>sendThen("Rpc", "asyncAppendEntries", ActorRejectPolicy.EXCEPTION ,new RpcMsg<>(this.uri, request))
                     .thenAccept(resp -> handleAppendEntriesResponse(resp, entries.size(), fistSnapShotEntry.getKey()))
                     .exceptionally(e -> {
@@ -1293,10 +1269,6 @@ public class VoterActor {
                     })
                     .whenComplete((c, r) -> {
                         waitingForResponse = false;
-                        long now = System.currentTimeMillis();
-                        if (now - start > 300L) {
-                            logger.info("Replication takes: {}ms.).", now - start);
-                        }
                         if (null != r && nextIndex < journal.maxIndex()) {
                             actor.send("Voter", "replication");
                         }

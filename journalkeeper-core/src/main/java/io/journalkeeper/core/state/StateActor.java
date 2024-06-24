@@ -30,7 +30,6 @@ import java.nio.channels.ClosedByInterruptException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -102,7 +101,7 @@ public class StateActor implements RaftState{
         this.config = config;
         this.properties = properties;
 
-        this.actor = Actor.builder().addr("State").setHandlerInstance(this).privatePostman(config.get("performance_mode")).build();
+        this.actor = Actor.builder().addr("State").setHandlerInstance(this).build();
         persistenceFactory = ServiceSupport.load(PersistenceFactory.class);
 
         metadataPersistence = persistenceFactory.createMetadataPersistenceInstance();
@@ -377,7 +376,6 @@ public class StateActor implements RaftState{
 
     @ActorListener
     public QueryStateResponse queryServerState(QueryStateRequest request) {
-        long lastApplied = state.lastApplied();
         if (request.getIndex() > 0 && state.lastApplied() < request.getIndex()) {
             return new QueryStateResponse(new IllegalStateException());
         } else {
@@ -585,7 +583,6 @@ public class StateActor implements RaftState{
     @ActorListener
     private void recoverVoterConfig() {
         boolean isRecoveredFromJournal = false;
-        List<CompletableFuture<?>> futures = new ArrayList<>();
         for (long index = journal.maxIndex(INTERNAL_PARTITION) - 1;
              index >= journal.minIndex(INTERNAL_PARTITION);
              index--) {
