@@ -346,8 +346,7 @@ class Voter extends AbstractServer implements CheckTermInterceptor {
                         return null;
                     }).thenRun(() -> {
                         if (pendingRequests.decrementAndGet() == 0 && !isWinTheElection.get()) {
-                            electionTimeoutMs = config.getElectionTimeoutMs() + randomInterval(config.getElectionTimeoutMs());
-                            nextElectionTime = System.currentTimeMillis() + electionTimeoutMs;
+                            convertToFollower();
                         }
                     });
             }
