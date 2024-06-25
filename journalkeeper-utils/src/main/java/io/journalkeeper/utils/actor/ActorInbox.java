@@ -16,8 +16,6 @@ import java.util.stream.Collectors;
 
 class ActorInbox {
     private static final Logger logger = LoggerFactory.getLogger( ActorInbox.class );
-    // 收件箱队列
-    private final BlockingQueue<ActorMsg> msgQueue;
     // 显式注册的收消息方法
     private final Map<String /* topic */, Tuple<Object /* instance */, Method>> topicHandlerFunctions;
     // 兜底处理所有未被处理消息的方法
@@ -26,34 +24,27 @@ class ActorInbox {
     private final String myAddr;
     // 收消息的实例对象
     private Object handlerInstance;
-    // 默认收件箱容量
-    final static int DEFAULT_CAPACITY = Integer.MAX_VALUE;
 
     private final ActorOutbox outbox;
 
     private final Map<String, BlockingQueue<ActorMsg>> topicQueueMap;
-    private final List<BlockingQueue<ActorMsg>> allMsgQueues;
 
     // 收到消息后，通知邮递员派送消息的响铃
     private Object ring;
 
-    ActorInbox(int capacity, String myAddr, Map<String, Integer> topicQueueMap, ActorOutbox outbox) {
+    private final int defaultCapacity;
+
+    ActorInbox(int defaultCapacity, String myAddr, Map<String, Integer> topicQueueMap, ActorOutbox outbox) {
+        this.defaultCapacity = defaultCapacity;
         this.myAddr = myAddr;
-        msgQueue = new LinkedBlockingQueue<>(capacity < 0 ? DEFAULT_CAPACITY : capacity);
         this.outbox = outbox;
         this.defaultHandlerFunction = null;
         this.topicHandlerFunctions = new ConcurrentHashMap<>();
-        this.topicQueueMap = new HashMap<>();
+        this.topicQueueMap = new ConcurrentHashMap<>();
         if (null != topicQueueMap) {
             for (Map.Entry<String, Integer> entry : topicQueueMap.entrySet()) {
-                this.topicQueueMap.put(entry.getKey(), new LinkedBlockingQueue<>(entry.getValue() < 0 ? DEFAULT_CAPACITY : entry.getValue()));
+                this.topicQueueMap.put(entry.getKey(), new LinkedBlockingQueue<>(entry.getValue() < 0 ? defaultCapacity : entry.getValue()));
             }
-        }
-
-        allMsgQueues = new ArrayList<>();
-        allMsgQueues.add(msgQueue);
-        for (Map.Entry<String, BlockingQueue<ActorMsg>> entry : this.topicQueueMap.entrySet()) {
-            allMsgQueues.add(entry.getValue());
         }
     }
 
@@ -169,7 +160,7 @@ class ActorInbox {
                     this.outbox.send(this.outbox.createResponse(msg, null, ite.getCause()));
 
                 }
-                logger.info("Invoke message handler exception, handler: {}, msg: {}, exception: ", instance.getClass().getName() + "." + method.getName() + "(...)", msg, ite.getCause());
+                logger.info("Invoke message handler exception, handler: {}, msg: {}, exception: {}.", instance.getClass().getName() + "." + method.getName() + "(...)", msg, ite.getMessage());
             } catch (IllegalArgumentException e) {
                 if (needResponse(msg, method)) {
                     this.outbox.send(this.outbox.createResponse(msg, null, e));
@@ -197,7 +188,7 @@ class ActorInbox {
                 if (!void.class.equals(method.getReturnType())) {
                     this.outbox.send(this.outbox.createResponse(msg, null, ite.getCause()));
                 }
-                logger.info("Invoke message handler exception, handler: {}, msg: {}, exception: {}.", handlerInstance.getClass().getName() + "." + method.getName() + "(...)", msg, ite.getCause().toString());
+                logger.info("Invoke message handler exception, handler: {}, msg: {}, exception: {}.", handlerInstance.getClass().getName() + "." + method.getName() + "(...)", msg, ite.getMessage());
             }
         } else {
             tryInvoke(new Tuple<>(handlerInstance, method), msg);
@@ -220,7 +211,7 @@ class ActorInbox {
      */
     boolean processOneMsg() {
         boolean hasMessage = false;
-        for (BlockingQueue<ActorMsg> queue : allMsgQueues) {
+        for (BlockingQueue<ActorMsg> queue : topicQueueMap.values()) {
             if (processOneMsgFromQueue(queue)) {
                 hasMessage = true;
             }
@@ -305,7 +296,7 @@ class ActorInbox {
 
 
     void receive(ActorMsg msg) {
-        BlockingQueue<ActorMsg> queue = topicQueueMap.getOrDefault(msg.getQueueName(), msgQueue);
+        BlockingQueue<ActorMsg> queue = topicQueueMap.computeIfAbsent(msg.getQueueName(), queueName -> new LinkedBlockingQueue<>(defaultCapacity));
         queue.add(msg);
         ring();
         if (msg.getContext().getMetric() != null) {
@@ -327,10 +318,10 @@ class ActorInbox {
     }
 
     boolean cleared() {
-        return msgQueue.isEmpty();
+        return topicQueueMap.values().stream().allMatch(BlockingQueue::isEmpty);
     }
 
-    public int getQueueSize() {
-        return msgQueue.size();
+    public int getQueueSize(String queueName) {
+        return topicQueueMap.getOrDefault(queueName, new LinkedBlockingQueue<>(defaultCapacity)).size();
     }
 }

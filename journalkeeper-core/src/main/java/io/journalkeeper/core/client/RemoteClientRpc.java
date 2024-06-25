@@ -194,14 +194,12 @@ public class RemoteClientRpc implements ClientRpc {
             switch (response.getStatusCode()) {
                 case NOT_LEADER:
                     leaderUri = ((LeaderResponse) response).getLeader();
-//                    logger.info("{} failed, cause: {}, Retry...", response.getClass().getName(), response.errorString());
-                    return true;
                 case TIMEOUT:
                 case SERVER_BUSY:
                 case RETRY_LATER:
                 case TRANSPORT_FAILED:
                 case EXCEPTION:
-//                    logger.info("{} failed, cause: {}, Retry...", response.getClass().getName(), response.errorString());
+                    logger.info("{} failed, cause: {}, Retry...", response.getClass().getName(), response.errorString());
                     return true;
                 case SUCCESS:
                     return false;

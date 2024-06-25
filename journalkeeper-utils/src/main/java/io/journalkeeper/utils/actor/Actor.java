@@ -25,6 +25,8 @@ public class Actor {
     // 对请求/响应模式的封装支持
     private final ActorResponseSupport responseSupport;
 
+    private final boolean enableMetric;
+
     public boolean isPrivatePostman() {
         return privatePostman;
     }
@@ -32,16 +34,17 @@ public class Actor {
     // 是否独占线程，独占线程有更好的性能
     private final boolean privatePostman;
 
-    private Actor(String addr, int inboxCapacity, int outboxCapacity, Map<String, Integer> topicQueueMap, boolean privatePostman) {
+    private Actor(String addr, int inboxCapacity, int outboxCapacity, Map<String, Integer> topicQueueMap, boolean privatePostman, boolean enableMetric) {
         this.addr = addr;
-        this.outbox = new ActorOutbox(outboxCapacity, addr, topicQueueMap);
+        this.outbox = new ActorOutbox(outboxCapacity, addr, topicQueueMap, enableMetric);
         this.inbox = new ActorInbox(inboxCapacity, addr, topicQueueMap, outbox);
         this.responseSupport = new ActorResponseSupport(inbox, outbox);
         this.privatePostman = privatePostman;
+        this.enableMetric = enableMetric;
     }
 
-    public int getInboxQueueSize() {
-        return inbox.getQueueSize();
+    public int getInboxQueueSize(String topic) {
+        return inbox.getQueueSize(topic);
     }
 
     /**
@@ -228,6 +231,10 @@ public class Actor {
         return inbox.cleared();
     }
 
+    public boolean isEnableMetric() {
+        return enableMetric;
+    }
+
     // Builder
     public static class Builder {
         private String addr;
@@ -241,11 +248,12 @@ public class Actor {
         private Consumer<ActorMsg> defaultHandlerFunction = null; // <topic, handler>
         private Object handlerInstance = null;
         private Object responseHandlerInstance = null;
-        private int inboxCapacity = -1;
-        private int outBoxCapacity = -1;
+        private int inboxCapacity = Integer.MAX_VALUE;
+        private int outBoxCapacity = Integer.MAX_VALUE;
         private final Map<String, Integer> topicQueueMap = new HashMap<>();
         private Consumer<ActorMsg> defaultResponseHandlerFunction = null;
         private boolean privatePostman = false;
+        private boolean enableMetric = false;
         private Builder() {}
 
         public Builder addTopicHandlerFunction(String topic, Runnable handler) {
@@ -329,8 +337,13 @@ public class Actor {
             this.addr = addr;
             return this;
         }
+
+        public Builder enableMetric() {
+            this.enableMetric = true;
+            return this;
+        }
         public Actor build() {
-            Actor actor = new Actor(addr, inboxCapacity, outBoxCapacity, topicQueueMap, privatePostman);
+            Actor actor = new Actor(addr, inboxCapacity, outBoxCapacity, topicQueueMap, privatePostman, enableMetric);
             this.topicHandlerRunnableMap.forEach(actor::addTopicHandlerFunction);
             this.topicHandlerSupplierMap.forEach(actor::addTopicHandlerFunction);
             this.topicHandlerFunctionMap.forEach(actor::addTopicHandlerFunction);

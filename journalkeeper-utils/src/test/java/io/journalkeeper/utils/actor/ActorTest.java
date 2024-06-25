@@ -7,9 +7,6 @@ import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -894,27 +891,62 @@ private static final Logger logger = LoggerFactory.getLogger(ActorTest.class);
 
     @Test
     @Ignore
-    public void performanceTest() {
-        final int count = 1000000;
+    public void requestPerformanceTest() throws InterruptedException {
+        final int count = 10000000;
+        final CountDownLatch countDownLatch = new CountDownLatch(count);
         Actor sender = Actor.builder().addr("sender")
-                .privatePostman(true).build();
+//                .enableMetric()
+                .build();
         Actor receiver = Actor.builder()
-                .addr("receiver").privatePostman(true)
-                .addTopicHandlerFunction("topic", request -> "World").build();
+                .addr("receiver")
+                .addTopicHandlerFunction("topic", new Consumer<ActorMsg>() {
+
+                    @Override
+                    public void accept(@ActorMessage ActorMsg msg) {
+                        countDownLatch.countDown();
+                    }
+                }).build();
         PostOffice.builder()
                 .addActor(sender)
                 .addActor(receiver)
                 .build();
 
         long start = System.currentTimeMillis();
-        List<CompletableFuture<Void>> futures = new ArrayList<>(count);
         for (int i = 0; i < count; i++) {
-            futures.add(sender.sendThen("receiver", "topic", "Hello")
-                    .thenAccept(reply -> Assert.assertEquals("World", reply)));
+            sender.send("receiver", "topic", "Hello");
         }
-        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+        countDownLatch.await();
         long end = System.currentTimeMillis();
+        logger.info("cost {} ms, {}/s", end - start, count * 1000L / (end - start));
 
-        logger.info("cost {} ms, {}/s", end - start, count * 1000 / (end - start));
+//        msgList.forEach(msg -> logger.info(msg.getContext().getMetric().toString()));
+
+    }
+    @Test
+    @Ignore
+    public void responsePerformanceTest() throws InterruptedException {
+        final int count = 10000000;
+        final CountDownLatch countDownLatch = new CountDownLatch(count);
+        Actor sender = Actor.builder().addr("sender")
+//                .enableMetric()
+                .build();
+        Actor receiver = Actor.builder()
+                .addr("receiver")
+                .addTopicHandlerFunction("topic", rquest->"World").build();
+        PostOffice.builder()
+                .addActor(sender)
+                .addActor(receiver)
+                .build();
+
+        long start = System.currentTimeMillis();
+        for (int i = 0; i < count; i++) {
+            sender.sendThen("receiver", "topic", "Hello").thenAccept(result -> countDownLatch.countDown());
+        }
+        countDownLatch.await();
+        long end = System.currentTimeMillis();
+        logger.info("cost {} ms, {}/s", end - start, count * 1000L / (end - start));
+
+//        msgList.forEach(msg -> logger.info(msg.getContext().getMetric().toString()));
+
     }
 }

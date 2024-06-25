@@ -1558,7 +1558,7 @@ public class VoterActor {
             if (raftState.current() == VoterState.LEADER) {
                 leaderMonitorInfo = new LeaderMonitorInfo();
                 leaderMonitorInfo.setState(StateServer.ServerState.RUNNING);
-                leaderMonitorInfo.setRequestQueueSize(actor.getInboxQueueSize());
+                leaderMonitorInfo.setRequestQueueSize(actor.getInboxQueueSize("updateClusterState"));
                 leaderMonitorInfo.setWriteEnabled(isWritable);
 
                 List<LeaderFollowerMonitorInfo> leaderFollowerMonitorInfoList = new ArrayList<>(replicationDestinations.size());

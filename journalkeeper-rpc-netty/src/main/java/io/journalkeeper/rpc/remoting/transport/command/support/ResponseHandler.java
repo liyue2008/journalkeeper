@@ -18,7 +18,6 @@ import io.journalkeeper.rpc.remoting.transport.ResponseFuture;
 import io.journalkeeper.rpc.remoting.transport.Transport;
 import io.journalkeeper.rpc.remoting.transport.command.Command;
 import io.journalkeeper.rpc.remoting.transport.command.Header;
-import io.journalkeeper.rpc.remoting.transport.command.handler.ExceptionHandler;
 import io.journalkeeper.rpc.remoting.transport.config.TransportConfig;
 import io.journalkeeper.utils.threads.NamedThreadFactory;
 import org.slf4j.Logger;
@@ -41,7 +40,7 @@ public class ResponseHandler {
     private final RequestBarrier barrier;
     private final ExecutorService asyncExecutorService;
 
-    public ResponseHandler(TransportConfig transportConfig, RequestBarrier barrier, ExceptionHandler exceptionHandler) {
+    public ResponseHandler(TransportConfig transportConfig, RequestBarrier barrier) {
         this.config = transportConfig;
         this.barrier = barrier;
         this.asyncExecutorService = newAsyncExecutorService();
@@ -52,9 +51,7 @@ public class ResponseHandler {
         // 超时被删除了
         final ResponseFuture responseFuture = barrier.get(header.getRequestId());
         if (responseFuture == null) {
-            if (logger.isInfoEnabled()) {
-                logger.info(String.format("request is timeout %s", header));
-            }
+            logger.info("request is timeout {}", header);
             return;
         }
         // 设置应答

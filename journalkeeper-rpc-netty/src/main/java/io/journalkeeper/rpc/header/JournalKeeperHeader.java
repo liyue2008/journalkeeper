@@ -152,4 +152,19 @@ public class JournalKeeperHeader implements Header {
     public void setDestination(URI destination) {
         this.destination = destination;
     }
+
+    @Override
+    public String toString() {
+        return "JournalKeeperHeader{" +
+                "oneWay=" + oneWay +
+                ", status=" + status +
+                ", error='" + error + '\'' +
+                ", requestId=" + requestId +
+                ", direction=" + direction +
+                ", version=" + version +
+                ", type=" + type +
+                ", sendTime=" + sendTime +
+                ", destination=" + destination +
+                '}';
+    }
 }

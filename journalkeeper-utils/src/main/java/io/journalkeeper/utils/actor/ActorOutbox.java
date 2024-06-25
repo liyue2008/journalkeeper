@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
@@ -15,33 +16,26 @@ class ActorOutbox {
 
     private final AtomicLong msgId = new AtomicLong(0);
 
-    private final BlockingQueue<ActorMsg> msgQueue;
-
     private final Map<String, BlockingQueue<ActorMsg>> topicQueueMap;
 
     private final String myAddr;
 
-    final static int DEFAULT_CAPACITY = Integer.MAX_VALUE;
-
     private final ThreadLocal<ActorThreadContext> contextThreadLocal = new ThreadLocal<>();
 
-    private final List<BlockingQueue<ActorMsg>> allMsgQueues;
+    private final boolean enableMetric;
 
-    ActorOutbox(int capacity, String myAddr, Map<String, Integer> topicQueueMap) {
-        this.msgQueue = new LinkedBlockingQueue<>(capacity < 0 ? DEFAULT_CAPACITY : capacity);
+    private final int capacity;
+
+    ActorOutbox(int capacity, String myAddr, Map<String, Integer> topicQueueMap, boolean enableMetric) {
+        this.capacity = capacity;
         this.myAddr = myAddr;
-        this.topicQueueMap = new HashMap<>();
+        this.topicQueueMap = new ConcurrentHashMap<>();
         if (null != topicQueueMap) {
             for (Map.Entry<String, Integer> entry : topicQueueMap.entrySet()) {
-                this.topicQueueMap.put(entry.getKey(), new LinkedBlockingQueue<>(entry.getValue() < 0 ? DEFAULT_CAPACITY : entry.getValue()));
+                this.topicQueueMap.put(entry.getKey(), new LinkedBlockingQueue<>(entry.getValue() < 0 ? capacity : entry.getValue()));
             }
         }
-
-        allMsgQueues = new ArrayList<>();
-        allMsgQueues.add(msgQueue);
-        for (Map.Entry<String, BlockingQueue<ActorMsg>> entry : this.topicQueueMap.entrySet()) {
-            allMsgQueues.add(entry.getValue());
-        }
+        this.enableMetric = enableMetric;
     }
     ActorMsg send(String addr, String topic, ActorMsg.Response response, Object... payloads){
         return send(createMsg(addr, topic,response,ActorRejectPolicy.EXCEPTION, payloads));
@@ -54,7 +48,7 @@ class ActorOutbox {
     ActorMsg send(ActorMsg actorMsg) {
         try {
             ActorRejectPolicy rejectPolicy = actorMsg.getContext().getRejectPolicy();
-            BlockingQueue<ActorMsg> queue = topicQueueMap.getOrDefault(actorMsg.getQueueName(), msgQueue);
+            BlockingQueue<ActorMsg> queue = topicQueueMap.computeIfAbsent(actorMsg.getQueueName(), queueName -> new LinkedBlockingQueue<>(capacity));
             ActorMsg ret = actorMsg;
             switch (rejectPolicy) {
                 case EXCEPTION:
@@ -87,7 +81,7 @@ class ActorOutbox {
     }
 
     ActorMsg createMsg(String addr, String topic, ActorMsg.Response response, ActorRejectPolicy rejectPolicy, Object... payloads){
-        return new ActorMsg(msgId.getAndIncrement(), myAddr, addr, topic, new ActorMsgCtx(response, ActorMsg.Type.REQUEST, rejectPolicy), payloads);
+        return new ActorMsg(msgId.getAndIncrement(), myAddr, addr, topic, new ActorMsgCtx(response, ActorMsg.Type.REQUEST, rejectPolicy, this.enableMetric), payloads);
     }
 
     ActorMsg createResponse(ActorMsg request, Object result, Throwable throwable) {
@@ -98,7 +92,7 @@ class ActorOutbox {
 
     boolean consumeOneMsg(Consumer<ActorMsg> consumer) {
         boolean hasMessage = false;
-        for (BlockingQueue<ActorMsg> queue : allMsgQueues) {
+        for (BlockingQueue<ActorMsg> queue : topicQueueMap.values()) {
             ActorMsg msg = queue.peek();
             if (msg != null) {
                 try {
@@ -130,6 +124,6 @@ class ActorOutbox {
     }
 
     boolean cleared() {
-        return this.msgQueue.isEmpty();
+        return this.topicQueueMap.values().stream().allMatch(BlockingQueue::isEmpty);
     }
 }

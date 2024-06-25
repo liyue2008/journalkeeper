@@ -37,7 +37,7 @@ public class ActorMsg {
      * create response message
      */
     public ActorMsg(long sequentialId, String sender,ActorMsg request, Object result, Throwable throwable) {
-        this(sequentialId, sender, request.getSender(), RESPONSE, new ActorMsgCtx(Response.IGNORE, Type.RESPONSE, ActorRejectPolicy.EXCEPTION), request, result, throwable);
+        this(sequentialId, sender, request.getSender(), RESPONSE, new ActorMsgCtx(Response.IGNORE, Type.RESPONSE, ActorRejectPolicy.EXCEPTION, request.getContext().getMetric() != null), request, result, throwable);
     }
     public ActorMsg(long sequentialId, String sender, String receiver, String topic, Object... payloads) {
         this(sequentialId, sender, receiver, topic, new ActorMsgCtx(), payloads);
@@ -50,10 +50,6 @@ public class ActorMsg {
         this.topic = topic;
         this.context = context;
         this.payloads = payloads;
-    }
-
-    public long getSequentialId() {
-        return sequentialId;
     }
 
     public String getSender() {
@@ -95,13 +91,11 @@ public class ActorMsg {
 
     @Override
     public String toString() {
-        return "ActorMsg{" +
-                "sequentialId=" + sequentialId +
-                ", sender='" + sender + '\'' +
-                ", receiver='" + receiver + '\'' +
-                ", topic='" + topic + '\'' +
-                ", payloads=" + Arrays.toString(payloads) +
-                ", context=" + context +
+        return "{" +
+                sequentialId +
+                " | " + topic + " | " +
+                sender + " --> " + receiver + " | " +
+                Arrays.toString(payloads) +
                 '}';
     }
 

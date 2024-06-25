@@ -122,7 +122,7 @@ public class JournalStoreTest {
         // 单分区和多分区
 
         Properties properties = new Properties();
-        writeReadTest(3, Sets.newSet(0, 1, 2, 3, 4), 1024, 10, 10L * 1024 * 1024, true, ResponseConfig.REPLICATION, true, properties);
+        writeReadTest(3, Sets.newSet(0, 1, 2, 3, 4), 1024, 10, 100L * 1024 * 1024, true, ResponseConfig.REPLICATION, true, properties);
     }
 
     @Test
