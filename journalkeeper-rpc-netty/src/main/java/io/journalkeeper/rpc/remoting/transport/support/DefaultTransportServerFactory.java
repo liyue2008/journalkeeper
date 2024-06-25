@@ -70,7 +70,7 @@ public class DefaultTransportServerFactory implements TransportServerFactory {
         CommandHandlerFilterFactory commandHandlerFilterFactory = new DefaultCommandHandlerFilterFactory();
         RequestBarrier requestBarrier = new RequestBarrier(serverConfig);
         RequestHandler requestHandler = new RequestHandler(commandHandlerFactory, commandHandlerFilterFactory, exceptionHandler);
-        ResponseHandler responseHandler = new ResponseHandler(serverConfig, requestBarrier, exceptionHandler);
+        ResponseHandler responseHandler = new ResponseHandler(serverConfig, requestBarrier);
         return new DefaultTransportServer(serverConfig, host, port, codec, exceptionHandler, requestBarrier, requestHandler, responseHandler, eventBus);
     }
 

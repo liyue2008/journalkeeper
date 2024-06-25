@@ -68,7 +68,7 @@ public class DefaultTransportClientFactory implements TransportClientFactory {
         CommandHandlerFilterFactory commandHandlerFilterFactory = new DefaultCommandHandlerFilterFactory();
         RequestBarrier requestBarrier = new RequestBarrier(config);
         RequestHandler requestHandler = new RequestHandler(commandHandlerFactory, commandHandlerFilterFactory, exceptionHandler);
-        ResponseHandler responseHandler = new ResponseHandler(config, requestBarrier, exceptionHandler);
+        ResponseHandler responseHandler = new ResponseHandler(config, requestBarrier);
         DefaultTransportClient transportClient = new DefaultTransportClient(config, codec, requestBarrier, requestHandler, responseHandler, transportEventBus);
         return new FailoverTransportClient(transportClient, config, transportEventBus);
     }

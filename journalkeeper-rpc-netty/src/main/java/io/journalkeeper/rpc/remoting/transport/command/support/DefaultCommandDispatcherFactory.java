@@ -48,7 +48,7 @@ public class DefaultCommandDispatcherFactory implements CommandDispatcherFactory
         ExceptionHandler exceptionHandler = getExceptionHandler(protocol);
         CommandHandlerFactory commandHandlerFactory = protocol.createCommandHandlerFactory();
         RequestHandler requestHandler = new RequestHandler(commandHandlerFactory, commandHandlerFilterFactory, exceptionHandler);
-        ResponseHandler responseHandler = new ResponseHandler(transportConfig, requestBarrier, exceptionHandler);
+        ResponseHandler responseHandler = new ResponseHandler(transportConfig, requestBarrier);
         return new DefaultCommandDispatcher(requestBarrier, requestHandler, responseHandler);
     }
 
