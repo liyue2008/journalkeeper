@@ -188,7 +188,7 @@ class ActorInbox {
                 if (!void.class.equals(method.getReturnType())) {
                     this.outbox.send(this.outbox.createResponse(msg, null, ite.getCause()));
                 }
-                logger.info("Invoke message handler exception, handler: {}, msg: {}, exception: {}.", handlerInstance.getClass().getName() + "." + method.getName() + "(...)", msg, ite.getMessage());
+                logger.info("Invoke message handler exception, handler: {}, msg: {}, exception: {}.", handlerInstance.getClass().getName() + "." + method.getName() + "(...)", msg, ite.getTargetException().getMessage());
             }
         } else {
             tryInvoke(new Tuple<>(handlerInstance, method), msg);

@@ -16,6 +16,9 @@ import java.util.function.*;
  */
 @SuppressWarnings("UnusedReturnValue")
 public class Actor {
+
+    private final static int DEFAULT_INBOX_CAPACITY = 1024;
+    private final static int DEFAULT_OUTBOX_CAPACITY = 1024;
     // 地址
     private final String addr;
     // 收件箱，所有收到的消息放入收件箱暂存，然后单线程顺序处理。
@@ -248,8 +251,8 @@ public class Actor {
         private Consumer<ActorMsg> defaultHandlerFunction = null; // <topic, handler>
         private Object handlerInstance = null;
         private Object responseHandlerInstance = null;
-        private int inboxCapacity = Integer.MAX_VALUE;
-        private int outBoxCapacity = Integer.MAX_VALUE;
+        private int inboxCapacity = DEFAULT_INBOX_CAPACITY;
+        private int outBoxCapacity = DEFAULT_OUTBOX_CAPACITY;
         private final Map<String, Integer> topicQueueMap = new HashMap<>();
         private Consumer<ActorMsg> defaultResponseHandlerFunction = null;
         private boolean privatePostman = false;
