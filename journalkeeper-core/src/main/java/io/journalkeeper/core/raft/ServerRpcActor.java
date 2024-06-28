@@ -1,6 +1,7 @@
 package io.journalkeeper.core.raft;
 
 import io.journalkeeper.core.api.ClusterConfiguration;
+import io.journalkeeper.core.resilience.InFlightRequestRateLimiter;
 import io.journalkeeper.rpc.RpcAccessPointFactory;
 import io.journalkeeper.rpc.client.*;
 import io.journalkeeper.rpc.server.*;
@@ -14,7 +15,9 @@ import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
 
 public class ServerRpcActor implements ServerRpc {
@@ -30,13 +33,33 @@ public class ServerRpcActor implements ServerRpc {
             .addTopicQueue("asyncAppendEntries", 1024)
             .build();
 
+    private final InFlightRequestRateLimiter commonLimiter;
+    private final Map<String, InFlightRequestRateLimiter> rateLimiterMap;
+
     private StateServer.ServerState serverState = StateServer.ServerState.CREATED;
 
     protected ServerRpcActor() {
         this.rpcAccessPointFactory = ServiceSupport.load(RpcAccessPointFactory.class);
+        this.rateLimiterMap = createRateLimiterMap();
+        this.commonLimiter = new InFlightRequestRateLimiter(1024);
 
     }
 
+    private Map<String, InFlightRequestRateLimiter> createRateLimiterMap() {
+        InFlightRequestRateLimiter updateLimiter = new InFlightRequestRateLimiter(1024);
+        InFlightRequestRateLimiter queryLimiter = new InFlightRequestRateLimiter(1024);
+        Map<String, InFlightRequestRateLimiter> rateLimiterMap = new ConcurrentHashMap<>();
+        rateLimiterMap.put("updateClusterState", updateLimiter);
+        rateLimiterMap.put("asyncAppendEntries", updateLimiter);
+        rateLimiterMap.put("queryClusterState", queryLimiter);
+        rateLimiterMap.put("queryServerState", queryLimiter);
+        rateLimiterMap.put("getServerEntries", queryLimiter);
+        return rateLimiterMap;
+    }
+
+    private InFlightRequestRateLimiter getRateLimiter(String topic) {
+        return rateLimiterMap.getOrDefault(topic, commonLimiter);
+    }
 
     public Actor getActor() {
         return actor;
@@ -49,6 +72,7 @@ public class ServerRpcActor implements ServerRpc {
 
     @Override
     public CompletableFuture<UpdateClusterStateResponse> updateClusterState(UpdateClusterStateRequest request) {
+
         return forwardRequest(request, "Voter");
     }
 
@@ -75,8 +99,10 @@ public class ServerRpcActor implements ServerRpc {
         return forwardRequest(request, addr, null);
     }
     private <T> CompletableFuture<T> forwardRequest(Object request, String addr, String topic) {
+        CompletableFuture<T> future;
+
         if (serverState != StateServer.ServerState.RUNNING) {
-            CompletableFuture<T> future = new CompletableFuture<>();
+            future = new CompletableFuture<>();
             future.completeExceptionally(new IllegalStateException("Server is not running"));
             return future;
         }
@@ -92,10 +118,20 @@ public class ServerRpcActor implements ServerRpc {
             topic = firstCharToLowerCase(topic);
         }
 
-        if (null == request) {
-            return actor.sendThen(addr, topic, ActorRejectPolicy.BLOCK);
-        }else {
-            return actor.sendThen(addr, topic, ActorRejectPolicy.BLOCK, request);
+        InFlightRequestRateLimiter rateLimiter = getRateLimiter(topic);
+        try {
+            rateLimiter.acquire();
+            if (null == request) {
+                future = actor.sendThen(addr, topic, ActorRejectPolicy.BLOCK);
+            } else {
+                future = actor.sendThen(addr, topic, ActorRejectPolicy.BLOCK, request);
+            }
+            future.whenComplete((r, e) -> rateLimiter.release());
+            return future;
+        } catch (InterruptedException e) {
+            future = new CompletableFuture<>();
+            future.completeExceptionally(e);
+            return future;
         }
     }
 
@@ -111,7 +147,6 @@ public class ServerRpcActor implements ServerRpc {
         return forwardRequest(request,"State", "querySnapshot");
     }
 
-    // TODO: 在返回值中补充Observers信息
     @Override
     public CompletableFuture<GetServersResponse> getServers() {
         if (serverState != StateServer.ServerState.RUNNING) {
