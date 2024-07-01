@@ -102,6 +102,7 @@ public class VoterActor {
                 .addTopicQueue("updateClusterState", 1024)
                 .addTopicQueue("asyncAppendEntries", 1024)
                 .setHandlerInstance(this)
+                .enableMetric()
                 .build();
         this.raftState = StateMachine.<VoterState>builder()
                 .initState(VoterState.FOLLOWER)
@@ -531,21 +532,39 @@ public class VoterActor {
         } else {
 
             // 如果要删除部分未提交的日志，并且待删除的这部分存在配置变更日志，则需要回滚配置
-            actor.sendThen("State", "maybeRollbackConfig", startIndex)
-                    // 3. If an existing entry conflicts with a new one (same index
-                    // but different terms), delete the existing entry and all that
-                    // follow it (§5.3)
-                    //4. Append any new entries not already in the log
-                    .thenCompose(ignored -> actor.sendThen("Journal", "compareOrAppendRaw", entries, request.getPrevLogIndex() + 1))
-                    .thenCompose(ignored -> actor.sendThen("State", "maybeUpdateNonLeaderConfig", entries))
+//            actor.sendThen("State", "maybeRollbackConfig", startIndex)
+//                    // 3. If an existing entry conflicts with a new one (same index
+//                    // but different terms), delete the existing entry and all that
+//                    // follow it (§5.3)
+//                    //4. Append any new entries not already in the log
+//                    .thenCompose(ignored -> actor.sendThen("Journal", "compareOrAppendRaw", entries, request.getPrevLogIndex() + 1))
+//                    .thenCompose(ignored -> actor.sendThen("State", "maybeUpdateNonLeaderConfig", entries))
+//                    //5. If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry)
+//                    .thenCompose(ignored -> actor.sendThen("Journal", "commit", request.getLeaderCommit()))
+//                    .thenRun(() -> {
+//                        if (leaderMaxIndex < request.getMaxIndex()) {
+//                            leaderMaxIndex = request.getMaxIndex();
+//                        }
+//                        actor.reply(msg, new AsyncAppendEntriesResponse(true, request.getPrevLogIndex() + 1,
+//                                request.getTerm(), request.getEntries().size()));
+////                        logger.info("{} AppendEntries success, prevLogIndex:{}, leaderCommit:{}, maxIndex:{}", state.getLocalUri(), request.getPrevLogIndex(), request.getLeaderCommit(), request.getMaxIndex());
+//                    })
+//                    .exceptionally(t -> {
+//                        actor.reply(msg, new AsyncAppendEntriesResponse(t));
+//                        logger.info("{} AppendEntries failed, prevLogIndex:{}, leaderCommit:{}, maxIndex:{}", state.getLocalUri(), request.getPrevLogIndex(), request.getLeaderCommit(), request.getMaxIndex());
+//                        return null;
+//                    });
+            actor.reply(msg, new AsyncAppendEntriesResponse(true, request.getPrevLogIndex() + 1,
+                    request.getTerm(), request.getEntries().size()));
+             actor.sendThen("Journal", "compareOrAppendRaw", entries, request.getPrevLogIndex() + 1)
+//                    .thenCompose(ignored -> actor.sendThen("State", "maybeUpdateNonLeaderConfig", entries))
                     //5. If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry)
-                    .thenCompose(ignored -> actor.sendThen("Journal", "commit", request.getLeaderCommit()))
                     .thenRun(() -> {
                         if (leaderMaxIndex < request.getMaxIndex()) {
                             leaderMaxIndex = request.getMaxIndex();
                         }
-                        actor.reply(msg, new AsyncAppendEntriesResponse(true, request.getPrevLogIndex() + 1,
-                                request.getTerm(), request.getEntries().size()));
+
+                        actor.send("Journal", "commit", request.getLeaderCommit());
 //                        logger.info("{} AppendEntries success, prevLogIndex:{}, leaderCommit:{}, maxIndex:{}", state.getLocalUri(), request.getPrevLogIndex(), request.getLeaderCommit(), request.getMaxIndex());
                     })
                     .exceptionally(t -> {
@@ -1261,7 +1280,13 @@ public class VoterActor {
                             entries, state.commitIndex(), maxIndex);
 
             waitingForResponse = true;
+
+            long start = System.currentTimeMillis();
             actor.<AsyncAppendEntriesResponse>sendThen("Rpc", "asyncAppendEntries", ActorRejectPolicy.EXCEPTION ,new RpcMsg<>(this.uri, request))
+                    .thenApply(r -> {
+                        logger.info("Replication destination: {}, cost: {}ms.", uri, System.currentTimeMillis() - start);
+                        return r;
+                    })
                     .thenAccept(resp -> handleAppendEntriesResponse(resp, entries.size(), fistSnapShotEntry.getKey()))
                     .exceptionally(e -> {
                         logger.warn("Replication execution exception, from {} to {}, cause: {}.", state.getLocalUri(), uri, null == e.getCause() ? e.getMessage() : e.getCause().getMessage());

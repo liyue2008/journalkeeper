@@ -68,7 +68,7 @@ class ActorOutbox {
                     throw new IllegalArgumentException("unknown rejectPolicy: " + rejectPolicy);
             }
             if (actorMsg.getContext().getMetric() != null) {
-                actorMsg.getContext().getMetric().onOutboxIn(actorMsg.getQueueName(), queue.size());
+                actorMsg.getContext().getMetric().onOutboxEnqueue(actorMsg.getQueueName(), queue.size());
             }
             ring();
 
@@ -96,8 +96,12 @@ class ActorOutbox {
             ActorMsg msg = queue.peek();
             if (msg != null) {
                 try {
+                    if (null != msg.getContext().getMetric()) {
+                        msg.getContext().getMetric().onOutboxDequeue(queue.size() - 1);
+                    }
                     consumer.accept(msg);
                     queue.poll();
+
                     hasMessage = true;
                 } catch (IllegalStateException t) {
                     logger.debug("Target inbox queue full，retry later, msg: {}", msg, t);

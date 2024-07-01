@@ -7,46 +7,53 @@ public class ActorMetric {
             = ThreadLocal.withInitial(() -> new SimpleDateFormat("HH:mm:ss.SSS"));
 
     private final long createTime = System.currentTimeMillis(); // 创建时间
-    private long inboxTime; // 放入 sender inbox 的时间
-    private long outboxTime; // 放入 receiver outbox 的时间
-    private long deliverTime; // 从 receiver outbox 中取出的时间
+    private long outboxEnqueueTime;
+    private long outboxDequeueTime;
+    private long inboxEnqueueTime;
+    private long inboxDequeueTime;
     private long consumedTime; // 消费完成的时间
 
-    private int inboxQueueSize;
+    private int inboxEnqueueSize;
+    private int inboxDequeueSize;
     private String inboxQueueName;
-    private int outBoxQueueSize;
+    private int outBoxEnqueueSize;
+    private int outBoxDequeueSize;
     private String outBoxQueueName;
 
     public long getCreateTime() {
         return createTime;
     }
 
-    public long getInboxTime() {
-        return inboxTime;
+    public long getInboxEnqueueTime() {
+        return inboxEnqueueTime;
     }
 
-    void onInboxIn(String queueName, int queueSize) {
+    void onInboxEnqueue(String queueName, int queueSize) {
         this.inboxQueueName = queueName;
-        this.inboxQueueSize = queueSize;
-        this.inboxTime = System.currentTimeMillis();
+        this.inboxEnqueueSize = queueSize;
+        this.inboxEnqueueTime = System.currentTimeMillis();
+    }
+    void onInboxDequeue(int queueSize) {
+        this.inboxDequeueSize = queueSize;
+        this.inboxDequeueTime = System.currentTimeMillis();
     }
 
-    public long getOutboxTime() {
-        return outboxTime;
+    public long getOutboxEnqueueTime() {
+        return outboxEnqueueTime;
     }
 
-    void onOutboxIn(String queueName, int queueSize) {
+    void onOutboxEnqueue(String queueName, int queueSize) {
         this.outBoxQueueName = queueName;
-        this.outBoxQueueSize = queueSize;
-        this.outboxTime = System.currentTimeMillis();
+        this.outBoxEnqueueSize = queueSize;
+        this.outboxEnqueueTime = System.currentTimeMillis();
+    }
+    void onOutboxDequeue(int queueSize) {
+        this.outBoxDequeueSize = queueSize;
+        this.outboxDequeueTime = System.currentTimeMillis();
     }
 
-    public long getDeliverTime() {
-        return deliverTime;
-    }
-
-    void onDeliver() {
-        this.deliverTime = System.currentTimeMillis();
+    public long getInboxDequeueTime() {
+        return inboxDequeueTime;
     }
 
     public long getConsumedTime() {
@@ -57,20 +64,32 @@ public class ActorMetric {
         this.consumedTime = System.currentTimeMillis();
     }
 
-    public int getInboxQueueSize() {
-        return inboxQueueSize;
+    public int getInboxEnqueueSize() {
+        return inboxEnqueueSize;
     }
 
     public String getInboxQueueName() {
         return inboxQueueName;
     }
 
-    public int getOutBoxQueueSize() {
-        return outBoxQueueSize;
+    public int getOutBoxEnqueueSize() {
+        return outBoxEnqueueSize;
     }
 
     public String getOutBoxQueueName() {
         return outBoxQueueName;
+    }
+
+    public long getOutboxDequeueTime() {
+        return outboxDequeueTime;
+    }
+
+    public int getInboxDequeueSize() {
+        return inboxDequeueSize;
+    }
+
+    public int getOutBoxDequeueSize() {
+        return outBoxDequeueSize;
     }
 
     public long cost() {
@@ -78,12 +97,13 @@ public class ActorMetric {
     }
     @Override
     public String toString() {
-        return "ActorMetric{" +
-                "createTime=" + sdfHolder.get().format(createTime) +
-                ", outboxTime=(+" + (outboxTime - createTime) + ") queSize=" + outBoxQueueSize +
-                ", inboxTime=(+" + (inboxTime - outboxTime) + ") queSize=" + inboxQueueSize +
-                ", deliverTime=(+" + (deliverTime - inboxTime) + ")" +
-                ", consumedTime=(+" + (consumedTime - deliverTime) + ")" +
-                '}';
+        return "{" +
+                "[" + sdfHolder.get().format(createTime) +
+                "]--(+" + (outboxEnqueueTime - createTime) + "ms | " + outBoxEnqueueSize +
+                ")-->[" + outBoxQueueName + "]--(+" + (outboxDequeueTime - outboxEnqueueTime) + "ms | " + outBoxDequeueSize + ")--(+"
+                + (inboxEnqueueTime - outboxDequeueTime) + "ms | " + inboxEnqueueSize + ")-->[" + inboxQueueName + "]--(+"
+                + (inboxDequeueTime - inboxEnqueueTime) + "ms | " + inboxDequeueSize + ")-->[Consumer]--(+"
+                 + (consumedTime - inboxDequeueTime) + "ms)-->[" + sdfHolder.get().format(consumedTime) +
+                "]}";
     }
 }

@@ -223,7 +223,7 @@ class ActorInbox {
         ActorMsg msg = queue.poll();
         if (msg != null) {
             if (msg.getContext().getMetric() != null) {
-                msg.getContext().getMetric().onDeliver();
+                msg.getContext().getMetric().onInboxDequeue(queue.size());
             }
             try {
                 if(msg.getTopic().startsWith("@")) {
@@ -285,6 +285,15 @@ class ActorInbox {
             } finally {
                 if (msg.getContext().getMetric() != null) {
                     msg.getContext().getMetric().onConsumed();
+
+                    if(msg.getContext().getType() == ActorMsg.Type.RESPONSE && "asyncAppendEntries".equals(msg.getQueueName())) {
+                        ActorMetric responseMetric = msg.getContext().getMetric();
+                        ActorMetric requestMetric = msg.getRequest().getContext().getMetric();
+
+                        if ( responseMetric.getConsumedTime() - requestMetric.getCreateTime() > 100L) {
+                            logger.info("asyncAppendEntries cost {} {}", requestMetric, responseMetric);
+                        }
+                    }
                 }
             }
 
@@ -300,7 +309,7 @@ class ActorInbox {
         queue.add(msg);
         ring();
         if (msg.getContext().getMetric() != null) {
-            msg.getContext().getMetric().onInboxIn(msg.getQueueName(), queue.size());
+            msg.getContext().getMetric().onInboxEnqueue(msg.getQueueName(), queue.size());
         }
     }
 
