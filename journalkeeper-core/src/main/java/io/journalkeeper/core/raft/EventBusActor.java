@@ -6,6 +6,7 @@ import io.journalkeeper.core.entry.internal.OnStateChangeEvent;
 import io.journalkeeper.rpc.client.*;
 import io.journalkeeper.utils.actor.*;
 import io.journalkeeper.utils.actor.annotation.ActorListener;
+import io.journalkeeper.utils.actor.annotation.ActorSubscriber;
 import io.journalkeeper.utils.event.Event;
 import io.journalkeeper.utils.event.EventBus;
 import io.journalkeeper.utils.event.EventType;
@@ -51,7 +52,7 @@ public class EventBusActor {
         return null;
     }
 
-    @ActorListener
+    @ActorSubscriber
     private void onStateChange(StateResult stateResult) {
         OnStateChangeEvent event = new OnStateChangeEvent(stateResult.getLastApplied());
         byte [] serializedEvent =  InternalEntriesSerializeSupport.serialize(event);

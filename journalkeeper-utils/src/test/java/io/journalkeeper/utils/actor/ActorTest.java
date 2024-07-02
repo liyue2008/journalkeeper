@@ -895,7 +895,7 @@ private static final Logger logger = LoggerFactory.getLogger(ActorTest.class);
         final int count = 10000000;
         final CountDownLatch countDownLatch = new CountDownLatch(count);
         Actor sender = Actor.builder().addr("sender")
-//                .enableMetric()
+                .enableMetric()
                 .build();
         Actor receiver = Actor.builder()
                 .addr("receiver")
@@ -913,7 +913,7 @@ private static final Logger logger = LoggerFactory.getLogger(ActorTest.class);
 
         long start = System.currentTimeMillis();
         for (int i = 0; i < count; i++) {
-            sender.send("receiver", "topic", "Hello");
+            sender.send("receiver", "topic", ActorMsg.Response.IGNORE, ActorRejectPolicy.BLOCK, "Hello");
         }
         countDownLatch.await();
         long end = System.currentTimeMillis();
@@ -940,7 +940,7 @@ private static final Logger logger = LoggerFactory.getLogger(ActorTest.class);
 
         long start = System.currentTimeMillis();
         for (int i = 0; i < count; i++) {
-            sender.sendThen("receiver", "topic", "Hello").thenAccept(result -> countDownLatch.countDown());
+            sender.sendThen("receiver", "topic", ActorRejectPolicy.BLOCK, "Hello").thenAccept(result -> countDownLatch.countDown());
         }
         countDownLatch.await();
         long end = System.currentTimeMillis();

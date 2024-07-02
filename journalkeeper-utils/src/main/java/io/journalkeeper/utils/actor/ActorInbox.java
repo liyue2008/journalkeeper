@@ -211,15 +211,19 @@ class ActorInbox {
      */
     boolean processOneMsg() {
         boolean hasMessage = false;
-        for (BlockingQueue<ActorMsg> queue : topicQueueMap.values()) {
+        for (Map.Entry<String, BlockingQueue<ActorMsg>> entry : topicQueueMap.entrySet()) {
+            BlockingQueue<ActorMsg> queue = entry.getValue();
+
             if (processOneMsgFromQueue(queue)) {
                 hasMessage = true;
             }
+
         }
         return hasMessage;
     }
 
     private boolean processOneMsgFromQueue(BlockingQueue<ActorMsg> queue){
+        long start = System.currentTimeMillis();
         ActorMsg msg = queue.poll();
         if (msg != null) {
             if (msg.getContext().getMetric() != null) {
@@ -294,6 +298,11 @@ class ActorInbox {
                             logger.info("asyncAppendEntries cost {} {}", requestMetric, responseMetric);
                         }
                     }
+                }
+
+                long stop = System.currentTimeMillis();
+                if (stop - start > 100) {
+                    logger.warn("Slow consume, cost: {}, msg: {}.", stop - start, msg);
                 }
             }
 
