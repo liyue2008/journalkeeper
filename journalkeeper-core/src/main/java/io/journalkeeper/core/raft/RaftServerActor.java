@@ -47,15 +47,20 @@ public class RaftServerActor implements  RaftServer {
     }
 
     private ServerContext buildServerContext(Roll roll, StateFactory stateFactory, JournalEntryParser journalEntryParser, Properties properties, Config config) {
+        Actor.Builder flushActorBuilder = Actor.builder().addr("Flush").privatePostman(true);
+        Actor.Builder commitActorBuilder = Actor.builder().addr("Commit").privatePostman(true);
+
+
         MetricProviderImpl metricProvider  = new MetricProviderImpl(config.get("enable_metric"), config.get("print_metric_interval_sec"));
-        JournalActor journalActor = new JournalActor(journalEntryParser, config, metricProvider, properties);
-        StateActor stateActor = new StateActor(stateFactory, journalEntryParser, journalActor.getRaftJournal(),config, properties);
+        JournalActor journalActor = new JournalActor(journalEntryParser, config, metricProvider, flushActorBuilder, commitActorBuilder, properties);
+        StateActor stateActor = new StateActor(stateFactory, journalEntryParser, journalActor.getRaftJournal(), flushActorBuilder, commitActorBuilder, config, properties);
         VoterActor voterActor = new VoterActor(roll, journalEntryParser, journalActor.getRaftJournal(),stateActor.getState(), metricProvider, config);
         ServerRpcActor serverRpcActor = new ServerRpcActor();
 
         this.serverRpc = serverRpcActor;
         RpcActor rpcActor = new RpcActor(properties);
         EventBusActor eventBusActor = new EventBusActor();
+
 
         PostOffice postOffice = PostOffice.builder()
                 .addActor(actor)
@@ -67,6 +72,8 @@ public class RaftServerActor implements  RaftServer {
                 .addActor(rpcActor.getActor())
                 .addActor(eventBusActor.getActor())
                 .addActor(metricProvider.getActor())
+                .addActor(flushActorBuilder.build())
+                .addActor(commitActorBuilder.build())
                 .build();
         return new ServerContext(properties, config, stateActor.getState(),
                 journalActor.getRaftJournal(), voterActor.getMonitoredVoter(),

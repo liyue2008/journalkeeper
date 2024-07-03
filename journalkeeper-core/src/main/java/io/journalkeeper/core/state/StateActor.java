@@ -94,7 +94,7 @@ public class StateActor implements RaftState{
     private final Actor actor;
 
 
-    public StateActor(StateFactory stateFactory, JournalEntryParser journalEntryParser, RaftJournal journal, Config config, Properties properties) {
+    public StateActor(StateFactory stateFactory, JournalEntryParser journalEntryParser, RaftJournal journal, Actor.Builder flushActorBuilder, Actor.Builder commitActorBuilder, Config config, Properties properties) {
         this.stateFactory = stateFactory;
         this.journalEntryParser = journalEntryParser;
         this.journal = journal;
@@ -319,7 +319,7 @@ public class StateActor implements RaftState{
         try {
             doRecover();
             isRecovered = true;
-            actor.pub("onStateRecovered");
+            actor.send("Voter","onStateRecovered");
             return new JournalActor.RecoverJournalRequest(
                     state.getPartitions(),
                     snapshots.firstEntry().getValue().getJournalSnapshot(),
@@ -679,6 +679,13 @@ public class StateActor implements RaftState{
         state.removeInterceptor(interceptor);
     }
 
+    private long lastFlushTimestamp = 0L;
+    private void flushPeriodically() {
+        if (System.currentTimeMillis() - lastFlushTimestamp >= config.<Long>get("flush_interval_ms")) {
+            flush();
+        }
+    }
+
     private void flush() {
         if(!isRecovered){
             return;
@@ -690,6 +697,7 @@ public class StateActor implements RaftState{
                 metadataPersistence.save(metadataFile(), metadata);
                 lastSavedServerMetadata = metadata;
             }
+            lastFlushTimestamp = System.currentTimeMillis();
             actor.pub("onStateFlush");
         } catch (ClosedByInterruptException ignored) {
         } catch (Throwable e) {
@@ -702,6 +710,14 @@ public class StateActor implements RaftState{
         flush();
     }
 
+
+    private long lastApplyEntriesTimestamp = 0L;
+    @ActorScheduler(interval = 100L, topic = "applyEntries")
+    private  void applyEntriesPeriodically() {
+        if (System.currentTimeMillis() - lastApplyEntriesTimestamp >= 100L) {
+            applyEntries();
+        }
+    }
     /**
      * 监听属性commitIndex的变化，
      * 当commitIndex变更时如果commitIndex > lastApplied，
@@ -710,17 +726,20 @@ public class StateActor implements RaftState{
      * 2. lastApplied自增，将log[lastApplied]应用到状态机，更新当前状态state；
      *
      */
-    @ActorScheduler(interval = 100L)
     @ActorSubscriber(topic = "onJournalCommit")
     private void applyEntries() {
         if(!isRecovered){
             return;
         }
+        List<StateResult> resultList = new ArrayList<>();
         while (state.lastApplied() < journal.commitIndex()) {
             long offset = journal.readOffset(state.lastApplied());
             JournalEntry entryHeader = journal.readEntryHeaderByOffset(offset);
-            StateResult stateResult = state.applyEntry(entryHeader, new EntryFutureImpl(journal, offset), journal);
-            actor.pub("onStateChange", stateResult);
+            resultList.add(state.applyEntry(entryHeader, new EntryFutureImpl(journal, offset), journal));
+        }
+        if (!resultList.isEmpty()) {
+            actor.pub("onStateChange", resultList);
+            lastApplyEntriesTimestamp = System.currentTimeMillis();
         }
     }
 

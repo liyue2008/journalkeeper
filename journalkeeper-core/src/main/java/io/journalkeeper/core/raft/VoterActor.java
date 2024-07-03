@@ -102,6 +102,7 @@ public class VoterActor {
                 .addTopicQueue("updateClusterState", 1024)
                 .addTopicQueue("asyncAppendEntries", 1024)
                 .setHandlerInstance(this)
+                .privatePostman(true)
                 .enableMetric()
                 .build();
         this.raftState = StateMachine.<VoterState>builder()
@@ -532,39 +533,21 @@ public class VoterActor {
         } else {
 
             // 如果要删除部分未提交的日志，并且待删除的这部分存在配置变更日志，则需要回滚配置
-//            actor.sendThen("State", "maybeRollbackConfig", startIndex)
-//                    // 3. If an existing entry conflicts with a new one (same index
-//                    // but different terms), delete the existing entry and all that
-//                    // follow it (§5.3)
-//                    //4. Append any new entries not already in the log
-//                    .thenCompose(ignored -> actor.sendThen("Journal", "compareOrAppendRaw", entries, request.getPrevLogIndex() + 1))
-//                    .thenCompose(ignored -> actor.sendThen("State", "maybeUpdateNonLeaderConfig", entries))
-//                    //5. If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry)
-//                    .thenCompose(ignored -> actor.sendThen("Journal", "commit", request.getLeaderCommit()))
-//                    .thenRun(() -> {
-//                        if (leaderMaxIndex < request.getMaxIndex()) {
-//                            leaderMaxIndex = request.getMaxIndex();
-//                        }
-//                        actor.reply(msg, new AsyncAppendEntriesResponse(true, request.getPrevLogIndex() + 1,
-//                                request.getTerm(), request.getEntries().size()));
-////                        logger.info("{} AppendEntries success, prevLogIndex:{}, leaderCommit:{}, maxIndex:{}", state.getLocalUri(), request.getPrevLogIndex(), request.getLeaderCommit(), request.getMaxIndex());
-//                    })
-//                    .exceptionally(t -> {
-//                        actor.reply(msg, new AsyncAppendEntriesResponse(t));
-//                        logger.info("{} AppendEntries failed, prevLogIndex:{}, leaderCommit:{}, maxIndex:{}", state.getLocalUri(), request.getPrevLogIndex(), request.getLeaderCommit(), request.getMaxIndex());
-//                        return null;
-//                    });
-            actor.reply(msg, new AsyncAppendEntriesResponse(true, request.getPrevLogIndex() + 1,
-                    request.getTerm(), request.getEntries().size()));
-             actor.sendThen("Journal", "compareOrAppendRaw", entries, request.getPrevLogIndex() + 1)
-//                    .thenCompose(ignored -> actor.sendThen("State", "maybeUpdateNonLeaderConfig", entries))
+            actor.sendThen("State", "maybeRollbackConfig", startIndex)
+                    // 3. If an existing entry conflicts with a new one (same index
+                    // but different terms), delete the existing entry and all that
+                    // follow it (§5.3)
+                    //4. Append any new entries not already in the log
+                    .thenCompose(ignored -> actor.sendThen("Journal", "compareOrAppendRaw", entries, request.getPrevLogIndex() + 1))
+                    .thenCompose(ignored -> actor.sendThen("State", "maybeUpdateNonLeaderConfig", entries))
                     //5. If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry)
+                    .thenCompose(ignored -> actor.sendThen("Journal", "commit", request.getLeaderCommit()))
                     .thenRun(() -> {
                         if (leaderMaxIndex < request.getMaxIndex()) {
                             leaderMaxIndex = request.getMaxIndex();
                         }
-
-                        actor.send("Journal", "commit", request.getLeaderCommit());
+                        actor.reply(msg, new AsyncAppendEntriesResponse(true, request.getPrevLogIndex() + 1,
+                                request.getTerm(), request.getEntries().size()));
 //                        logger.info("{} AppendEntries success, prevLogIndex:{}, leaderCommit:{}, maxIndex:{}", state.getLocalUri(), request.getPrevLogIndex(), request.getLeaderCommit(), request.getMaxIndex());
                     })
                     .exceptionally(t -> {
@@ -573,7 +556,6 @@ public class VoterActor {
                         return null;
                     });
         }
-
     }
 
     @ResponseManually
@@ -671,13 +653,13 @@ public class VoterActor {
         }
         switch (responseConfig) {
             case PERSISTENCE:
-                actor.send("Journal", "flush");
+                actor.send("Flush", "flushJournal");
                 break;
             case REPLICATION:
                 this.replication();
                 break;
             case ALL:
-                actor.send("Journal", "flush");
+                actor.send("Flush", "flushJournal");
                 this.replication();
                 break;
             default:
@@ -795,35 +777,43 @@ public class VoterActor {
         return N;
     }
     @ActorSubscriber
-    private void onStateChange(StateResult stateResult) {
+    private void onStateChange(List<StateResult> stateResults) {
         if (raftState.current() != VoterState.LEADER) {
             return;
         }
-        if(config.get("enable_events")) {
-            OnStateChangeEvent event = new OnStateChangeEvent(state.lastApplied());
-            byte [] serializedEvent =  InternalEntriesSerializeSupport.serialize(event);
-            actor.send("EventBus", "fireEvent", new Event(EventType.ON_STATE_CHANGE, serializedEvent));
-        }
-        Iterator<WaitingResponse> iterator = waitingResponses.iterator();
-        while (iterator.hasNext()) {
-            WaitingResponse waitingResponse = iterator.next();
-            if (waitingResponse.positionMatch(stateResult.getLastApplied() - 1)) {
-                waitingResponse.putResult(stateResult.getUserResult(), stateResult.getLastApplied());
-                if (waitingResponse.countdownReplication()) {
-                    iterator.remove();
-                }
-                break;
+        List<Event> events = new ArrayList<>();
+        for (StateResult stateResult : stateResults) {
+            if(config.get("enable_events")) {
+                OnStateChangeEvent event = new OnStateChangeEvent(stateResult.getLastApplied());
+                byte [] serializedEvent =  InternalEntriesSerializeSupport.serialize(event);
+                events.add(new Event(EventType.ON_STATE_CHANGE, serializedEvent));
             }
+            Iterator<WaitingResponse> iterator = waitingResponses.iterator();
+            while (iterator.hasNext()) {
+                WaitingResponse waitingResponse = iterator.next();
+                if (waitingResponse.positionMatch(stateResult.getLastApplied() - 1)) {
+                    waitingResponse.putResult(stateResult.getUserResult(), stateResult.getLastApplied());
+                    if (waitingResponse.countdownReplication()) {
+                        iterator.remove();
+                    }
+                    break;
+                }
+            }
+        }
+
+        if (!events.isEmpty()) {
+            actor.send("EventBus", "fireEvents", events);
         }
     }
 
-    @ActorSubscriber
-    private void onJournalFlush(long journalFlushIndex) {
+    @ActorListener
+    private void onJournalFlush() {
         if (raftState.current() != VoterState.LEADER) {
             return;
         }
         Iterator<WaitingResponse> iterator = this.waitingResponses.iterator();
 
+        long journalFlushIndex = journal.flushedIndex();
         while (iterator.hasNext()) {
             WaitingResponse waitingResponse = iterator.next();
             if (waitingResponse.getToPosition() <= journalFlushIndex) {
@@ -1039,7 +1029,7 @@ public class VoterActor {
         }
     }
 
-    @ActorSubscriber
+    @ActorListener
     private void onStateRecovered() {
         this.replicationDestinations.addAll(state.getConfigState().voters().stream()
                 .filter(uri -> !uri.equals(state.getLocalUri()))
@@ -1284,7 +1274,11 @@ public class VoterActor {
             long start = System.currentTimeMillis();
             actor.<AsyncAppendEntriesResponse>sendThen("Rpc", "asyncAppendEntries", ActorRejectPolicy.EXCEPTION ,new RpcMsg<>(this.uri, request))
                     .thenApply(r -> {
-                        logger.info("Replication destination: {}, cost: {}ms.", uri, System.currentTimeMillis() - start);
+                        long now = System.currentTimeMillis();
+                        long cost = now - start;
+                        if (cost > 100L) {
+                            logger.info("Slow replication! destination: {}, cost: {}ms.", uri, cost);
+                        }
                         return r;
                     })
                     .thenAccept(resp -> handleAppendEntriesResponse(resp, entries.size(), fistSnapShotEntry.getKey()))

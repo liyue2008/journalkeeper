@@ -157,4 +157,6 @@ public interface RaftJournal {
     Map<Integer, Long> calcPartitionIndices(long journalOffset);
 
     long maxOffset();
+
+    long flushOnce();
 }

@@ -52,7 +52,7 @@ private static final Logger logger = LoggerFactory.getLogger( JournalActor.class
     private final JMetric appendJournalMetric;
 
 
-    public JournalActor(JournalEntryParser journalEntryParser, Config config, MetricProvider metricProvider, Properties properties) {
+    public JournalActor(JournalEntryParser journalEntryParser, Config config, MetricProvider metricProvider, Actor.Builder flushActorBuilder, Actor.Builder commitActorBuilder, Properties properties) {
         this.config = config;
         this.properties = properties;
         PersistenceFactory persistenceFactory = ServiceSupport.load(PersistenceFactory.class);
@@ -60,6 +60,11 @@ private static final Logger logger = LoggerFactory.getLogger( JournalActor.class
         this.journal = new Journal(persistenceFactory, bufferPool, journalEntryParser);
         this.monitoredJournal = new MonitoredJournalImpl();
         this.actor = Actor.builder().addr("Journal").setHandlerInstance(this).build();
+        flushActorBuilder.addTopicHandlerFunction("flushJournal", this::flush);
+        // TODO: flushActorBuilder.addScheduler("flushJournalScheduler", this::flush);
+        // TODO: flushActorBuilder.addSubscriber("onStop", this::flush);
+        commitActorBuilder.addTopicHandlerFunction("commitJournal", this::commit);
+
         this.metricProvider = metricProvider;
         this.appendJournalMetric = metricProvider.getMetric(MetricNames.METRIC_APPEND_JOURNAL);
     }
@@ -128,16 +133,17 @@ private static final Logger logger = LoggerFactory.getLogger( JournalActor.class
         journal.compareOrAppendRaw(entries, startIndex);
     }
 
-    @ActorListener
-    private void commit(long commitIndex) throws IOException {
-
-        if (commitIndex > journal.commitIndex()) {
-            journal.commit(Math.min(commitIndex, journal.maxIndex()));
-            actor.pub("onJournalCommit");
+    private void commit(long commitIndex){
+        try {
+            if (commitIndex > journal.commitIndex()) {
+                journal.commit(Math.min(commitIndex, journal.maxIndex()));
+                actor.pub("onJournalCommit");
+            }
+        } catch (IOException e) {
+            logger.warn("Commit journal exception: ", e);
         }
 
     }
-    @ActorScheduler(interval = 100L)
     private void flush() {
         long flushCount = journal.flushOnce();
         if (flushCount > 0) {
@@ -164,6 +170,7 @@ private static final Logger logger = LoggerFactory.getLogger( JournalActor.class
     }
     @ActorSubscriber
     private void onStop() {
+        // TODO: 移到flushActor中
         flush();
         this.metricProvider.removeMetric(MetricNames.METRIC_APPEND_JOURNAL);
     }

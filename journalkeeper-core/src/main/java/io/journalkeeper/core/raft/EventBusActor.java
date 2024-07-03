@@ -11,6 +11,8 @@ import io.journalkeeper.utils.event.Event;
 import io.journalkeeper.utils.event.EventBus;
 import io.journalkeeper.utils.event.EventType;
 
+import java.util.List;
+
 public class EventBusActor {
     private final EventBus eventBus;
     private final Actor actor = Actor.builder().addr("EventBus").setHandlerInstance(this).build();
@@ -53,14 +55,20 @@ public class EventBusActor {
     }
 
     @ActorSubscriber
-    private void onStateChange(StateResult stateResult) {
-        OnStateChangeEvent event = new OnStateChangeEvent(stateResult.getLastApplied());
-        byte [] serializedEvent =  InternalEntriesSerializeSupport.serialize(event);
-        eventBus.fireEvent(new Event(EventType.ON_STATE_CHANGE, serializedEvent));
+    private void onStateChange(List<StateResult> stateResults) {
+        for(StateResult stateResult : stateResults) {
+            OnStateChangeEvent event = new OnStateChangeEvent(stateResult.getLastApplied());
+            byte[] serializedEvent = InternalEntriesSerializeSupport.serialize(event);
+            eventBus.fireEvent(new Event(EventType.ON_STATE_CHANGE, serializedEvent));
+        }
     }
     @ActorListener
     private void fireEvent(Event event) {
         eventBus.fireEvent(event);
+    }
+    @ActorListener
+    private void fireEvents(List<Event> events) {
+        events.forEach(eventBus::fireEvent);
     }
     public Actor getActor() {
         return actor;

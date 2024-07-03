@@ -160,7 +160,7 @@ class ActorInbox {
                     this.outbox.send(this.outbox.createResponse(msg, null, ite.getCause()));
 
                 }
-                logger.info("Invoke message handler exception, handler: {}, msg: {}, exception: {}.", instance.getClass().getName() + "." + method.getName() + "(...)", msg, ite.getMessage());
+                logger.info("Invoke message handler exception, handler: {}, msg: {}, exception: {}.", instance.getClass().getName() + "." + method.getName() + "(...)", msg, ite.getTargetException().getMessage());
             } catch (IllegalArgumentException e) {
                 if (needResponse(msg, method)) {
                     this.outbox.send(this.outbox.createResponse(msg, null, e));
@@ -295,13 +295,13 @@ class ActorInbox {
                         ActorMetric requestMetric = msg.getRequest().getContext().getMetric();
 
                         if ( responseMetric.getConsumedTime() - requestMetric.getCreateTime() > 100L) {
-                            logger.info("asyncAppendEntries cost {} {}", requestMetric, responseMetric);
+                            logger.info("asyncAppendEntries cost {}--(+{}ms)->{}", requestMetric, responseMetric.getCreateTime() - requestMetric.getConsumedTime(), responseMetric);
                         }
                     }
                 }
 
                 long stop = System.currentTimeMillis();
-                if (stop - start > 100) {
+                if (stop - start > 50) {
                     logger.warn("Slow consume, cost: {}, msg: {}.", stop - start, msg);
                 }
             }

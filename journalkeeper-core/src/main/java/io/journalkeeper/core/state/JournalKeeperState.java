@@ -233,10 +233,6 @@ public class JournalKeeperState implements Flushable {
             internalState.setLastIncludedTerm(entryHeader.getTerm());
             internalState.next();
             result.setLastApplied(lastApplied());
-            flushInternalState();
-
-        } catch (IOException e) {
-            logger.warn("Flush internal state exception! Path: {}.", path, e);
         }
         finally {
             stateLock.unlockWrite(stamp);
