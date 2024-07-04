@@ -158,5 +158,4 @@ public interface RaftJournal {
 
     long maxOffset();
 
-    long flushOnce();
 }
