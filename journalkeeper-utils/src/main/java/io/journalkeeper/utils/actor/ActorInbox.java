@@ -18,8 +18,14 @@ class ActorInbox {
     private static final Logger logger = LoggerFactory.getLogger( ActorInbox.class );
     // 显式注册的收消息方法
     private final Map<String /* topic */, Tuple<Object /* instance */, Method>> topicHandlerFunctions;
+    // 显式注册的pub/sub消费者方法
+    private final Map<String /* topic */, Tuple<Object /* instance */, Method>> subscriberHandlerFunctions = new HashMap<>(); 
     // 兜底处理所有未被处理消息的方法
     private Consumer<ActorMsg> defaultHandlerFunction;
+    // 注解注册的方法
+    private Map<String, Method> annotationListeners = new HashMap<>();
+
+    private List<ScheduleTask> schedulers = new LinkedList<>();
     // 收件箱地址
     private final String myAddr;
     // 收消息的实例对象
@@ -52,9 +58,7 @@ class ActorInbox {
         return myAddr;
     }
 
-    private Map<String, Method> annotationListeners = new HashMap<>();
 
-    private List<ScheduleTask> schedulers = new LinkedList<>();
     private List<ScheduleTask> scanSchedulers(Object handlerInstance) {
         return Arrays.stream(handlerInstance.getClass().getDeclaredMethods())
                 .filter(method -> method.isAnnotationPresent(ActorScheduler.class))
@@ -121,6 +125,40 @@ class ActorInbox {
         topicHandlerFunctions.remove(topic);
     }
 
+
+
+    void addSubscriberHandlerFunction(String topic, Runnable runnable) {
+        try {
+            addSubscriberHandlerFunction(topic, runnable, runnable.getClass().getDeclaredMethod("run"));
+        } catch (NoSuchMethodException e) {
+            throw new RuntimeException(e);
+        }
+    }
+    <T> void addSubscriberHandlerFunction(String topic, Consumer<T> consumer) {
+        try {
+            addSubscriberHandlerFunction(topic, consumer, consumer.getClass().getDeclaredMethod("accept", Object.class));
+        } catch (NoSuchMethodException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    <T, U> void addSubscriberHandlerFunction(String topic, BiConsumer<T, U> consumer) {
+        try {
+            addSubscriberHandlerFunction(topic, consumer, consumer.getClass().getDeclaredMethod("accept", Object.class, Object.class));
+        } catch (NoSuchMethodException e) {
+            throw new RuntimeException(e);
+        }
+    }
+    
+    void addSubscriberHandlerFunction(String topic, Object instance, Method method) {
+        subscriberHandlerFunctions.put(topic, new Tuple<>(instance, method));
+    }
+
+    void removeSubscriberHandlerFunction(String topic) {
+        subscriberHandlerFunctions.remove(topic);
+    }
+    
+
     void setDefaultHandlerFunction(Consumer<ActorMsg> handlerFunction) {
         this.defaultHandlerFunction = handlerFunction;
     }
@@ -132,10 +170,15 @@ class ActorInbox {
     }
 
     Set<String> getSubscribedTopics() {
-        return annotationListeners.entrySet().stream()
+        Set<String> ret = new HashSet<>();
+        ret.addAll(subscriberHandlerFunctions.keySet());
+
+        ret.addAll(annotationListeners.entrySet().stream()
                 .filter(entry -> entry.getValue().isAnnotationPresent(ActorSubscriber.class))
                 .map(Map.Entry::getKey)
-                .collect(Collectors.toSet());
+                .collect(Collectors.toSet()));
+
+        return ret;
     }
 
     private boolean tryInvoke(Tuple<Object, Method> function, ActorMsg msg) throws IllegalAccessException {
@@ -188,7 +231,7 @@ class ActorInbox {
                 if (!void.class.equals(method.getReturnType())) {
                     this.outbox.send(this.outbox.createResponse(msg, null, ite.getCause()));
                 }
-                logger.info("Invoke message handler exception, handler: {}, msg: {}, exception: {}.", handlerInstance.getClass().getName() + "." + method.getName() + "(...)", msg, ite.getTargetException().getMessage());
+                logger.info("Invoke scheduler listener exception, handler: {}, msg: {}, exception: {}.", handlerInstance.getClass().getName() + "." + method.getName() + "(...)", msg, ite.getTargetException().getMessage());
             }
         } else {
             tryInvoke(new Tuple<>(handlerInstance, method), msg);
@@ -232,18 +275,32 @@ class ActorInbox {
             try {
                 if(msg.getTopic().startsWith("@")) {
                     String methodName = msg.getTopic().substring(1);
-                    if ("addTopicHandlerFunction".equals(methodName)) {
-                        addTopicHandlerFunction(msg.getPayload(), msg.<Runnable>getPayload(1));
-                    } else if ("removeTopicHandlerFunction".equals(methodName)) {
-                        removeTopicHandlerFunction(msg.getPayload());
-                    }else {
-                        throw new IllegalArgumentException("Unsupported method: " + methodName);
+                    switch (methodName) {
+                        case "addTopicHandlerFunction":
+                            addTopicHandlerFunction(msg.getPayload(), msg.<Runnable>getPayload(1));
+                            break;
+                        case "removeTopicHandlerFunction":
+                            removeTopicHandlerFunction(msg.getPayload());
+                            break;
+                        case "addSubscriberHandlerFunction":
+                            addSubscriberHandlerFunction(msg.getPayload(), msg.<Runnable>getPayload(1));
+                            break;
+                        case "removeSubscriberHandlerFunction":
+                            removeSubscriberHandlerFunction(msg.getPayload());
+                            break;
+                        default:
+                            throw new IllegalArgumentException("Unsupported method: " + methodName);
                     }
                     return true;
                 }
 
                 // 显式注册的方法
                 Tuple<Object, Method> tuple = topicHandlerFunctions.get(msg.getTopic());
+                if (tryInvoke(tuple, msg)){
+                    return true;
+                }
+
+                tuple = subscriberHandlerFunctions.get(msg.getTopic());
                 if (tryInvoke(tuple, msg)){
                     return true;
                 }

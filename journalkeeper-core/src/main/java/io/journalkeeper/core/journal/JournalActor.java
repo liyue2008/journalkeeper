@@ -21,7 +21,6 @@ import io.journalkeeper.persistence.MonitoredPersistence;
 import io.journalkeeper.persistence.PersistenceFactory;
 import io.journalkeeper.utils.actor.Actor;
 import io.journalkeeper.utils.actor.annotation.ActorListener;
-import io.journalkeeper.utils.actor.annotation.ActorScheduler;
 import io.journalkeeper.utils.actor.annotation.ActorSubscriber;
 import io.journalkeeper.utils.config.Config;
 import io.journalkeeper.utils.spi.ServiceSupport;
@@ -30,6 +29,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 
 import static io.journalkeeper.core.api.RaftJournal.RESERVED_PARTITIONS_START;
 import static io.journalkeeper.core.journal.Journal.INDEX_STORAGE_SIZE;
@@ -61,7 +61,8 @@ private static final Logger logger = LoggerFactory.getLogger( JournalActor.class
         this.monitoredJournal = new MonitoredJournalImpl();
         this.actor = Actor.builder().addr("Journal").setHandlerInstance(this).build();
         flushActorBuilder.addTopicHandlerFunction("flushJournal", this::flush);
-        // TODO: flushActorBuilder.addScheduler("flushJournalScheduler", this::flush);
+        flushActorBuilder.addScheduler(config.get("flush_interval_ms"), TimeUnit.MILLISECONDS, "flushJournalScheduler", this::flush);
+
         // TODO: flushActorBuilder.addSubscriber("onStop", this::flush);
         commitActorBuilder.addTopicHandlerFunction("commitJournal", this::commit);
 
