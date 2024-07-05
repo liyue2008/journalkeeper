@@ -110,7 +110,7 @@ public class StateActor implements RaftState{
 
         this.partialSnapshot = new PartialSnapshot(partialSnapshotPath());
 
-        this.actor.addScheduler(config.<Long>get("flush_interval_ms"), TimeUnit.MILLISECONDS, "flush", this::flush);
+        this.actor.addActorScheduler(config.<Long>get("flush_interval_ms"), TimeUnit.MILLISECONDS, "flush", this::flush);
     }
 
 

@@ -60,11 +60,10 @@ private static final Logger logger = LoggerFactory.getLogger( JournalActor.class
         this.journal = new Journal(persistenceFactory, bufferPool, journalEntryParser);
         this.monitoredJournal = new MonitoredJournalImpl();
         this.actor = Actor.builder().addr("Journal").setHandlerInstance(this).build();
-        flushActorBuilder.addTopicHandlerFunction("flushJournal", this::flush);
+        flushActorBuilder.addActorListener("flushJournal", this::flush);
         flushActorBuilder.addScheduler(config.get("flush_interval_ms"), TimeUnit.MILLISECONDS, "flushJournalScheduler", this::flush);
-
-        // TODO: flushActorBuilder.addSubscriber("onStop", this::flush);
-        commitActorBuilder.addTopicHandlerFunction("commitJournal", this::commit);
+        flushActorBuilder.addActorSubscriber("onStop", this::flush);
+        commitActorBuilder.addActorListener("commitJournal", this::commit);
 
         this.metricProvider = metricProvider;
         this.appendJournalMetric = metricProvider.getMetric(MetricNames.METRIC_APPEND_JOURNAL);

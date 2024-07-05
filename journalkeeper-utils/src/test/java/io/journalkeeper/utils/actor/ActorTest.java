@@ -17,11 +17,11 @@ import java.util.function.Consumer;
 public class ActorTest {
 private static final Logger logger = LoggerFactory.getLogger(ActorTest.class);
     @Test
-    public void testAddTopicHandlerFunctionNoArg() throws InterruptedException {
+    public void testAddActorListenerNoArg() throws InterruptedException {
 
         CountDownLatch latch = new CountDownLatch(1);
         Actor receiver = Actor.builder().addr("receiver")
-                .addTopicHandlerFunction("test", latch::countDown)
+                .addActorListener("test", latch::countDown)
                 .build();
         Actor sender = Actor.builder().addr("sender").build();
         PostOffice.builder()
@@ -33,10 +33,10 @@ private static final Logger logger = LoggerFactory.getLogger(ActorTest.class);
     }
 
     @Test
-    public void testAddTopicHandlerFunctionOneArg() throws InterruptedException {
+    public void testAddActorListenerOneArg() throws InterruptedException {
         CountDownLatch latch = new CountDownLatch(1);
         Actor receiver = Actor.builder().addr("receiver")
-                .addTopicHandlerFunction("test", (Consumer<String>) str -> {
+                .addActorListener("test", (Consumer<String>) str -> {
                     Assert.assertEquals("Hello, world!", str);
                     latch.countDown();
                 })
@@ -52,10 +52,10 @@ private static final Logger logger = LoggerFactory.getLogger(ActorTest.class);
     }
 
     @Test
-    public void testAddTopicHandlerFunctionTwoArgs() throws InterruptedException {
+    public void testAddActorListenerTwoArgs() throws InterruptedException {
         CountDownLatch latch = new CountDownLatch(1);
         Actor receiver = Actor.builder().addr("receiver")
-                .addTopicHandlerFunction("test", (str, num) -> {
+                .addActorListener("test", (str, num) -> {
                     Assert.assertEquals("Hello, world!", str);
                     Assert.assertEquals(12, num);
                     latch.countDown();
@@ -72,9 +72,9 @@ private static final Logger logger = LoggerFactory.getLogger(ActorTest.class);
     }
 
     @Test
-    public void testAddTopicHandlerFunctionNoArgWithResponse() throws InterruptedException {
+    public void testAddActorListenerNoArgWithResponse() throws InterruptedException {
         CountDownLatch latch = new CountDownLatch(2);
-        Actor receiver = Actor.builder().addr("receiver").addTopicHandlerFunction("test", () -> {
+        Actor receiver = Actor.builder().addr("receiver").addActorListener("test", () -> {
             latch.countDown();
             return "Hello, world!";
         }).build();
@@ -93,9 +93,9 @@ private static final Logger logger = LoggerFactory.getLogger(ActorTest.class);
     }
 
     @Test
-    public void testAddTopicHandlerFunctionOneArgWithResponse() throws InterruptedException {
+    public void testAddActorListenerOneArgWithResponse() throws InterruptedException {
         CountDownLatch latch = new CountDownLatch(2);
-        Actor receiver = Actor.builder().addr("receiver").addTopicHandlerFunction("test", str -> {
+        Actor receiver = Actor.builder().addr("receiver").addActorListener("test", str -> {
             Assert.assertEquals("Hello, world!", str);
             latch.countDown();
             return "Hello, world2!";
@@ -116,9 +116,9 @@ private static final Logger logger = LoggerFactory.getLogger(ActorTest.class);
     }
 
     @Test
-    public void testAddTopicHandlerFunctionTwoArgsWithResponse() throws InterruptedException {
+    public void testAddActorListenerTwoArgsWithResponse() throws InterruptedException {
         CountDownLatch latch = new CountDownLatch(2);
-        Actor receiver = Actor.builder().addr("receiver").addTopicHandlerFunction("test", (str, num) -> {
+        Actor receiver = Actor.builder().addr("receiver").addActorListener("test", (str, num) -> {
             Assert.assertEquals("Hello, world!", str);
             Assert.assertEquals(12, num);
             latch.countDown();
@@ -446,13 +446,13 @@ private static final Logger logger = LoggerFactory.getLogger(ActorTest.class);
     }
 
     @Test
-    public void testAddScheduler () throws InterruptedException {
+    public void testAddActorScheduler() throws InterruptedException {
         Actor receiver = Actor.builder().addr("receiver").build();
         AtomicInteger counter = new AtomicInteger();
         PostOffice.builder()
                 .addActor(receiver)
                 .build();
-        receiver.addScheduler(10, TimeUnit.MILLISECONDS, "onEvent", counter::incrementAndGet);
+        receiver.addActorScheduler(10, TimeUnit.MILLISECONDS, "onEvent", counter::incrementAndGet);
         Thread.sleep(100);
         int count = counter.get();
         Assert.assertTrue(8 < count && count < 12);
@@ -465,12 +465,13 @@ private static final Logger logger = LoggerFactory.getLogger(ActorTest.class);
         PostOffice.builder()
                 .addActor(receiver)
                 .build();
-        receiver.addScheduler(10, TimeUnit.MILLISECONDS, "onEvent", counter::incrementAndGet);
+        Runnable runnable = counter::incrementAndGet;
+        receiver.addActorScheduler(10, TimeUnit.MILLISECONDS, "onEvent", runnable);
         Thread.sleep(100);
         int count = counter.get();
         Assert.assertTrue(8 < count && count < 12);
 
-        receiver.removeScheduler("onEvent");
+        receiver.removeScheduler("onEvent", runnable);
         // 等待消息被处理
         Thread.sleep(20);
         // 之后counter不再增长
@@ -482,7 +483,7 @@ private static final Logger logger = LoggerFactory.getLogger(ActorTest.class);
 
 
     @Test
-    public void testAddTopicHandlerFunctionWithAnnotation() throws InterruptedException {
+    public void testAddActorListenerWithAnnotation() throws InterruptedException {
         final CountDownLatch latch = new CountDownLatch(12);
         AnnotationHandlerFunctions handlerFunctions = new AnnotationHandlerFunctions(latch);
         Actor receiver = Actor.builder().addr("receiver").setHandlerInstance(handlerFunctions).build();
@@ -551,7 +552,7 @@ private static final Logger logger = LoggerFactory.getLogger(ActorTest.class);
         CountDownLatch latch = new CountDownLatch(2);
         AtomicInteger topic1Count = new AtomicInteger(0);
         AtomicInteger topic2Count = new AtomicInteger(0);
-        Actor receiver = Actor.builder().addr("receiver").addTopicHandlerFunction("topic1", () -> {
+        Actor receiver = Actor.builder().addr("receiver").addActorListener("topic1", () -> {
             topic1Count.incrementAndGet();
             latch.countDown();
         }).setDefaultHandlerFunction(msg -> {
@@ -579,7 +580,7 @@ private static final Logger logger = LoggerFactory.getLogger(ActorTest.class);
     @Test
     public void testResponseHandlerFunction() throws InterruptedException {
         final CountDownLatch latch = new CountDownLatch(2);
-        Actor receiver = Actor.builder().addr("receiver").addTopicHandlerFunction("topic", request -> {
+        Actor receiver = Actor.builder().addr("receiver").addActorListener("topic", request -> {
             Assert.assertEquals("Hello!", request);
             latch.countDown();
             return "World!";
@@ -628,11 +629,11 @@ private static final Logger logger = LoggerFactory.getLogger(ActorTest.class);
     public void testResponseAnnotationFunction() throws InterruptedException {
         final CountDownLatch latch = new CountDownLatch(4);
         Actor receiver = Actor.builder().addr("receiver")
-                .addTopicHandlerFunction("my_topic1", () -> {
+                .addActorListener("my_topic1", () -> {
                     latch.countDown();
                     return "result";
                 })
-                .addTopicHandlerFunction("my_topic2", () -> {
+                .addActorListener("my_topic2", () -> {
                     latch.countDown();
                     throw new RuntimeException("exception msg");
                 })
@@ -675,7 +676,7 @@ private static final Logger logger = LoggerFactory.getLogger(ActorTest.class);
     public void testResponseFunction() throws InterruptedException {
         final CountDownLatch latch = new CountDownLatch(2);
         Actor receiver = Actor.builder().addr("receiver")
-                .addTopicHandlerFunction("topic", () -> {
+                .addActorListener("topic", () -> {
                     latch.countDown();
                     return "result";
                 })
@@ -699,11 +700,11 @@ private static final Logger logger = LoggerFactory.getLogger(ActorTest.class);
     public void testDefaultResponseFunction() throws InterruptedException {
         final CountDownLatch latch = new CountDownLatch(4);
         Actor receiver = Actor.builder().addr("receiver")
-                .addTopicHandlerFunction("topic1", () -> {
+                .addActorListener("topic1", () -> {
                     latch.countDown();
                     return "result";
                 })
-                .addTopicHandlerFunction("topic2", () -> {
+                .addActorListener("topic2", () -> {
                     latch.countDown();
                     return "result";
                 })
@@ -790,7 +791,7 @@ private static final Logger logger = LoggerFactory.getLogger(ActorTest.class);
     @Test
     public void testSendThen() throws InterruptedException {
         final CountDownLatch latch = new CountDownLatch(2);
-        Actor receiver = Actor.builder().addr("receiver").addTopicHandlerFunction("topic", request -> {
+        Actor receiver = Actor.builder().addr("receiver").addActorListener("topic", request -> {
             Assert.assertEquals("Hello!", request);
             latch.countDown();
             return "World!";
@@ -816,7 +817,7 @@ private static final Logger logger = LoggerFactory.getLogger(ActorTest.class);
     @Test
     public void testResponseConfigIgnored() throws InterruptedException {
         final CountDownLatch latch = new CountDownLatch(2);
-        Actor receiver = Actor.builder().addr("receiver").addTopicHandlerFunction("topic", request -> {
+        Actor receiver = Actor.builder().addr("receiver").addActorListener("topic", request -> {
             Assert.assertEquals("Hello!", request);
             latch.countDown();
             return "World";
@@ -838,7 +839,7 @@ private static final Logger logger = LoggerFactory.getLogger(ActorTest.class);
     @Test
     public void testResponseConfigRequired() throws InterruptedException {
         final CountDownLatch latch = new CountDownLatch(2);
-        Actor receiver = Actor.builder().addr("receiver").addTopicHandlerFunction("topic", request -> {
+        Actor receiver = Actor.builder().addr("receiver").addActorListener("topic", request -> {
             Assert.assertEquals("Hello!", request);
             latch.countDown();
         }).build();
@@ -899,7 +900,7 @@ private static final Logger logger = LoggerFactory.getLogger(ActorTest.class);
                 .build();
         Actor receiver = Actor.builder()
                 .addr("receiver")
-                .addTopicHandlerFunction("topic", new Consumer<ActorMsg>() {
+                .addActorListener("topic", new Consumer<ActorMsg>() {
 
                     @Override
                     public void accept(@ActorMessage ActorMsg msg) {
@@ -932,7 +933,7 @@ private static final Logger logger = LoggerFactory.getLogger(ActorTest.class);
                 .build();
         Actor receiver = Actor.builder()
                 .addr("receiver")
-                .addTopicHandlerFunction("topic", rquest->"World").build();
+                .addActorListener("topic", rquest->"World").build();
         PostOffice.builder()
                 .addActor(sender)
                 .addActor(receiver)

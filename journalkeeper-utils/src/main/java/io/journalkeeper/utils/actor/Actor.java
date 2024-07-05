@@ -60,8 +60,8 @@ public class Actor {
      * @param topic 消息主题
      * @param handler 消息处理函数
      */
-    private void addTopicHandlerFunction(String topic, Runnable handler) {
-        inbox.addTopicHandlerFunction(topic, handler);
+    private void addActorListener(String topic, Runnable handler) {
+        inbox.addActorListener(topic, handler);
     }
     /**
      * 添加没有参数的消息处理函数，函数返回值将作为响应消息发送给发送者
@@ -69,8 +69,8 @@ public class Actor {
      * @param handler 消息处理函数
      * @param <R> 返回值类型
      */
-    private <R> void addTopicHandlerFunction(String topic, Supplier<R> handler) {
-        inbox.addTopicHandlerFunction(topic, handler);
+    private <R> void addActorListener(String topic, Supplier<R> handler) {
+        inbox.addActorListener(topic, handler);
     }
     /**
      * 添加1个参数的消息处理函数，函数返回值将作为响应消息发送给发送者
@@ -79,8 +79,8 @@ public class Actor {
      * @param <T> 参数的类型
      * @param <R> 返回值类型
      */
-    private <T, R> void addTopicHandlerFunction(String topic, Function<T, R> handler) {
-        inbox.addTopicHandlerFunction(topic, handler);
+    private <T, R> void addActorListener(String topic, Function<T, R> handler) {
+        inbox.addActorListener(topic, handler);
     }
     /**
      * 添加有2个参数的消息处理函数，函数返回值将作为响应消息发送给发送者
@@ -90,8 +90,8 @@ public class Actor {
      * @param <U> 第二个参数类型
      * @param <R> 返回值类型
      */
-    private <T, U, R> void addTopicHandlerFunction(String topic, BiFunction<T, U, R> handler) {
-        inbox.addTopicHandlerFunction(topic, handler);
+    private <T, U, R> void addActorListener(String topic, BiFunction<T, U, R> handler) {
+        inbox.addActorListener(topic, handler);
     }
 
     /**
@@ -101,8 +101,8 @@ public class Actor {
      * @param <T> 第一个参数类型
      * @param <U> 第二个参数类型
      */
-    private <T, U> void addTopicHandlerFunction(String topic, BiConsumer<T, U> handler) {
-        inbox.addTopicHandlerFunction(topic, handler);
+    private <T, U> void addActorListener(String topic, BiConsumer<T, U> handler) {
+        inbox.addActorListener(topic, handler);
     }
 
     /**
@@ -111,42 +111,42 @@ public class Actor {
      * @param handler 消息处理函数
      * @param <T> 参数类型。
      */
-    private <T> void addTopicHandlerFunction(String topic, Consumer<T> handler) {
-        inbox.addTopicHandlerFunction(topic, handler);
+    private <T> void addActorListener(String topic, Consumer<T> handler) {
+        inbox.addActorListener(topic, handler);
     }
 
-    private void addSubscriberHandlerFunction(String topic, Runnable runnable) {
-        inbox.addSubscriberHandlerFunction(topic, runnable);
+    private void addActorSubscriber(String topic, Runnable runnable) {
+        inbox.addActorSubscriber(topic, runnable);
     }
-    private <T> void addSubscriberHandlerFunction(String topic, Consumer<T> consumer) {
-        inbox.addSubscriberHandlerFunction(topic, consumer);
-    }
-
-    private <T, U> void addSubscriberHandlerFunction(String topic, BiConsumer<T, U> consumer) {
-        inbox.addSubscriberHandlerFunction(topic, consumer);
+    private <T> void addActorSubscriber(String topic, Consumer<T> consumer) {
+        inbox.addActorSubscriber(topic, consumer);
     }
 
-    public void addScheduler(long interval, TimeUnit timeUnit, String topic, Runnable runnable) {
-        addScheduler( new ScheduleTask(timeUnit, interval, this.addr, topic), runnable);
+    private <T, U> void addActorSubscriber(String topic, BiConsumer<T, U> consumer) {
+        inbox.addActorSubscriber(topic, consumer);
     }
 
-    private void addScheduler(ScheduleTask scheduleTask, Runnable runnable) {
-        inbox.receive(new ActorMsg(0L, addr,addr,"@addTopicHandlerFunction", scheduleTask.getTopic(), runnable));
+    public void addActorScheduler(long interval, TimeUnit timeUnit, String topic, Runnable runnable) {
+        addActorScheduler( new ScheduleTask(timeUnit, interval, this.addr, topic), runnable);
+    }
+
+    private void addActorScheduler(ScheduleTask scheduleTask, Runnable runnable) {
+        inbox.receive(new ActorMsg(0L, addr,addr,"@addActorListener", scheduleTask.getTopic(), runnable));
         send("Scheduler", "addTask", scheduleTask);
     }
 
-    private void addScheduler(SchedulerRequest request) {
-        addScheduler(request.getInterval(), request.getTimeUnit(), request.getTopic(), request.getRunnable());
+    private void addActorScheduler(SchedulerRequest request) {
+        addActorScheduler(request.getInterval(), request.getTimeUnit(), request.getTopic(), request.getRunnable());
     }
 
     public void runDelay(long delay, TimeUnit timeUnit,  Runnable runnable) {
         String topic = runnable.toString();
-        inbox.receive(new ActorMsg(0L, addr,addr,"@addTopicHandlerFunction", topic, runnable));
+        inbox.receive(new ActorMsg(0L, addr,addr,"@addActorListener", topic, runnable));
         send("Scheduler", "addDelayTask", new DelayTask(timeUnit, delay, this.addr, topic));
     }
 
-    public void removeScheduler(String topic) {
-        inbox.receive(new ActorMsg(0L, addr,addr,"@removeTopicHandlerFunction", topic));
+    public void removeScheduler(String topic, Runnable runnable) {
+        inbox.receive(new ActorMsg(0L, addr,addr,"@removeActorListener", topic, runnable));
         send("Scheduler", "removeTask", addr, topic);
     }
     /**
@@ -281,45 +281,45 @@ public class Actor {
 
 
 
-        public <R> Builder addTopicHandlerFunction(String topic, Supplier<R> handler) {
+        public <R> Builder addActorListener(String topic, Supplier<R> handler) {
             this.topicHandlerSupplierMap.put(topic, handler);
             return this;
         }
 
-        public <T, R> Builder addTopicHandlerFunction(String topic, Function<T, R> handler) {
+        public <T, R> Builder addActorListener(String topic, Function<T, R> handler) {
             this.topicHandlerFunctionMap.put(topic, handler);
             return this;
         }
 
-        public <T, U, R> Builder addTopicHandlerFunction(String topic, BiFunction<T, U, R> handler) {
+        public <T, U, R> Builder addActorListener(String topic, BiFunction<T, U, R> handler) {
             this.topicHandlerBiFunctionMap.put(topic, handler);
             return this;
         }
-        public Builder addTopicHandlerFunction(String topic, Runnable handler) {
+        public Builder addActorListener(String topic, Runnable handler) {
             this.topicHandlerRunnableMap.put(topic, handler);
             return this;
         }
-        public <T, U> Builder addTopicHandlerFunction(String topic, BiConsumer<T, U> handler) {
+        public <T, U> Builder addActorListener(String topic, BiConsumer<T, U> handler) {
             this.topicHandlerBiConsumerMap.put(topic, handler);
             return this;
         }
 
-        public <T> Builder addSubscriberHandlerFunction(String topic, Consumer<T> handler) {
+        public <T> Builder addActorSubscriber(String topic, Consumer<T> handler) {
             this.subscriberHandlerConsumerMap.put(topic, handler);
             return this;
         }
 
 
-        public Builder addSubscriberHandlerFunction(String topic, Runnable handler) {
+        public Builder addActorSubscriber(String topic, Runnable handler) {
             this.subscriberHandlerRunnableMap.put(topic, handler);
             return this;
         }
-        public <T, U> Builder addSubscriberHandlerFunction(String topic, BiConsumer<T, U> handler) {
+        public <T, U> Builder addActorSubscriber(String topic, BiConsumer<T, U> handler) {
             this.subscriberHandlerBiConsumerMap.put(topic, handler);
             return this;
         }
 
-        public <T> Builder addTopicHandlerFunction(String topic, Consumer<T> handler) {
+        public <T> Builder addActorListener(String topic, Consumer<T> handler) {
             this.topicHandlerConsumerMap.put(topic, handler);
             return this;
         }
@@ -388,16 +388,16 @@ public class Actor {
         }
         public Actor build() {
             Actor actor = new Actor(addr, inboxCapacity, outBoxCapacity, topicQueueMap, privatePostman, enableMetric);
-            this.topicHandlerRunnableMap.forEach(actor::addTopicHandlerFunction);
-            this.topicHandlerSupplierMap.forEach(actor::addTopicHandlerFunction);
-            this.topicHandlerFunctionMap.forEach(actor::addTopicHandlerFunction);
-            this.topicHandlerBiFunctionMap.forEach(actor::addTopicHandlerFunction);
-            this.topicHandlerBiConsumerMap.forEach(actor::addTopicHandlerFunction);
-            this.topicHandlerConsumerMap.forEach(actor::addTopicHandlerFunction);
-            this.subscriberHandlerRunnableMap.forEach(actor::addSubscriberHandlerFunction);
-            this.subscriberHandlerConsumerMap.forEach(actor::addSubscriberHandlerFunction);
-            this.subscriberHandlerBiConsumerMap.forEach(actor::addSubscriberHandlerFunction);
-            this.schedulerRequestList.forEach(actor::addScheduler);
+            this.topicHandlerRunnableMap.forEach(actor::addActorListener);
+            this.topicHandlerSupplierMap.forEach(actor::addActorListener);
+            this.topicHandlerFunctionMap.forEach(actor::addActorListener);
+            this.topicHandlerBiFunctionMap.forEach(actor::addActorListener);
+            this.topicHandlerBiConsumerMap.forEach(actor::addActorListener);
+            this.topicHandlerConsumerMap.forEach(actor::addActorListener);
+            this.subscriberHandlerRunnableMap.forEach(actor::addActorSubscriber);
+            this.subscriberHandlerConsumerMap.forEach(actor::addActorSubscriber);
+            this.subscriberHandlerBiConsumerMap.forEach(actor::addActorSubscriber);
+            this.schedulerRequestList.forEach(actor::addActorScheduler);
             if (this.defaultHandlerFunction != null) {
                 actor.setDefaultHandlerFunction(this.defaultHandlerFunction);
             }

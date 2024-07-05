@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -26,6 +27,9 @@ class ActorResponseSupport {
 
     private Object handlerInstance;
 
+    private Map<String, List<InvocationTarget>> annotationListeners = new HashMap<>();
+
+
     @SuppressWarnings("rawtypes")
     private final Map<ActorMsg, CompletableFuture> responseFutures = new ConcurrentHashMap<>();
 
@@ -33,7 +37,7 @@ class ActorResponseSupport {
     ActorResponseSupport(ActorInbox inbox, ActorOutbox outbox) {
         responseHandlers = new HashMap<>();
         this.outbox = outbox;
-        inbox.addTopicHandlerFunction(RESPONSE, new ResponseMessageConsumer());
+        inbox.addActorListener(RESPONSE, new ResponseMessageConsumer());
     }
 
     <T> CompletableFuture<T> send(String addr, String topic, ActorRejectPolicy rejectPolicy, Object... payloads){
@@ -66,7 +70,6 @@ class ActorResponseSupport {
         this.defaultResponseHandler = handler;
     }
 
-    private Map<String, Method> annotationListeners = new HashMap<>();
 
 
     private void processResponse(ActorMsg response) {
@@ -94,10 +97,16 @@ class ActorResponseSupport {
                     // 注解注册的
                     if (null != annotationListeners && annotationListeners.containsKey(request.getTopic())){
                         // 通过注解注册的方法
-                        Method method = annotationListeners.get(request.getTopic());
-                        method.setAccessible(true);
-                        method.invoke(handlerInstance, response);
-                        return;
+
+                        List<InvocationTarget> invocationTargets = annotationListeners.get(request.getTopic());
+                        if (null != invocationTargets) {
+                            for (InvocationTarget target: invocationTargets) {
+                                Method method = target.getMethod();
+                                method.setAccessible(true);
+                                method.invoke(handlerInstance, response);
+                            }
+                            return;
+                        }
                     }
                     // 默认的响应方法
                     Method method = handlerInstance.getClass().getDeclaredMethod(request.getTopic() + "Response", ActorMsg.class);

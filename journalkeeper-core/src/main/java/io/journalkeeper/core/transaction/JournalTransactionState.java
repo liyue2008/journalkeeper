@@ -70,17 +70,6 @@ class JournalTransactionState extends ServerStateMachine {
     private ScheduledFuture<?> checkOutdatedTransactionsScheduledFuture = null;
     private final Actor actor;
 
-    JournalTransactionState(RaftJournal journal, long transactionTimeoutMs, ClientServerRpc server, ScheduledExecutorService scheduledExecutor) {
-        super(false);
-        this.journal = journal;
-        this.transactionTimeoutMs = transactionTimeoutMs;
-        this.server = server;
-        this.scheduledExecutor = scheduledExecutor;
-        this.partitionStatusMap = new HashMap<>(TRANSACTION_PARTITION_COUNT);
-        this.openingTransactionMap = new HashMap<>(TRANSACTION_PARTITION_COUNT);
-        this.actor = null;
-    }
-
     JournalTransactionState(RaftJournal journal, long transactionTimeoutMs, Actor actor) {
         super(false);
         this.journal = journal;
@@ -97,8 +86,8 @@ class JournalTransactionState extends ServerStateMachine {
         super.doStart();
         recoverTransactionState();
         if (null != actor) {
-            actor.addScheduler(RETRY_COMPLETE_TRANSACTION_INTERVAL_MS, TimeUnit.MILLISECONDS, "retryCompleteTransactions", this::retryCompleteTransactions);
-            actor.addScheduler(transactionTimeoutMs, TimeUnit.MILLISECONDS, "checkOutdatedTransactions", this::abortOutdatedTransactions);
+            actor.addActorScheduler(RETRY_COMPLETE_TRANSACTION_INTERVAL_MS, TimeUnit.MILLISECONDS, "retryCompleteTransactions", this::retryCompleteTransactions);
+            actor.addActorScheduler(transactionTimeoutMs, TimeUnit.MILLISECONDS, "checkOutdatedTransactions", this::abortOutdatedTransactions);
         }
         if (null != scheduledExecutor) {
             retryCompleteTransactionScheduledFuture = scheduledExecutor.scheduleWithFixedDelay(

@@ -29,7 +29,7 @@ public class MetricProviderImpl implements MetricProvider {
                 this.metricFactory = ServiceSupport.load(JMetricFactory.class);
                 this.metricMap = new ConcurrentHashMap<>();
                 if (printMetricIntervalSec > 0) {
-                    actor.addScheduler(printMetricIntervalSec, TimeUnit.SECONDS, "printMetrics", this::printMetrics);
+                    actor.addActorScheduler(printMetricIntervalSec, TimeUnit.SECONDS, "printMetrics", this::printMetrics);
                 }
             } catch (ServiceLoadException se) {
                 logger.warn("No metric extension found in the classpath, Metric will disabled!");
