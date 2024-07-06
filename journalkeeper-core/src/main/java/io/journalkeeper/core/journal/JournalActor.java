@@ -169,9 +169,8 @@ private static final Logger logger = LoggerFactory.getLogger( JournalActor.class
         logger.info("Compact journal finished, journal: {}.", journal);
     }
     @ActorSubscriber
-    private void onStop() {
-        // TODO: 移到flushActor中
-        flush();
+    private void onStop() throws IOException {
+        journal.close();
         this.metricProvider.removeMetric(MetricNames.METRIC_APPEND_JOURNAL);
     }
 
