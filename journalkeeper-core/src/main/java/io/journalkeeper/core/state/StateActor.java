@@ -110,7 +110,12 @@ public class StateActor implements RaftState{
 
         this.partialSnapshot = new PartialSnapshot(partialSnapshotPath());
 
-        this.actor.addActorScheduler(config.<Long>get("flush_interval_ms"), TimeUnit.MILLISECONDS, "flush", this::flush);
+
+        flushActorBuilder.addScheduler(config.get("flush_interval_ms"), TimeUnit.MILLISECONDS, "flushStateScheduler", this::flushPeriodically);
+        flushActorBuilder.addActorSubscriber("onStop", this::flush);
+        commitActorBuilder.addActorSubscriber("onJournalCommit", this::applyEntries);
+        commitActorBuilder.addScheduler(config.get("commit_interval_ms"), TimeUnit.MILLISECONDS, "applyEntries", this::applyEntriesPeriodically);
+
     }
 
 
@@ -698,21 +703,15 @@ public class StateActor implements RaftState{
                 lastSavedServerMetadata = metadata;
             }
             lastFlushTimestamp = System.currentTimeMillis();
-            actor.pub("onStateFlush");
         } catch (ClosedByInterruptException ignored) {
         } catch (Throwable e) {
             logger.warn("Flush exception, commitIndex: {}, lastApplied: {}, server: {}: ",
                     journal.commitIndex(), state.lastApplied(), localUri, e);
         }
     }
-    @ActorSubscriber
-    private void onStop() {
-        flush();
-    }
 
 
     private long lastApplyEntriesTimestamp = 0L;
-    @ActorScheduler(interval = 100L, topic = "applyEntries")
     private  void applyEntriesPeriodically() {
         if (System.currentTimeMillis() - lastApplyEntriesTimestamp >= 100L) {
             applyEntries();
@@ -726,7 +725,6 @@ public class StateActor implements RaftState{
      * 2. lastApplied自增，将log[lastApplied]应用到状态机，更新当前状态state；
      *
      */
-    @ActorSubscriber(topic = "onJournalCommit")
     private void applyEntries() {
         if(!isRecovered){
             return;

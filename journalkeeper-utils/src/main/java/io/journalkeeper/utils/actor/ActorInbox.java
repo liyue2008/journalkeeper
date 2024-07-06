@@ -204,7 +204,7 @@ class ActorInbox {
                         return false;
                     }
                     for (int i = 0; i < msg.getPayloads().length; i++) {
-                        if (!ClassUtils.isAssignable( msg.getPayloads()[i].getClass(), method.getParameters()[i].getType())) {
+                        if (msg.getPayloads()[i] != null &&!ClassUtils.isAssignable( msg.getPayloads()[i].getClass(), method.getParameters()[i].getType())) {
                             return false;
                         }
                     }

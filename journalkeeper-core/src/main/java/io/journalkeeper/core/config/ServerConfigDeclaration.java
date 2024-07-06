@@ -14,6 +14,7 @@ public class ServerConfigDeclaration {
         config.declare("snapshot_interval_sec", Integer.class, 0, true, "快照间隔，单位：秒");
         config.declare("rpc_timeout_ms", Long.class, 1000L, true, "RPC超时时间，单位：毫秒");
         config.declare("flush_interval_ms", Long.class, 50L, true, "刷盘间隔，单位：毫秒");
+        config.declare("commit_interval_ms", Long.class, 50L, true, "提交间隔，单位：毫秒");
         config.declare("working_dir", Path.class,  Paths.get(System.getProperty("user.dir")).resolve("journalkeeper"), true, "工作目录");
         config.declare("get_state_batch_size", Integer.class, 1024 * 1024, true, "获取状态批量大小");
         config.declare("enable_metric", Boolean.class, false, true, "是否启用Metric，显示详细的性能数据，但处理能力会下降");
