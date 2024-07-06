@@ -452,7 +452,7 @@ private static final Logger logger = LoggerFactory.getLogger(ActorTest.class);
         PostOffice.builder()
                 .addActor(receiver)
                 .build();
-        receiver.addActorScheduler(10, TimeUnit.MILLISECONDS, "onEvent", counter::incrementAndGet);
+        receiver.addActorScheduler(10, TimeUnit.MILLISECONDS,  counter::incrementAndGet);
         Thread.sleep(100);
         int count = counter.get();
         Assert.assertTrue(8 < count && count < 12);
@@ -466,7 +466,7 @@ private static final Logger logger = LoggerFactory.getLogger(ActorTest.class);
                 .addActor(receiver)
                 .build();
         Runnable runnable = counter::incrementAndGet;
-        receiver.addActorScheduler(10, TimeUnit.MILLISECONDS, "onEvent", runnable);
+        receiver.addActorScheduler(10, TimeUnit.MILLISECONDS, runnable);
         Thread.sleep(100);
         int count = counter.get();
         Assert.assertTrue(8 < count && count < 12);

@@ -126,7 +126,8 @@ public class Actor {
         inbox.addActorSubscriber(topic, consumer);
     }
 
-    public void addActorScheduler(long interval, TimeUnit timeUnit, String topic, Runnable runnable) {
+    public void addActorScheduler(long interval, TimeUnit timeUnit,Runnable runnable) {
+        String topic = runnable.getClass().getName() + "#run()";
         addActorScheduler( new ScheduleTask(timeUnit, interval, this.addr, topic), runnable);
     }
 
@@ -136,7 +137,7 @@ public class Actor {
     }
 
     private void addActorScheduler(SchedulerRequest request) {
-        addActorScheduler(request.getInterval(), request.getTimeUnit(), request.getTopic(), request.getRunnable());
+        addActorScheduler(request.getInterval(), request.getTimeUnit(), request.getRunnable());
     }
 
     public void runDelay(long delay, TimeUnit timeUnit,  Runnable runnable) {
@@ -380,9 +381,9 @@ public class Actor {
             return this;
         }
 
-        public Builder addScheduler(long interval, TimeUnit timeUnit, String topic, Runnable runnable) {
+        public Builder addScheduler(long interval, TimeUnit timeUnit, Runnable runnable) {
             this.schedulerRequestList.add(
-                    new SchedulerRequest(interval, timeUnit, topic, runnable)
+                    new SchedulerRequest(interval, timeUnit, runnable)
             );
             return this;
         }
@@ -432,13 +433,11 @@ public class Actor {
     private static class SchedulerRequest {
         private final long interval;
         private final TimeUnit timeUnit;
-        private final String topic;
         private final Runnable runnable;
 
-        public SchedulerRequest(long interval, TimeUnit timeUnit, String topic, Runnable runnable) {
+        public SchedulerRequest(long interval, TimeUnit timeUnit, Runnable runnable) {
             this.interval = interval;
             this.timeUnit = timeUnit;
-            this.topic = topic;
             this.runnable = runnable;
         }
 
@@ -448,10 +447,6 @@ public class Actor {
 
         public TimeUnit getTimeUnit() {
             return timeUnit;
-        }
-
-        public String getTopic() {
-            return topic;
         }
 
         public Runnable getRunnable() {

@@ -466,17 +466,17 @@ public class VoterActor {
     @ActorSubscriber
     private void onStart(ServerContext context) {
 
-        actor.addActorScheduler(config.<Long>get("heartbeat_interval_ms"), TimeUnit.MILLISECONDS, "checkElectionTimeout", this::checkElectionTimeout);
+        actor.addActorScheduler(config.<Long>get("heartbeat_interval_ms"), TimeUnit.MILLISECONDS, this::checkElectionTimeout);
         
         // Leader
         if (config.<Boolean>get("enable_check_quorum")) {
-            actor.addActorScheduler(config.get("check_quorum_timeout_ms"), TimeUnit.MILLISECONDS, "checkQuorum", this::checkQuorum);
+            actor.addActorScheduler(config.get("check_quorum_timeout_ms"), TimeUnit.MILLISECONDS, this::checkQuorum);
         }
-        actor.addActorScheduler(config.get("heartbeat_interval_ms"), TimeUnit.MILLISECONDS, "replication", this::replication);
-        actor.addActorScheduler(config.get("heartbeat_interval_ms"), TimeUnit.MILLISECONDS, "commit", this::commit);
+        actor.addActorScheduler(config.get("heartbeat_interval_ms"), TimeUnit.MILLISECONDS, this::replication);
+        actor.addActorScheduler(config.get("heartbeat_interval_ms"), TimeUnit.MILLISECONDS, this::commit);
 
         // Observer
-        actor.addActorScheduler(config.get("observer.pull_interval_ms"), TimeUnit.MILLISECONDS, "pullEntries", this::pullEntries);
+        actor.addActorScheduler(config.get("observer.pull_interval_ms"), TimeUnit.MILLISECONDS,  this::pullEntries);
 
     }
 

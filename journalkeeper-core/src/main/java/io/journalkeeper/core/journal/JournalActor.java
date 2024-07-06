@@ -61,7 +61,7 @@ private static final Logger logger = LoggerFactory.getLogger( JournalActor.class
         this.monitoredJournal = new MonitoredJournalImpl();
         this.actor = Actor.builder().addr("Journal").setHandlerInstance(this).build();
         flushActorBuilder.addActorListener("flushJournal", this::flush);
-        flushActorBuilder.addScheduler(config.get("flush_interval_ms"), TimeUnit.MILLISECONDS, "flushJournalScheduler", this::flush);
+        flushActorBuilder.addScheduler(config.get("flush_interval_ms"), TimeUnit.MILLISECONDS, this::flush);
         flushActorBuilder.addActorSubscriber("onStop", this::flush);
         commitActorBuilder.addActorListener("commitJournal", this::commit);
 
@@ -147,7 +147,7 @@ private static final Logger logger = LoggerFactory.getLogger( JournalActor.class
     private void flush() {
         long flushCount = journal.flushOnce();
         if (flushCount > 0) {
-            actor.pub("onJournalFlush", this.journal.maxIndex());
+            actor.send("Voter","onJournalFlush");
         }
     }
 

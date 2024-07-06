@@ -111,10 +111,10 @@ public class StateActor implements RaftState{
         this.partialSnapshot = new PartialSnapshot(partialSnapshotPath());
 
 
-        flushActorBuilder.addScheduler(config.get("flush_interval_ms"), TimeUnit.MILLISECONDS, "flushStateScheduler", this::flushPeriodically);
+        flushActorBuilder.addScheduler(config.get("flush_interval_ms"), TimeUnit.MILLISECONDS, this::flushPeriodically);
         flushActorBuilder.addActorSubscriber("onStop", this::flush);
         commitActorBuilder.addActorSubscriber("onJournalCommit", this::applyEntries);
-        commitActorBuilder.addScheduler(config.get("commit_interval_ms"), TimeUnit.MILLISECONDS, "applyEntries", this::applyEntriesPeriodically);
+        commitActorBuilder.addScheduler(config.get("commit_interval_ms"), TimeUnit.MILLISECONDS,  this::applyEntriesPeriodically);
 
     }
 

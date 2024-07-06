@@ -86,8 +86,8 @@ class JournalTransactionState extends ServerStateMachine {
         super.doStart();
         recoverTransactionState();
         if (null != actor) {
-            actor.addActorScheduler(RETRY_COMPLETE_TRANSACTION_INTERVAL_MS, TimeUnit.MILLISECONDS, "retryCompleteTransactions", this::retryCompleteTransactions);
-            actor.addActorScheduler(transactionTimeoutMs, TimeUnit.MILLISECONDS, "checkOutdatedTransactions", this::abortOutdatedTransactions);
+            actor.addActorScheduler(RETRY_COMPLETE_TRANSACTION_INTERVAL_MS, TimeUnit.MILLISECONDS, this::retryCompleteTransactions);
+            actor.addActorScheduler(transactionTimeoutMs, TimeUnit.MILLISECONDS, this::abortOutdatedTransactions);
         }
         if (null != scheduledExecutor) {
             retryCompleteTransactionScheduledFuture = scheduledExecutor.scheduleWithFixedDelay(
