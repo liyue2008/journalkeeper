@@ -1233,43 +1233,41 @@ public class VoterActor {
 
 
         void replication() {
-            long maxIndex;
-
-            if (waitingForResponse ||
-                    (nextIndex >= (maxIndex = journal.maxIndex()) // NOT 还有需要复制的数据
-                        &&
-                        System.currentTimeMillis() - lastHeartbeatRequestTime < heartbeatIntervalMs // NOT 距离上次复制/心跳已经超过一个心跳超时了
-                    )
-            ) {
+            long maxIndex = journal.maxIndex();
+            boolean heartbeat = waitingForResponse  || nextIndex >= maxIndex || installSnapshotInProgress;
+            // 如果正在复制数据过程中或没有需要复制的数据 且距离上次复制/心跳没有超过一个心跳周期，就不需要发送了
+            if (heartbeat && System.currentTimeMillis() - lastHeartbeatRequestTime >= heartbeatIntervalMs) {
                 return;
             }
 
-            if (installSnapshotInProgress) {
-                return;
-            }
 //            logger.info("Replication destination: {}, nextIndex: {}, maxIndex: {}, commitIndex: {}", uri, nextIndex, journal.maxIndex(), journal.commitIndex());
 
-
-            // 如果有必要，先安装第一个快照
+            final List<byte[]> entries;
             Map.Entry<Long, Snapshot> fistSnapShotEntry = state.getSnapshots().firstEntry();
-            if (leaderInstallSnapshotToFollower(fistSnapShotEntry)) {
-                return;
-            }
-            // 读取需要复制的Entry
-            List<byte[]> entries;
-            if (nextIndex < maxIndex) { // 复制
-                entries = journal.readRaw(nextIndex, this.replicationBatchSize);
-            } else { // 心跳
+
+            if (!heartbeat) {
+                // 如果有必要，先安装第一个快照
+                if (leaderInstallSnapshotToFollower(fistSnapShotEntry)) {
+                    return;
+                }
+                // 读取需要复制的Entry
+
+                if (nextIndex < maxIndex) { // 复制
+                    entries = journal.readRaw(nextIndex, this.replicationBatchSize);
+                } else { // 心跳
+                    entries = Collections.emptyList();
+                }
+                waitingForResponse = true;
+
+            } else {
                 entries = Collections.emptyList();
             }
-
             // 构建请求并发送
             AsyncAppendEntriesRequest request =
                     new AsyncAppendEntriesRequest(term, state.getLocalUri(),
                             nextIndex - 1, this.getPreLogTerm(nextIndex),
                             entries, state.commitIndex(), maxIndex);
 
-            waitingForResponse = true;
 
             long start = System.currentTimeMillis();
             actor.<AsyncAppendEntriesResponse>sendThen("Rpc", "asyncAppendEntries", ActorRejectPolicy.EXCEPTION ,new RpcMsg<>(this.uri, request))
@@ -1287,7 +1285,9 @@ public class VoterActor {
                         return null;
                     })
                     .whenComplete((c, r) -> {
-                        waitingForResponse = false;
+                        if (!heartbeat) {
+                            waitingForResponse = false;
+                        }
                         if (null != r && nextIndex < journal.maxIndex()) {
                             actor.send("Voter", "replication");
                         }
