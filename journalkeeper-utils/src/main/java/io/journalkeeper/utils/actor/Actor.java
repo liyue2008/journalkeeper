@@ -141,12 +141,13 @@ public class Actor {
     }
 
     public void runDelay(long delay, TimeUnit timeUnit,  Runnable runnable) {
-        String topic = runnable.toString();
+        String topic = runnable.getClass().getName() + "#run()";
         inbox.receive(new ActorMsg(0L, addr,addr,"@addActorListener", topic, runnable));
         send("Scheduler", "addDelayTask", new DelayTask(timeUnit, delay, this.addr, topic));
     }
 
-    public void removeScheduler(String topic, Runnable runnable) {
+    public void removeScheduler(Runnable runnable) {
+        String topic = runnable.getClass().getName() + "#run()";
         inbox.receive(new ActorMsg(0L, addr,addr,"@removeActorListener", topic, runnable));
         send("Scheduler", "removeTask", addr, topic);
     }

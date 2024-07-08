@@ -471,7 +471,7 @@ private static final Logger logger = LoggerFactory.getLogger(ActorTest.class);
         int count = counter.get();
         Assert.assertTrue(8 < count && count < 12);
 
-        receiver.removeScheduler("onEvent", runnable);
+        receiver.removeScheduler( runnable);
         // 等待消息被处理
         Thread.sleep(20);
         // 之后counter不再增长

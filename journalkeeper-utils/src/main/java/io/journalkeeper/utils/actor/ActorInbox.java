@@ -114,6 +114,9 @@ class ActorInbox {
 
     void removeActorListener(String topic, Runnable runnable) {
         List<InvocationTarget> targets = actorListeners.get(topic);
+        if (targets == null) {
+            return;
+        }
         targets.removeIf(target -> {
             try {
                 return target.getMethod().equals(runnable.getClass().getDeclaredMethod("run"));
