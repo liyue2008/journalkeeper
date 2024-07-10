@@ -80,7 +80,8 @@ public class VoterActor {
     private boolean isWritable = true; // Leader 是否可写
     private long disableWriteTimeout = 0L; // 禁用写操作的超时时间
     private boolean isAnnounced = false; // 发布Leader announcement 被多数确认，正式行使leader职权。
-    private final List<WaitingResponse> waitingResponses = new LinkedList<>(); // 处理中的待响应的update请求
+    private final List<WaitingResponse> waitingResponses; // 处理中的待响应的update请求
+    private final int cacheRequests;
     private final List<ReplicationDestination> replicationDestinations = new ArrayList<>(); // Followers
     private JMetric updateClusterStateMetric;
 
@@ -98,6 +99,8 @@ public class VoterActor {
         this.state = state;
         this.metricProvider = metricProvider;
         this.config = config;
+        this.cacheRequests = config.get("cache_requests");
+        this.waitingResponses = new ArrayList<>(cacheRequests);
         this.actor = Actor.builder().addr("Voter")
                 .addTopicQueue("updateClusterState", 1024)
                 .addTopicQueue("asyncAppendEntries", 1024)
@@ -605,6 +608,12 @@ public class VoterActor {
             actor.reply(msg, new UpdateClusterStateResponse(new IllegalStateException("Server disabled temporarily.")));
             return;
         }
+
+        if(waitingResponses.size() >= cacheRequests){
+            actor.reply(msg, new UpdateClusterStateResponse(new IllegalStateException("Too many pending requests.")));
+            return;
+        }
+
         if (request.getResponseConfig() == ResponseConfig.RECEIVE) {
             actor.reply(msg, new UpdateClusterStateResponse());
             this.updateClusterStateMetric.mark(System.nanoTime() - startTime, request.getRequests().stream().mapToLong( rt -> rt.getEntry().length).sum());
@@ -1271,16 +1280,7 @@ public class VoterActor {
 
             waitingForResponse = true;
 
-            long start = System.currentTimeMillis();
             actor.<AsyncAppendEntriesResponse>sendThen("Rpc", "asyncAppendEntries", ActorRejectPolicy.EXCEPTION ,new RpcMsg<>(this.uri, request))
-                    .thenApply(r -> {
-                        long now = System.currentTimeMillis();
-                        long cost = now - start;
-                        if (cost > 100L) {
-                            logger.info("Slow replication! destination: {}, cost: {}ms.", uri, cost);
-                        }
-                        return r;
-                    })
                     .thenAccept(resp -> handleAppendEntriesResponse(resp, entries.size(), fistSnapShotEntry.getKey()))
                     .exceptionally(e -> {
                         logger.warn("Replication execution exception, from {} to {}, cause: {}.", state.getLocalUri(), uri, null == e.getCause() ? e.getMessage() : e.getCause().getMessage());

@@ -31,6 +31,7 @@ public class ServerRpcActor implements ServerRpc {
             .setHandlerInstance(this)
             .addTopicQueue("updateClusterState", 1024)
             .addTopicQueue("asyncAppendEntries", 1024)
+            .enableMetric()
             .build();
 
     private final InFlightRequestRateLimiter commonLimiter;

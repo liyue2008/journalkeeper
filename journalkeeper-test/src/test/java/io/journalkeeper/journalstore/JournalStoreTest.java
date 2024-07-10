@@ -122,6 +122,8 @@ public class JournalStoreTest {
         // 单分区和多分区
 
         Properties properties = new Properties();
+        properties.setProperty("election_timeout_ms", "1000");
+        properties.setProperty("check_quorum_timeout_ms", "1000");
         writeReadTest(3, Sets.newSet(0, 1, 2, 3, 4), 1024, 10, 100L * 1024 * 1024, true, ResponseConfig.REPLICATION, true, properties);
     }
 

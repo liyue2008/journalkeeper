@@ -11,7 +11,7 @@ public class ServerConfigDeclaration {
     public void declare(Config config) {
 
         // AbstractServer
-        config.declare("snapshot_interval_sec", Integer.class, 0, true, "快照间隔，单位：秒");
+        config.declare("snapshot_interval_sec", Integer.class, 0, true, "快照间隔，单位：秒"); // TODO 定期生成快照
         config.declare("rpc_timeout_ms", Long.class, 1000L, true, "RPC超时时间，单位：毫秒");
         config.declare("flush_interval_ms", Long.class, 50L, true, "刷盘间隔，单位：毫秒");
         config.declare("commit_interval_ms", Long.class, 50L, true, "提交间隔，单位：毫秒");
@@ -20,7 +20,7 @@ public class ServerConfigDeclaration {
         config.declare("enable_metric", Boolean.class, false, true, "是否启用Metric，显示详细的性能数据，但处理能力会下降");
         config.declare("disable_logo", Boolean.class, false, true, "是否禁用LOGO");
         config.declare("print_metric_interval_sec", Integer.class, 0, true, "指标打印间隔，单位：秒");
-        config.declare("journal_retention_min", Integer.class, 0, true, "日志保留时间，单位：分钟");
+        config.declare("journal_retention_min", Integer.class, 0, true, "日志保留时间，单位：分钟"); // TODO 定期清理日志
         config.declare("enable_events", Boolean.class, true, true, "是否启用事件");
         config.declare("server_name", String.class, "", true, "Server名称，用于在同一进程多Server情况下区分");
 

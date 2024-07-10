@@ -269,7 +269,6 @@ class ActorInbox {
     }
 
     private boolean processOneMsgFromQueue(BlockingQueue<ActorMsg> queue){
-        long start = System.currentTimeMillis();
         ActorMsg msg = queue.poll();
         if (msg != null) {
             if (msg.getContext().getMetric() != null) {
@@ -306,20 +305,6 @@ class ActorInbox {
             } finally {
                 if (msg.getContext().getMetric() != null) {
                     msg.getContext().getMetric().onConsumed();
-
-                    if(msg.getContext().getType() == ActorMsg.Type.RESPONSE && "asyncAppendEntries".equals(msg.getQueueName())) {
-                        ActorMetric responseMetric = msg.getContext().getMetric();
-                        ActorMetric requestMetric = msg.getRequest().getContext().getMetric();
-
-                        if ( responseMetric.getConsumedTime() - requestMetric.getCreateTime() > 100L) {
-                            logger.info("asyncAppendEntries cost {}--(+{}ms)->{}", requestMetric, responseMetric.getCreateTime() - requestMetric.getConsumedTime(), responseMetric);
-                        }
-                    }
-                }
-
-                long stop = System.currentTimeMillis();
-                if (stop - start > 50) {
-                    logger.warn("Slow consume, cost: {}, msg: {}.", stop - start, msg);
                 }
             }
 
