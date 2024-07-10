@@ -125,7 +125,7 @@ public class LocalStoreFile implements StoreFile, BufferHolder {
         if (bufferType == DIRECT_BUFFER) {
             return;
         } else if (bufferType == MAPPED_BUFFER) {
-            unloadUnsafe(true);
+            unloadUnsafe();
         }
 
         ByteBuffer buffer = bufferPool.allocateDirect(capacity, this);
@@ -196,7 +196,7 @@ public class LocalStoreFile implements StoreFile, BufferHolder {
         long stamp = bufferLock.writeLock();
         try {
             if (isClean()) {
-                unloadUnsafe(true);
+                unloadUnsafe();
                 return true;
             } else {
                 return false;
@@ -210,7 +210,7 @@ public class LocalStoreFile implements StoreFile, BufferHolder {
     public void forceUnload() {
         long stamp = bufferLock.writeLock();
         try {
-            unloadUnsafe(false);
+            unloadUnsafe();
         } finally {
             bufferLock.unlockWrite(stamp);
         }
@@ -468,14 +468,14 @@ public class LocalStoreFile implements StoreFile, BufferHolder {
     }
 
 
-    private void unloadUnsafe(boolean force) {
+    private void unloadUnsafe() {
         if (MAPPED_BUFFER == this.bufferType) {
             unloadMappedBuffer();
         } else if (DIRECT_BUFFER == this.bufferType) {
             unloadDirectBuffer();
         }
         try {
-            closeFileChannel(force);
+            closeFileChannel();
         } catch (IOException e) {
             logger.warn("Close file {} exception: ", file.getAbsolutePath(), e);
         }
@@ -532,17 +532,13 @@ public class LocalStoreFile implements StoreFile, BufferHolder {
         return bufferType == DIRECT_BUFFER && !writeClosed;
     }
 
-    private void closeFileChannel(boolean force) throws IOException {
-        if (force) {
-            force();
-        }
-        if (null != fileChannel && fileChannel.isOpen()) {
+    private void closeFileChannel() throws IOException {
+        force();
+        if (null != fileChannel) {
             fileChannel.close();
-            fileChannel = null;
         }
         if (null != raf) {
             raf.close();
-            raf = null;
         }
     }
 

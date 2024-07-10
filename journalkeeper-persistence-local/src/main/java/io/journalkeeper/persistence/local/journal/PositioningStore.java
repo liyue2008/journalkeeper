@@ -429,14 +429,14 @@ public class PositioningStore implements JournalPersistence, MonitoredPersistenc
     /**
      * 删除文件，丢弃未刷盘的数据，用于rollback
      */
-    private void forceDeleteStoreFile(StoreFile storeFile) {
+    private void forceDeleteStoreFile(StoreFile storeFile) throws IOException {
         storeFile.forceUnload();
         File file = storeFile.file();
         if (file.exists()) {
             if (file.delete()) {
                 logger.debug("File {} deleted.", file.getAbsolutePath());
             } else {
-                file.deleteOnExit();
+                throw new IOException(String.format("Delete file %s failed!", file.getAbsolutePath()));
             }
         }
     }
