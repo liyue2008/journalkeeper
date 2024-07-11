@@ -477,6 +477,10 @@ public class VoterActor {
         }
         actor.addActorScheduler(config.get("heartbeat_interval_ms"), TimeUnit.MILLISECONDS, this::replication);
         actor.addActorScheduler(config.get("heartbeat_interval_ms"), TimeUnit.MILLISECONDS, this::commit);
+        int snapshotIntervalSec = config.get("snapshot_interval_sec");
+        if (snapshotIntervalSec > 0) {
+            actor.addActorScheduler(snapshotIntervalSec, TimeUnit.SECONDS, this::takeSnapshotPeriodically);
+        }
 
         // Observer
         actor.addActorScheduler(config.get("observer.pull_interval_ms"), TimeUnit.MILLISECONDS,  this::pullEntries);
@@ -588,6 +592,8 @@ public class VoterActor {
     @ActorListener
     @ResponseManually
     private void updateClusterState(@ActorMessage ActorMsg msg) {
+        UpdateClusterStateRequest request = msg.getPayload();
+
         // 1. Leader.updateClusterState
         //      1.1. Journal.append
         // 2.
@@ -599,7 +605,6 @@ public class VoterActor {
         // 6. State.applyEntries
         // 7. Leader.callback
         long startTime = System.nanoTime();
-        UpdateClusterStateRequest request = msg.getPayload();
         if (!(raftState.current() == VoterState.LEADER && isAnnounced)) {
             actor.reply(msg, new UpdateClusterStateResponse(new NotLeaderException(this.leaderUri)));
             return;
@@ -916,6 +921,24 @@ public class VoterActor {
                         votersConfigStateMachine.getConfigOld(), votersConfigStateMachine.getConfigNew(), e);
             }
         }
+    }
+
+
+    private void takeSnapshotPeriodically() {
+        if (raftState.current() != VoterState.LEADER) {
+            return;
+        }
+        if (state.lastApplied() > state.getSnapshots().lastKey()) {
+            logger.info("Send create snapshot request.");
+            actor.send("Voter", "updateClusterState", new UpdateClusterStateRequest(
+                    new UpdateRequest(InternalEntriesSerializeSupport.serialize(
+                            new CreateSnapshotEntry()), RaftJournal.INTERNAL_PARTITION, 1
+                    )));
+
+        } else {
+            logger.info("No entry since last snapshot, no need to create a new snapshot.");
+        }
+
     }
 
     @ActorListener(topic = "getSnapshots")

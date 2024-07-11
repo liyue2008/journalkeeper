@@ -11,7 +11,7 @@ public class ServerConfigDeclaration {
     public void declare(Config config) {
 
         // AbstractServer
-        config.declare("snapshot_interval_sec", Integer.class, 0, true, "快照间隔，单位：秒"); // TODO 定期生成快照
+        config.declare("snapshot_interval_sec", Integer.class, 0, true, "快照间隔，单位：秒");
         config.declare("rpc_timeout_ms", Long.class, 1000L, true, "RPC超时时间，单位：毫秒");
         config.declare("flush_interval_ms", Long.class, 50L, true, "刷盘间隔，单位：毫秒");
         config.declare("commit_interval_ms", Long.class, 50L, true, "提交间隔，单位：毫秒");
