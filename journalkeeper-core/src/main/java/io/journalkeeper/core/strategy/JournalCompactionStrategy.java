@@ -25,7 +25,7 @@
  */
 package io.journalkeeper.core.strategy;
 
-import io.journalkeeper.core.journal.Journal;
+import io.journalkeeper.core.api.RaftJournal;
 
 import java.util.SortedMap;
 
@@ -36,5 +36,5 @@ import java.util.SortedMap;
  * Date: 2019/11/25
  */
 public interface JournalCompactionStrategy {
-    long calculateCompactionIndex(SortedMap<Long /* snapshot index */, Long /* snapshot timestamp */> snapshotTimestamps, Journal journal);
+    long calculateCompactionIndex(SortedMap<Long /* snapshot index */, Long /* snapshot timestamp */> snapshotTimestamps, RaftJournal journal);
 }

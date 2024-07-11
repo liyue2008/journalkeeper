@@ -4,8 +4,11 @@ import io.journalkeeper.base.ReplicableIterator;
 import io.journalkeeper.core.api.*;
 import io.journalkeeper.core.entry.internal.*;
 import io.journalkeeper.core.journal.JournalActor;
+import io.journalkeeper.core.journal.JournalSnapshot;
 import io.journalkeeper.core.raft.RaftState;
 import io.journalkeeper.core.raft.PartialSnapshot;
+import io.journalkeeper.core.strategy.DefaultJournalCompactionStrategy;
+import io.journalkeeper.core.strategy.JournalCompactionStrategy;
 import io.journalkeeper.exceptions.*;
 import io.journalkeeper.persistence.MetadataPersistence;
 import io.journalkeeper.persistence.PersistenceFactory;
@@ -20,6 +23,7 @@ import io.journalkeeper.utils.actor.*;
 import io.journalkeeper.utils.actor.annotation.*;
 import io.journalkeeper.utils.config.Config;
 import io.journalkeeper.utils.files.FileUtils;
+import io.journalkeeper.utils.spi.ServiceLoadException;
 import io.journalkeeper.utils.spi.ServiceSupport;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -55,6 +59,7 @@ public class StateActor implements RaftState{
     private static final String METADATA_FILE = "metadata";
     private static final String PARTIAL_SNAPSHOT_PATH = "partial_snapshot";
 
+    private JournalCompactionStrategy journalCompactionStrategy;
 
     /**
      * 存放节点上所有状态快照的稀疏数组，数组的索引（key）就是快照对应的日志位置的索引
@@ -110,14 +115,17 @@ public class StateActor implements RaftState{
 
         this.partialSnapshot = new PartialSnapshot(partialSnapshotPath());
 
-
+        try {
+            journalCompactionStrategy = ServiceSupport.load(JournalCompactionStrategy.class);
+        } catch (ServiceLoadException ignored) {
+            journalCompactionStrategy = new DefaultJournalCompactionStrategy(config.get("journal_retention_min"));
+        }
         flushActorBuilder.addScheduler(config.get("flush_interval_ms"), TimeUnit.MILLISECONDS, this::flushPeriodically);
         flushActorBuilder.addActorSubscriber("onStop", this::flush);
         commitActorBuilder.addActorSubscriber("onJournalCommit", this::applyEntries);
         commitActorBuilder.addScheduler(config.get("commit_interval_ms"), TimeUnit.MILLISECONDS,  this::applyEntriesPeriodically);
 
     }
-
 
     private Path workingDir() {
         return config.get("working_dir");
@@ -738,6 +746,47 @@ public class StateActor implements RaftState{
         if (!resultList.isEmpty()) {
             actor.pub("onStateChange", resultList);
             lastApplyEntriesTimestamp = System.currentTimeMillis();
+        }
+    }
+
+    @ActorScheduler(interval = 1, timeUnit = TimeUnit.MINUTES)
+    private void compactJournalPeriodically() {
+        long index = journalCompactionStrategy.calculateCompactionIndex(
+                snapshots.entrySet().stream().collect(
+                        Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().timestamp(),
+                                (v1, v2) -> {
+                                    throw new RuntimeException(String.format("Duplicate key for values %s and %s", v1, v2));
+                                },
+                                TreeMap::new)
+                ), journal
+        );
+
+        if (index > snapshots.firstKey()) {
+            compactJournalToSnapshot(index);
+        }
+
+    }
+
+    private void compactJournalToSnapshot(long index) {
+        logger.info("Compact journal to index: {}...", index);
+        try {
+            Snapshot snapshot = snapshots.get(index);
+            if (null != snapshot) {
+                JournalSnapshot journalSnapshot = snapshot.getJournalSnapshot();
+                actor.send("Journal", "compact", journalSnapshot);
+
+                NavigableMap<Long, Snapshot> headMap = snapshots.headMap(index, false);
+                while (!headMap.isEmpty()) {
+                    snapshot = headMap.remove(headMap.firstKey());
+                    logger.info("Discard snapshot: {}.", snapshot.getPath());
+                    snapshot.close();
+                    snapshot.clear();
+                }
+            } else {
+                logger.warn("Compact journal failed! Cause no snapshot at index: {}.", index);
+            }
+        } catch (Throwable e) {
+            logger.warn("Compact journal exception!", e);
         }
     }
 

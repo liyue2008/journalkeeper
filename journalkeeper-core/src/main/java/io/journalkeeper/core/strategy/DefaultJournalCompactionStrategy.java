@@ -25,7 +25,7 @@
  */
 package io.journalkeeper.core.strategy;
 
-import io.journalkeeper.core.journal.Journal;
+import io.journalkeeper.core.api.RaftJournal;
 import io.journalkeeper.utils.ThreadSafeFormat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,7 +47,7 @@ public class DefaultJournalCompactionStrategy implements JournalCompactionStrate
     }
 
     @Override
-    public long calculateCompactionIndex(SortedMap<Long, Long> snapshotTimestamps, Journal journal) {
+    public long calculateCompactionIndex(SortedMap<Long, Long> snapshotTimestamps, RaftJournal journal) {
         long index = -1;
         long now = System.currentTimeMillis();
 

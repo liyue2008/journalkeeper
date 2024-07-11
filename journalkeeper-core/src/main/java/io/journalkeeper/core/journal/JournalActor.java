@@ -275,4 +275,8 @@ private static final Logger logger = LoggerFactory.getLogger( JournalActor.class
             throw new JournalException(e);
         }
     }
+    @ActorListener
+    private void compact(JournalSnapshot journalSnapshot) throws IOException {
+        journal.compact(journalSnapshot);
+    }
 }
