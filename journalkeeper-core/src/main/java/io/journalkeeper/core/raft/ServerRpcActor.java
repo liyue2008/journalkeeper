@@ -170,7 +170,7 @@ public class ServerRpcActor implements ServerRpc {
 
     @Override
     public CompletableFuture<AddPullWatchResponse> addPullWatch() {
-        return forwardRequest(null, "EventBus");
+        return forwardRequest("EventBus", "addPullWatch");
 
     }
 

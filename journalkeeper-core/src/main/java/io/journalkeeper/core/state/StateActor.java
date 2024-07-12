@@ -751,6 +751,9 @@ public class StateActor implements RaftState{
 
     @ActorScheduler(interval = 1, timeUnit = TimeUnit.MINUTES)
     private void compactJournalPeriodically() {
+        if (snapshots.isEmpty()) {
+            return;
+        }
         long index = journalCompactionStrategy.calculateCompactionIndex(
                 snapshots.entrySet().stream().collect(
                         Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().timestamp(),

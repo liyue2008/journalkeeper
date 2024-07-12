@@ -221,7 +221,7 @@ class ActorInbox {
                 if (needResponse(msg, method)) {
                     this.outbox.send(this.outbox.createResponse(msg, null, ite.getCause()));
                 }
-                logger.info("Invoke message handler exception, handler: {}, msg: {}, exception: {}.", instance.getClass().getName() + "." + method.getName() + "(...)", msg, ite.getTargetException().getMessage());
+                logger.info("Invoke message handler exception, handler: {}, msg: {}, exception: ", instance.getClass().getName() + "." + method.getName() + "(...)", msg, ite.getTargetException());
             } catch (IllegalArgumentException e) {
                 if (needResponse(msg, method)) {
                     this.outbox.send(this.outbox.createResponse(msg, null, e));

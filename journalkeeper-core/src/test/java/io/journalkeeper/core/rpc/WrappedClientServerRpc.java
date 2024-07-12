@@ -132,12 +132,12 @@ public class WrappedClientServerRpc implements ClientServerRpc {
 
     @Override
     public void watch(EventWatcher eventWatcher) {
-        clientServerRpc.unWatch(eventWatcher);
+        clientServerRpc.watch(eventWatcher);
     }
 
     @Override
     public void unWatch(EventWatcher eventWatcher) {
-        clientServerRpc.watch(eventWatcher);
+        clientServerRpc.unWatch(eventWatcher);
     }
 
     @Override

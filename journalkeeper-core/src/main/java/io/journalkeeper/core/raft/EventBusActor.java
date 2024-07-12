@@ -10,6 +10,7 @@ import io.journalkeeper.utils.actor.annotation.ActorSubscriber;
 import io.journalkeeper.utils.event.Event;
 import io.journalkeeper.utils.event.EventBus;
 import io.journalkeeper.utils.event.EventType;
+import io.journalkeeper.utils.event.EventWatcher;
 
 import java.util.List;
 
@@ -25,18 +26,19 @@ public class EventBusActor {
         this.eventBus = new EventBus();
     }
 
-    public void watch(ActorMsg msg) {
-        eventBus.watch(msg.getPayload());
 
+    @ActorListener
+    private void watch(EventWatcher eventWatcher) {
+        eventBus.watch(eventWatcher);
+    }
+    @ActorListener
+    private void unWatch(EventWatcher eventWatcher) {
+        eventBus.unWatch(eventWatcher);
     }
 
-    public void unWatch(ActorMsg msg) {
-        eventBus.unWatch(msg.getPayload());
-    }
     @ActorListener
     private AddPullWatchResponse addPullWatch() {
         return new AddPullWatchResponse(eventBus.addPullWatch(), eventBus.pullIntervalMs());
-
     }
 
     @ActorListener

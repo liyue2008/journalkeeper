@@ -36,26 +36,12 @@ public enum InternalEntryType {
     }
 
     public static InternalEntryType valueOf(final int value) {
-        switch (value) {
-            case 0:
-                return TYPE_LEADER_ANNOUNCEMENT;
-            case 1:
-                return TYPE_CREATE_SNAPSHOT;
-            case 2:
-                return TYPE_SCALE_PARTITIONS;
-            case 3:
-                return TYPE_UPDATE_VOTERS_S1;
-            case 4:
-                return TYPE_UPDATE_VOTERS_S2;
-            case 5:
-                return TYPE_UPDATE_OBSERVERS;
-            case 6:
-                return TYPE_SET_PREFERRED_LEADER;
-            case 7:
-                return TYPE_RECOVER_SNAPSHOT;
-            default:
-                throw new IllegalArgumentException("Illegal InternalEntryType value!");
+        for (InternalEntryType type : InternalEntryType.values()) {
+            if (type.value() == value) {
+                return type;
+            }
         }
+        throw new IllegalArgumentException("Unknown entry type: " + value);
     }
 
     public int value() {

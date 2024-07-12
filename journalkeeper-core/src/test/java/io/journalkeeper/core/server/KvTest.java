@@ -16,6 +16,8 @@ package io.journalkeeper.core.server;
 import io.journalkeeper.core.BootStrap;
 import io.journalkeeper.core.api.*;
 import io.journalkeeper.core.easy.JkClient;
+import io.journalkeeper.core.easy.JkEventBus;
+import io.journalkeeper.core.entry.internal.OnLeaderChangeEvent;
 import io.journalkeeper.core.monitor.SimpleMonitorCollector;
 import io.journalkeeper.core.state.KvStateFactory;
 import io.journalkeeper.monitor.MonitorCollector;
@@ -32,8 +34,11 @@ import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 /**
@@ -850,6 +855,48 @@ public class KvTest {
 
         stopServers(servers);
 
+    }
+
+    private static class LeaderChangeListener implements Consumer<OnLeaderChangeEvent> {
+        private OnLeaderChangeEvent event;
+        private final CountDownLatch latch;
+
+        public LeaderChangeListener(CountDownLatch latch) {
+            this.latch = latch;
+        }
+
+        @Override
+        public void accept(OnLeaderChangeEvent event) {
+            this.event = event;
+            latch.countDown();
+        }
+
+        public OnLeaderChangeEvent getEvent() {
+            return event;
+        }
+    }
+    @Test
+    public void eventTest() throws Exception {
+        Path path = TestPathUtils.prepareBaseDir("EventTest");
+        final CountDownLatch latch = new CountDownLatch(1);
+        final LeaderChangeListener leaderChangeListener = new LeaderChangeListener(latch);
+        List<BootStrap> kvServers = createServers(3, path);
+
+        try {
+            List<URI> servers = kvServers.stream().map(BootStrap::getServer).map(RaftServer::serverUri).collect(Collectors.toList());
+            BootStrap clientBootStrap = BootStrap.builder().servers(servers).build();
+            JkEventBus eventBus = new JkEventBus(clientBootStrap.getRaftClient());
+            eventBus.addLeaderChangeListener(leaderChangeListener);
+            AdminClient adminClient = clientBootStrap.getAdminClient();
+            adminClient.waitForClusterReady(10000L);
+            URI leader =adminClient.getClusterConfiguration().get(10, TimeUnit.SECONDS).getLeader();
+            boolean result = latch.await(10, TimeUnit.SECONDS);
+            Assert.assertTrue(result);
+            Assert.assertEquals(leader, leaderChangeListener.getEvent().getLeader());
+        } finally {
+            stopServers(kvServers);
+            TestPathUtils.destroyBaseDir(path.toFile());
+        }
     }
 
     private void stopServers(List<BootStrap> kvServers) {
