@@ -35,23 +35,22 @@ public class EventBusActor {
     }
     @ActorListener
     private AddPullWatchResponse addPullWatch() {
-        // TODO
-        return null;
+        return new AddPullWatchResponse(eventBus.addPullWatch(), eventBus.pullIntervalMs());
 
     }
 
     @ActorListener
     private RemovePullWatchResponse removePullWatch(RemovePullWatchRequest request) {
-        // TODO
-
-        return null;
+        eventBus.removePullWatch(request.getPullWatchId());
+        return new RemovePullWatchResponse();
     }
 
     @ActorListener
     private PullEventsResponse pullEvents(PullEventsRequest request) {
-        // TODO
-
-        return null;
+        if (request.getAckSequence() >= 0) {
+            eventBus.ackPullEvents(request.getPullWatchId(), request.getAckSequence());
+        }
+        return new PullEventsResponse(eventBus.pullEvents(request.getPullWatchId()));
     }
 
     @ActorSubscriber

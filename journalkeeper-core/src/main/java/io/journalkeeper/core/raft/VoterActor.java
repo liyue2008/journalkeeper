@@ -891,7 +891,7 @@ public class VoterActor {
         }
         if (type == InternalEntryType.TYPE_LEADER_ANNOUNCEMENT) {
             LeaderAnnouncementEntry leaderAnnouncementEntry = InternalEntriesSerializeSupport.parse(internalEntry);
-
+            fireOnLeaderChangeEvent(leaderAnnouncementEntry.getTerm(), leaderAnnouncementEntry.getLeaderUri());
             if (raftState.current() == VoterState.LEADER && !isAnnounced && leaderAnnouncementEntry.getTerm() == this.term) {
                 this.isAnnounced = true;
                 logger.info("Leader announcement applied! Leader: {}, term: {}.", state.getLocalUri(), term);
@@ -923,6 +923,12 @@ public class VoterActor {
         }
     }
 
+    private void fireOnLeaderChangeEvent(int term, URI leaderUri) {
+        if(config.get("enable_events")) {
+            actor.send("EventBus", "fireEvent", new Event(EventType.ON_LEADER_CHANGE,
+                    InternalEntriesSerializeSupport.serialize(new OnLeaderChangeEvent(leaderUri, term))));
+        }
+    }
 
     private void takeSnapshotPeriodically() {
         if (raftState.current() != VoterState.LEADER) {
