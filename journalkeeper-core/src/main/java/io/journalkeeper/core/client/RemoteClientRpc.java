@@ -25,7 +25,6 @@ import io.journalkeeper.rpc.LeaderResponse;
 import io.journalkeeper.rpc.client.ClientServerRpc;
 import io.journalkeeper.rpc.client.ClientServerRpcAccessPoint;
 import io.journalkeeper.rpc.client.GetServersResponse;
-import io.journalkeeper.utils.event.EventWatcher;
 import io.journalkeeper.utils.retry.CheckRetry;
 import io.journalkeeper.utils.retry.CompletableRetry;
 import io.journalkeeper.utils.retry.RandomDestinationSelector;
@@ -151,22 +150,6 @@ public class RemoteClientRpc implements ClientRpc {
         uriSelector.setAllDestinations(servers);
     }
 
-    @Override
-    public void watch(EventWatcher eventWatcher) {
-        completableRetry.retry(uri -> {
-            clientServerRpcAccessPoint.getClintServerRpc(uri)
-                    .watch(eventWatcher);
-            return CompletableFuture.completedFuture(null);
-        }, clientCheckRetry, executor, scheduledExecutor);
-    }
-
-    @Override
-    public void unWatch(EventWatcher eventWatcher) {
-        completableRetry.retry(uri -> {
-            clientServerRpcAccessPoint.getClintServerRpc(uri).unWatch(eventWatcher);
-            return CompletableFuture.completedFuture(null);
-        }, clientCheckRetry, executor, scheduledExecutor);
-    }
 
     private class ClientCheckRetry implements CheckRetry<BaseResponse> {
 

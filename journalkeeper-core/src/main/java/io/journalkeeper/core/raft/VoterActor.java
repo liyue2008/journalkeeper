@@ -525,7 +525,7 @@ public class VoterActor {
             return;
         }
         if (null == request.getEntries() || request.getEntries().isEmpty()) { // 心跳
-            actor.sendThen("Journal", "commit", request.getLeaderCommit())
+            actor.sendThen("Commit", "commitJournal", request.getLeaderCommit())
                     .thenRun(() -> {
                         if (leaderMaxIndex < request.getMaxIndex()) {
                             leaderMaxIndex = request.getMaxIndex();
@@ -548,7 +548,7 @@ public class VoterActor {
                     .thenCompose(ignored -> actor.sendThen("Journal", "compareOrAppendRaw", entries, request.getPrevLogIndex() + 1))
                     .thenCompose(ignored -> actor.sendThen("State", "maybeUpdateNonLeaderConfig", entries))
                     //5. If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry)
-                    .thenCompose(ignored -> actor.sendThen("Journal", "commit", request.getLeaderCommit()))
+                    .thenCompose(ignored -> actor.sendThen("Commit", "commitJournal", request.getLeaderCommit()))
                     .thenRun(() -> {
                         if (leaderMaxIndex < request.getMaxIndex()) {
                             leaderMaxIndex = request.getMaxIndex();
@@ -735,7 +735,7 @@ public class VoterActor {
                 if (logger.isDebugEnabled()) {
                     logger.debug("Set commitIndex {} to {}.", journal.commitIndex(), N);
                 }
-                actor.send("Journal", "commit", N);
+                actor.send("Commit", "commitJournal", N);
             }
         }
     }
@@ -886,18 +886,20 @@ public class VoterActor {
 
     @ActorSubscriber
     private void onInternalEntryApply(InternalEntryType type, byte [] internalEntry) {
+        if (type == InternalEntryType.TYPE_LEADER_ANNOUNCEMENT) {
+            LeaderAnnouncementEntry leaderAnnouncementEntry = InternalEntriesSerializeSupport.parse(internalEntry);
+            fireOnLeaderChangeEvent(leaderAnnouncementEntry.getTerm(), leaderAnnouncementEntry.getLeaderUri());
+        }
         if (raftState.current() != VoterState.LEADER) {
             return;
         }
         if (type == InternalEntryType.TYPE_LEADER_ANNOUNCEMENT) {
             LeaderAnnouncementEntry leaderAnnouncementEntry = InternalEntriesSerializeSupport.parse(internalEntry);
-            fireOnLeaderChangeEvent(leaderAnnouncementEntry.getTerm(), leaderAnnouncementEntry.getLeaderUri());
             if (raftState.current() == VoterState.LEADER && !isAnnounced && leaderAnnouncementEntry.getTerm() == this.term) {
                 this.isAnnounced = true;
-                logger.info("Leader announcement applied! Leader: {}, term: {}.", state.getLocalUri(), term);
+                logger.info("Leader announcement applied! Leader: {}, term: {}, last applied: {}.", state.getLocalUri(), term, state.lastApplied());
             }
-        } else
-        if (type == TYPE_UPDATE_VOTERS_S1) {
+        } else if (type == TYPE_UPDATE_VOTERS_S1) {
             ConfigState votersConfigStateMachine = state.getConfigState();
             byte[] s2Entry = InternalEntriesSerializeSupport.serialize(new UpdateVotersS2Entry(votersConfigStateMachine.getConfigOld(), votersConfigStateMachine.getConfigNew(), votersConfigStateMachine.getEpoch() + 1));
             try {
@@ -1311,13 +1313,9 @@ public class VoterActor {
 
             actor.<AsyncAppendEntriesResponse>sendThen("Rpc", "asyncAppendEntries", ActorRejectPolicy.EXCEPTION ,new RpcMsg<>(this.uri, request))
                     .thenAccept(resp -> handleAppendEntriesResponse(resp, entries.size(), fistSnapShotEntry.getKey()))
-                    .exceptionally(e -> {
-                        logger.warn("Replication execution exception, from {} to {}, cause: {}.", state.getLocalUri(), uri, null == e.getCause() ? e.getMessage() : e.getCause().getMessage());
-                        return null;
-                    })
                     .whenComplete((c, r) -> {
                         waitingForResponse = false;
-                        if (null != r && nextIndex < journal.maxIndex()) {
+                        if (null == r && nextIndex < journal.maxIndex() ) {
                             actor.send("Voter", "replication");
                         }
                     });

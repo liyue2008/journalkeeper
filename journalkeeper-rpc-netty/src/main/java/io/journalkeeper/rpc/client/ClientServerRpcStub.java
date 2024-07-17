@@ -27,19 +27,12 @@ package io.journalkeeper.rpc.client;
 
 import io.journalkeeper.exceptions.RequestTimeoutException;
 import io.journalkeeper.rpc.BaseResponse;
-import io.journalkeeper.rpc.RpcException;
 import io.journalkeeper.rpc.codec.RpcTypes;
 import io.journalkeeper.rpc.remoting.transport.Transport;
 import io.journalkeeper.rpc.remoting.transport.TransportClient;
 import io.journalkeeper.rpc.remoting.transport.TransportState;
 import io.journalkeeper.rpc.remoting.transport.exception.TransportException;
 import io.journalkeeper.rpc.utils.CommandSupport;
-import io.journalkeeper.utils.event.EventBus;
-import io.journalkeeper.utils.event.EventWatcher;
-import io.journalkeeper.utils.threads.AsyncLoopThread;
-import io.journalkeeper.utils.threads.ThreadBuilder;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -54,15 +47,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 
 public class ClientServerRpcStub implements ClientServerRpc {
-    private static final Logger logger = LoggerFactory.getLogger(ClientServerRpcStub.class);
     protected final TransportClient transportClient;
     protected final InetSocketAddress inetSocketAddress;
     protected final URI uri;
     protected Transport transport;
-    protected EventBus eventBus = null;
-    protected AsyncLoopThread pullEventThread = null;
-    protected long pullWatchId = -1L;
-    protected long ackSequence = -1L;
     protected final AtomicBoolean lastRequestSuccess = new AtomicBoolean(true);
     protected final int version;
 
@@ -201,94 +189,6 @@ public class ClientServerRpcStub implements ClientServerRpc {
         return sendRequest(null, RpcTypes.CHECK_LEADERSHIP_REQUEST);
     }
 
-    @Override
-    public void watch(EventWatcher eventWatcher) {
-        if (null == eventBus) {
-            initPullEvent();
-        }
-        eventBus.watch(eventWatcher);
-    }
-
-    private void initPullEvent() {
-        try {
-            AddPullWatchResponse addPullWatchResponse = addPullWatch().get();
-            if (addPullWatchResponse.success()) {
-                eventBus = new EventBus();
-                this.pullWatchId = addPullWatchResponse.getPullWatchId();
-                this.ackSequence = -1L;
-                long pullInterval = addPullWatchResponse.getPullIntervalMs();
-                pullEventThread = buildPullEventsThread(pullInterval);
-                pullEventThread.start();
-            } else {
-                throw new RpcException(addPullWatchResponse);
-            }
-        } catch (Throwable t) {
-            throw new RpcException(t);
-        }
-
-    }
-
-    private AsyncLoopThread buildPullEventsThread(long pullInterval) {
-        return ThreadBuilder.builder()
-                .name("PullEventsThread")
-                .doWork(this::pullRemoteEvents)
-                .sleepTime(pullInterval, pullInterval)
-                .onException(e -> logger.warn("PullEventsThread Exception: ", e))
-                .daemon(true)
-                .build();
-    }
-
-    private void pullRemoteEvents() {
-        pullEvents(new PullEventsRequest(pullWatchId, ackSequence))
-                .thenAccept(response -> {
-                    if (response.success()) {
-                        if (null != response.getPullEvents()) {
-                            response.getPullEvents().forEach(pullEvent -> {
-                                eventBus.fireEvent(pullEvent);
-                                ackSequence = pullEvent.getSequence();
-                            });
-                        }
-                    } else {
-                        logger.warn("Pull event error: {}", response.getError());
-                    }
-                });
-    }
-
-    @Override
-    public void unWatch(EventWatcher eventWatcher) {
-        if (null != eventBus) {
-            eventBus.unWatch(eventWatcher);
-            if (!eventBus.hasEventWatchers()) {
-                destroyPullEvent();
-            }
-        }
-
-    }
-
-    private void destroyPullEvent() {
-        if (null != eventBus) {
-            eventBus.shutdown();
-            eventBus = null;
-        }
-        if (null != pullEventThread) {
-            pullEventThread.stop();
-            eventBus = null;
-        }
-        if (pullWatchId >= 0) {
-            try {
-                RemovePullWatchResponse response = removePullWatch(new RemovePullWatchRequest(pullWatchId))
-                        .get();
-                if (!response.success()) {
-                    throw new RpcException(response);
-                }
-            } catch (Throwable t) {
-                logger.warn("Remove pull watch exception: ", t);
-            } finally {
-                pullWatchId = -1L;
-            }
-        }
-
-    }
 
     private synchronized Transport createTransport() {
         return transportClient.createTransport(inetSocketAddress);
@@ -307,7 +207,6 @@ public class ClientServerRpcStub implements ClientServerRpc {
 
     @Override
     public void stop() {
-        destroyPullEvent();
         closeTransport();
     }
 }

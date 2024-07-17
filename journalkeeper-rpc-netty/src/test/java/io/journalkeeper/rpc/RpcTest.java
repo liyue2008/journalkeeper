@@ -65,8 +65,6 @@ import io.journalkeeper.rpc.server.RequestVoteRequest;
 import io.journalkeeper.rpc.server.RequestVoteResponse;
 import io.journalkeeper.rpc.server.ServerRpc;
 import io.journalkeeper.rpc.server.ServerRpcAccessPoint;
-import io.journalkeeper.utils.event.Event;
-import io.journalkeeper.utils.event.EventWatcher;
 import io.journalkeeper.utils.event.PullEvent;
 import io.journalkeeper.utils.net.NetworkingUtils;
 import io.journalkeeper.utils.state.StateServer;
@@ -84,7 +82,6 @@ import java.net.URISyntaxException;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -480,46 +477,7 @@ public class RpcTest {
                         r.getAckSequence() == ackSequence));
     }
 
-    @Test
-    public void testWatch() throws Exception {
-        logger.info("Running test {}.", Thread.currentThread()
-                .getStackTrace()[1]
-                .getMethodName());
-        long pullWatchId = 666L;
-        long pullIntervalMs = 100L;
-        byte [] eventData = new byte[20];
-        new Random().nextBytes(eventData);
-        List<PullEvent> pullEvents = Collections.singletonList(new PullEvent(23, 83999L, eventData));
 
-
-        ClientServerRpc clientServerRpc = clientServerRpcAccessPoint.getClintServerRpc(serverRpcMock.serverUri());
-
-        AtomicBoolean addWatchFinished = new AtomicBoolean(false);
-        AtomicBoolean alreadySendEvents = new AtomicBoolean(false);
-        when(serverRpcMock.pullEvents(any(PullEventsRequest.class)))
-                .thenAnswer(invocation -> CompletableFuture.supplyAsync(() -> {
-                    if (addWatchFinished.get() && alreadySendEvents.compareAndSet(false, true)) {
-                        return new PullEventsResponse(pullEvents);
-                    } else {
-                        return new PullEventsResponse(Collections.emptyList());
-                    }
-                }));
-        when(serverRpcMock.addPullWatch())
-                .thenReturn(CompletableFuture.supplyAsync(() -> new AddPullWatchResponse(pullWatchId, pullIntervalMs)));
-        when(serverRpcMock.removePullWatch(any(RemovePullWatchRequest.class)))
-                .thenReturn(CompletableFuture.supplyAsync(RemovePullWatchResponse::new));
-
-        List<Event> eventList = new ArrayList<>();
-        EventWatcher eventWatcher = eventList::add;
-
-        clientServerRpc.watch(eventWatcher);
-        addWatchFinished.set(true);
-        Thread.sleep(3 * pullIntervalMs);
-        clientServerRpc.unWatch(eventWatcher);
-
-        Assert.assertEquals(pullEvents.size(), eventList.size());
-        Assert.assertArrayEquals(pullEvents.get(0).getEventData(), eventList.get(0).getEventData());
-    }
 
     @Test
     public void testAsyncAppendEntries() throws ExecutionException, InterruptedException {

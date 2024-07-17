@@ -71,6 +71,11 @@ public class EventBusActor {
     private void fireEvents(List<Event> events) {
         events.forEach(eventBus::fireEvent);
     }
+
+    @ActorSubscriber
+    private void onStop(){
+        fireEvent(new Event(EventType.ON_SERVER_SHUTDOWN, new byte[0]));
+    }
     public Actor getActor() {
         return actor;
     }

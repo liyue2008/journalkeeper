@@ -14,7 +14,6 @@
 package io.journalkeeper.rpc.client;
 
 import io.journalkeeper.utils.event.EventBus;
-import io.journalkeeper.utils.event.EventWatcher;
 
 import java.net.URI;
 import java.util.concurrent.CompletableFuture;
@@ -163,20 +162,6 @@ public interface ClientServerRpc {
      * @return See {@link CheckLeadershipResponse}
      */
     CompletableFuture<CheckLeadershipResponse> checkLeadership();
-
-    /**
-     * 添加事件监听器，当事件发生时会调用监听器
-     * @see EventBus
-     * @param eventWatcher 事件监听器
-     */
-    void watch(EventWatcher eventWatcher);
-
-    /**
-     * 删除事件监听器
-     * @see EventBus
-     * @param eventWatcher 事件监听器
-     */
-    void unWatch(EventWatcher eventWatcher);
 
     void stop();
 }

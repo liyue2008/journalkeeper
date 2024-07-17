@@ -16,7 +16,6 @@ package io.journalkeeper.core.client;
 import io.journalkeeper.exceptions.ServerBusyException;
 import io.journalkeeper.rpc.BaseResponse;
 import io.journalkeeper.rpc.client.ClientServerRpc;
-import io.journalkeeper.utils.event.EventWatcher;
 import io.journalkeeper.utils.retry.CheckRetry;
 import io.journalkeeper.utils.retry.CompletableRetry;
 import io.journalkeeper.utils.retry.DestinationSelector;
@@ -95,15 +94,7 @@ public class LocalClientRpc implements ClientRpc {
         // do nothing
     }
 
-    @Override
-    public void watch(EventWatcher eventWatcher) {
-        localServer.watch(eventWatcher);
-    }
 
-    @Override
-    public void unWatch(EventWatcher eventWatcher) {
-        localServer.unWatch(eventWatcher);
-    }
 
     private static class LocalClientCheckRetry implements CheckRetry<BaseResponse> {
 

@@ -29,4 +29,12 @@ public class OnLeaderChangeEvent extends InternalEntry {
     public int getTerm() {
         return term;
     }
+
+    @Override
+    public String toString() {
+        return "OnLeaderChangeEvent{" +
+                "leader=" + leader +
+                ", term=" + term +
+                '}';
+    }
 }

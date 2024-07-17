@@ -32,6 +32,8 @@ public class RaftServerActor implements  RaftServer {
     private final Actor actor = Actor.builder().addr("RaftServer").setHandlerInstance(this).build();
     private final Collection<MonitorCollector> monitorCollectors;
     private final RaftServerMonitorInfoProvider monitorInfoProvider;
+    private ServerState serverState = ServerState.CREATED;
+
 
     public RaftServerActor(Roll roll, StateFactory stateFactory, JournalEntryParser journalEntryParser, Properties properties) {
         this.persistenceFactory = ServiceSupport.load(PersistenceFactory.class);
@@ -155,9 +157,21 @@ public class RaftServerActor implements  RaftServer {
 
     @Override
     public CompletableFuture<Void> startAsync() {
+        if (serverState() == ServerState.RUNNING) {
+            return CompletableFuture.completedFuture(null);
+        }
+        if (serverState() != ServerState.CREATED) {
+            throw new IllegalStateException();
+        }
+        this.serverState = ServerState.STARTING;
         addMonitorProviderToCollectors();
 
-        return actor.pubThen("onStart", context);
+        return actor.pubThen("onStart", context)
+                .thenRun(()-> this.serverState = ServerState.RUNNING)
+                .exceptionally(t -> {
+                    this.serverState = ServerState.START_FAILED;
+                    throw new RuntimeException(t);
+                });
     }
 
     @Override
@@ -171,15 +185,27 @@ public class RaftServerActor implements  RaftServer {
 
     @Override
     public CompletableFuture<Void> stopAsync() {
+        if (serverState() == ServerState.STOPPED) {
+            return CompletableFuture.completedFuture(null);
+        }
+        if (serverState() != ServerState.RUNNING) {
+            throw new IllegalStateException();
+        }
+        this.serverState = ServerState.STOPPING;
         return actor.pubThen("onStop").thenRunAsync(() -> {
             context.getPostOffice().stop();
             removeMonitorProviderToCollectors();
-        });
+                    this.serverState = ServerState.STOPPED;
+                })
+                .exceptionally(t -> {
+                    this.serverState = ServerState.STOP_FAILED;
+                    throw new RuntimeException(t);
+                });
     }
 
     @Override
     public ServerState serverState() {
-        return null;
+        return serverState;
     }
 
 

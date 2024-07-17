@@ -24,7 +24,6 @@ import io.journalkeeper.rpc.client.UpdateClusterStateRequest;
 import io.journalkeeper.rpc.client.UpdateClusterStateResponse;
 import io.journalkeeper.rpc.client.UpdateVotersRequest;
 import io.journalkeeper.rpc.client.UpdateVotersResponse;
-import io.journalkeeper.utils.event.EventWatcher;
 
 import java.net.URI;
 import java.util.concurrent.CompletableFuture;
@@ -130,15 +129,6 @@ public class WrappedClientServerRpc implements ClientServerRpc {
         return clientServerRpc.checkLeadership();
     }
 
-    @Override
-    public void watch(EventWatcher eventWatcher) {
-        clientServerRpc.watch(eventWatcher);
-    }
-
-    @Override
-    public void unWatch(EventWatcher eventWatcher) {
-        clientServerRpc.unWatch(eventWatcher);
-    }
 
     @Override
     public void stop() {

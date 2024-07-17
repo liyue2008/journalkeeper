@@ -7,7 +7,6 @@ import io.journalkeeper.rpc.client.*;
 import io.journalkeeper.rpc.server.*;
 import io.journalkeeper.utils.actor.*;
 import io.journalkeeper.utils.actor.annotation.ActorSubscriber;
-import io.journalkeeper.utils.event.EventWatcher;
 import io.journalkeeper.utils.spi.ServiceSupport;
 import io.journalkeeper.utils.state.StateServer;
 import org.slf4j.Logger;
@@ -79,6 +78,7 @@ public class ServerRpcActor implements ServerRpc {
 
     @Override
     public CompletableFuture<QueryStateResponse> queryClusterState(QueryStateRequest request) {
+
         return forwardRequest(request, "Voter", "queryClusterState");
     }
 
@@ -228,15 +228,6 @@ public class ServerRpcActor implements ServerRpc {
 
     }
 
-    @Override
-    public void watch(EventWatcher eventWatcher) {
-        actor.send("EventBus", "watch", ActorMsg.Response.DEFAULT, ActorRejectPolicy.BLOCK, eventWatcher);
-    }
-
-    @Override
-    public void unWatch(EventWatcher eventWatcher) {
-        actor.send("EventBus", "unWatch", ActorMsg.Response.DEFAULT, ActorRejectPolicy.BLOCK,eventWatcher);
-    }
 
     @Override
     public CompletableFuture<AsyncAppendEntriesResponse> asyncAppendEntries(AsyncAppendEntriesRequest request) {

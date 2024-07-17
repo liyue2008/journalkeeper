@@ -19,10 +19,46 @@ public class JkEventBus {
     private final RaftClient raftClient;
     private final SerializeExtensionPoint serializer = ServiceSupport.tryLoad(SerializeExtensionPoint.class).orElse(new JavaSerializeExtensionPoint());
 
+    private final Set<Consumer<OnLeaderChangeEvent>> leaderChangeListeners = new HashSet<>();
+    private final Set<Consumer<Event>> stateChangeListeners = new HashSet<>();
+    private final AtomicInteger listenerCounter = new AtomicInteger(0);
+    private final EventWatcher eventWatcher ;
+
     public JkEventBus(RaftClient raftClient) {
         this.raftClient = raftClient;
+        this.eventWatcher = event -> {
+            switch (event.getEventType()) {
+                case EventType.ON_LEADER_CHANGE:
+                    synchronized (leaderChangeListeners) {
+                        if (!leaderChangeListeners.isEmpty()) {
+                            OnLeaderChangeEvent leaderChangeEvent = InternalEntriesSerializeSupport.parse(event.getEventData());
+                            this.leaderChangeListeners.forEach(listener -> listener.accept(leaderChangeEvent));
+                        }
+                    }
+                    break;
+                case EventType.ON_STATE_CHANGE:
+                    synchronized (stateChangeListeners) {
+                        if (!stateChangeListeners.isEmpty()) {
+                            Object eventData = serializer.parse(event.getEventData());
+                            this.stateChangeListeners.forEach(listener -> listener.accept(new Event(eventData)));
+                        }
+                    }
+                    break;
+
+                case EventType.ON_SERVER_SHUTDOWN:
+                    reWatch();
+                    break;
+
+                default:
+                    // nothing to do
+            }
+        };
     }
 
+    private void reWatch() {
+        this.raftClient.unWatch(this.eventWatcher);
+        this.raftClient.watch(this.eventWatcher);
+    }
 
     public void addLeaderChangeListener(Consumer<OnLeaderChangeEvent> listener) {
         synchronized (leaderChangeListeners) {
@@ -55,31 +91,6 @@ public class JkEventBus {
         }
     }
 
-    private final Set<Consumer<OnLeaderChangeEvent>> leaderChangeListeners = new HashSet<>();
-    private final Set<Consumer<Event>> stateChangeListeners = new HashSet<>();
-    private final AtomicInteger listenerCounter = new AtomicInteger(0);
-    private final EventWatcher eventWatcher = event -> {
-        switch (event.getEventType()) {
-            case EventType.ON_LEADER_CHANGE:
-                synchronized (leaderChangeListeners) {
-                    if (!leaderChangeListeners.isEmpty()) {
-                        OnLeaderChangeEvent leaderChangeEvent = InternalEntriesSerializeSupport.parse(event.getEventData());
-                        this.leaderChangeListeners.forEach(listener -> listener.accept(leaderChangeEvent));
-                    }
-                }
-                break;
-            case EventType.ON_STATE_CHANGE:
-                synchronized (stateChangeListeners) {
-                    if (!stateChangeListeners.isEmpty()) {
-                        Object eventData = serializer.parse(event.getEventData());
-                        this.stateChangeListeners.forEach(listener -> listener.accept(new Event(eventData)));
-                    }
-                }
-                break;
-            default:
-                // nothing to do
-        }
-    };
     public void close() {
         if (listenerCounter.get() > 0) {
             this.raftClient.unWatch(eventWatcher);
@@ -102,6 +113,8 @@ public class JkEventBus {
 
         }
     }
+
+
 
     private static class EventListener implements Consumer<Event> {
         private final Consumer<?> listener;
