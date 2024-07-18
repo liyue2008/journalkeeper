@@ -80,16 +80,6 @@ public class WrappedClientServerRpc implements ClientServerRpc {
     }
 
     @Override
-    public CompletableFuture<AddPullWatchResponse> addPullWatch() {
-        return clientServerRpc.addPullWatch();
-    }
-
-    @Override
-    public CompletableFuture<RemovePullWatchResponse> removePullWatch(RemovePullWatchRequest request) {
-        return clientServerRpc.removePullWatch(request);
-    }
-
-    @Override
     public CompletableFuture<UpdateVotersResponse> updateVoters(UpdateVotersRequest request) {
         return clientServerRpc.updateVoters(request);
     }

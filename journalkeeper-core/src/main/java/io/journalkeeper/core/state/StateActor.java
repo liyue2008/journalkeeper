@@ -44,6 +44,7 @@ import static io.journalkeeper.core.api.RaftJournal.DEFAULT_PARTITION;
 import static io.journalkeeper.core.api.RaftJournal.INTERNAL_PARTITION;
 import static io.journalkeeper.core.entry.internal.InternalEntryType.TYPE_UPDATE_VOTERS_S1;
 import static io.journalkeeper.core.entry.internal.InternalEntryType.TYPE_UPDATE_VOTERS_S2;
+import static io.journalkeeper.core.event.EventSupport.EVENT_PARTITION;
 import static io.journalkeeper.core.transaction.JournalTransactionManager.TRANSACTION_PARTITION_COUNT;
 import static io.journalkeeper.core.transaction.JournalTransactionManager.TRANSACTION_PARTITION_START;
 
@@ -294,6 +295,7 @@ public class StateActor implements RaftState{
             Set<Integer> partitions = new HashSet<>(userPartitions);
             partitions.add(INTERNAL_PARTITION);
             partitions.addAll(IntStream.range(TRANSACTION_PARTITION_START, TRANSACTION_PARTITION_START + TRANSACTION_PARTITION_COUNT).boxed().collect(Collectors.toSet()));
+            partitions.add(EVENT_PARTITION);
             state.init(statePath(), voters, partitions, preferredLeader);
             createFistSnapshot(voters, partitions, preferredLeader);
             lastSavedServerMetadata = createServerMetadata();

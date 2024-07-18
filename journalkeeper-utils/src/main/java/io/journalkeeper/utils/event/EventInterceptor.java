@@ -22,9 +22,8 @@ public interface EventInterceptor {
     /**
      * 拦截事件
      * @param event 事件
-     * @param eventBus 事件总线
      * @return true: 继续发送事件， false： 取消事件
      */
     @SuppressWarnings("SameReturnValue")
-    boolean onEvent(Event event, EventBus eventBus);
+    boolean onEvent(Event event, Fireable fireable);
 }

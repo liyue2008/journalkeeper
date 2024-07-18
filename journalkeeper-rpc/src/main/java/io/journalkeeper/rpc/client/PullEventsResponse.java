@@ -35,8 +35,10 @@ import java.util.List;
  */
 public class PullEventsResponse extends BaseResponse {
     private final List<PullEvent> pullEvents;
+    private final long latestIndex;
 
-    public PullEventsResponse(List<PullEvent> pullEvents) {
+    public PullEventsResponse(long latestIndex, List<PullEvent> pullEvents) {
+        this.latestIndex = latestIndex;
         if (null != pullEvents) {
             setStatusCode(StatusCode.SUCCESS);
         } else {
@@ -48,6 +50,7 @@ public class PullEventsResponse extends BaseResponse {
     public PullEventsResponse(Throwable throwable) {
         super(throwable);
         this.pullEvents = Collections.emptyList();
+        this.latestIndex = -1;
     }
 
     /**
@@ -56,5 +59,13 @@ public class PullEventsResponse extends BaseResponse {
      */
     public List<PullEvent> getPullEvents() {
         return pullEvents;
+    }
+
+    /**
+     * 最新的事件序号
+     * @return 最新的事件序号
+     */
+    public long getLatestIndex() {
+        return latestIndex;
     }
 }

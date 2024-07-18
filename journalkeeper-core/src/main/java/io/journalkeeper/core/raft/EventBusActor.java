@@ -1,39 +1,46 @@
 package io.journalkeeper.core.raft;
 
-import io.journalkeeper.core.api.StateResult;
-import io.journalkeeper.core.entry.internal.InternalEntriesSerializeSupport;
-import io.journalkeeper.core.entry.internal.OnStateChangeEvent;
+import io.journalkeeper.core.api.EntryFuture;
+import io.journalkeeper.core.api.JournalEntry;
+import io.journalkeeper.core.api.RaftJournal;
+import io.journalkeeper.core.event.EventSupport;
+import io.journalkeeper.core.state.ApplyReservedEntryInterceptor;
 import io.journalkeeper.rpc.client.*;
 import io.journalkeeper.utils.actor.*;
 import io.journalkeeper.utils.actor.annotation.ActorListener;
 import io.journalkeeper.utils.actor.annotation.ActorSubscriber;
 import io.journalkeeper.utils.event.Event;
 import io.journalkeeper.utils.event.EventBus;
-import io.journalkeeper.utils.event.EventType;
-import io.journalkeeper.utils.event.EventWatcher;
+import io.journalkeeper.utils.event.PullEvent;
 
+import java.util.ArrayList;
 import java.util.List;
 
-public class EventBusActor {
+import static io.journalkeeper.core.event.EventSupport.EVENT_PARTITION;
+
+
+public class EventBusActor implements ApplyReservedEntryInterceptor{
     private final EventBus eventBus;
-    private final Actor actor = Actor.builder().addr("EventBus").setHandlerInstance(this).build();
+    private final Actor actor;
+    private long appliedEventIndex = 0L;
+    private final RaftJournal raftJournal;
+    private static final int PULL_BATCH_SIZE = 1024;
 
 
-
-
-    public EventBusActor() {
+    public EventBusActor(RaftJournal raftJournal) {
+        this.raftJournal = raftJournal;
 
         this.eventBus = new EventBus();
+        actor = Actor.builder().addr("EventBus").setHandlerInstance(this).build();
+    }
+    @ActorSubscriber
+    private void onStart(ServerContext context) {
+        actor.send("State", "addInterceptor", this);
     }
 
-
     @ActorListener
-    private void watch(EventWatcher eventWatcher) {
-        eventBus.watch(eventWatcher);
-    }
-    @ActorListener
-    private void unWatch(EventWatcher eventWatcher) {
-        eventBus.unWatch(eventWatcher);
+    private void recoverEventIndex(long index) {
+        this.appliedEventIndex = index;
     }
 
     @ActorListener
@@ -49,38 +56,33 @@ public class EventBusActor {
 
     @ActorListener
     private PullEventsResponse pullEvents(PullEventsRequest request) {
-        if (request.getAckSequence() >= 0) {
-            eventBus.ackPullEvents(request.getPullWatchId(), request.getAckSequence());
+        long startIndex = request.getIndex() < 0 ? appliedEventIndex : request.getIndex();
+        long index = startIndex;
+        List<PullEvent> events = new ArrayList<>();
+        while (index < Math.min(appliedEventIndex, startIndex + PULL_BATCH_SIZE)) {
+
+            JournalEntry journalEntry = raftJournal.readByPartition(EVENT_PARTITION, index);
+            List<Event> eventBatch =EventSupport.journalEntryToEvents(journalEntry);
+
+            for (Event event : eventBatch) {
+                events.add(new PullEvent(event.getEventType(),index++, event.getEventData()));
+            }
         }
-        return new PullEventsResponse(eventBus.pullEvents(request.getPullWatchId()));
+        return new PullEventsResponse(appliedEventIndex, events);
     }
 
-    @ActorSubscriber
-    private void onStateChange(List<StateResult> stateResults) {
-        for(StateResult stateResult : stateResults) {
-            OnStateChangeEvent event = new OnStateChangeEvent(stateResult.getLastApplied());
-            byte[] serializedEvent = InternalEntriesSerializeSupport.serialize(event);
-            eventBus.fireEvent(new Event(EventType.ON_STATE_CHANGE, serializedEvent));
-        }
-    }
-    @ActorListener
-    private void fireEvent(Event event) {
-        eventBus.fireEvent(event);
-    }
-    @ActorListener
-    private void fireEvents(List<Event> events) {
-        events.forEach(eventBus::fireEvent);
-    }
-
-    @ActorSubscriber
-    private void onStop(){
-        fireEvent(new Event(EventType.ON_SERVER_SHUTDOWN, new byte[0]));
-    }
     public Actor getActor() {
         return actor;
     }
 
     public EventBus getEventBus() {
         return eventBus;
+    }
+
+    @Override
+    public void applyReservedEntry(JournalEntry entryHeader, EntryFuture entryFuture, long index) {
+        if (entryHeader.getPartition() == EVENT_PARTITION) {
+            appliedEventIndex += entryHeader.getBatchSize();
+        }
     }
 }

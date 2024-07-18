@@ -13,10 +13,7 @@
  */
 package io.journalkeeper.journalstore;
 
-import io.journalkeeper.utils.event.Event;
-import io.journalkeeper.utils.event.EventBus;
-import io.journalkeeper.utils.event.EventInterceptor;
-import io.journalkeeper.utils.event.EventType;
+import io.journalkeeper.utils.event.*;
 
 /**
  * @author LiYue
@@ -24,9 +21,9 @@ import io.journalkeeper.utils.event.EventType;
  */
 public class JournalChangedEventInterceptor implements EventInterceptor {
     @Override
-    public boolean onEvent(Event event, EventBus eventBus) {
+    public boolean onEvent(Event event, Fireable fireable) {
         if (event.getEventType() == EventType.ON_STATE_CHANGE) {
-            eventBus.fireEvent(new Event(EventType.ON_JOURNAL_CHANGE, event.getEventData()));
+            fireable.fireEvent(new Event(EventType.ON_JOURNAL_CHANGE, event.getEventData()));
         }
         return true;
     }

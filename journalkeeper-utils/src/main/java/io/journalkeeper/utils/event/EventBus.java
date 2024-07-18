@@ -49,7 +49,7 @@ import java.util.stream.Collectors;
  * @author LiYue
  * Date: 2019-04-12
  */
-public class EventBus implements Watchable {
+public class EventBus implements Watchable, Fireable {
     private static final Logger logger = LoggerFactory.getLogger(EventBus.class);
     private final NavigableMap<Long, Event> cachedEvents = new ConcurrentSkipListMap<>();
     private final AtomicLong watchIdGenerator = new AtomicLong(0L);

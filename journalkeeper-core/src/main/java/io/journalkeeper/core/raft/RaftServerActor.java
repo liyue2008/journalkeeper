@@ -61,7 +61,7 @@ public class RaftServerActor implements  RaftServer {
 
         this.serverRpc = serverRpcActor;
         RpcActor rpcActor = new RpcActor(properties);
-        EventBusActor eventBusActor = new EventBusActor();
+        EventBusActor eventBusActor = new EventBusActor(journalActor.getRaftJournal());
 
 
         PostOffice postOffice = PostOffice.builder()

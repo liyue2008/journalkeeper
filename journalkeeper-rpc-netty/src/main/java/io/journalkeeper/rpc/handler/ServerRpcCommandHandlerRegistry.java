@@ -31,8 +31,7 @@ public class ServerRpcCommandHandlerRegistry {
         factory.register(uri, new QueryServerStateHandler(serverRpc));
         factory.register(uri, new QuerySnapshotHandler(serverRpc));
         factory.register(uri, new GetServersHandler(serverRpc));
-        factory.register(uri, new AddPullWatchHandler(serverRpc));
-        factory.register(uri, new RemovePullWatchHandler(serverRpc));
+
         factory.register(uri, new PullEventsHandler(serverRpc));
         factory.register(uri, new UpdateVotersHandler(serverRpc));
         factory.register(uri, new ConvertRollHandler(serverRpc));

@@ -4,6 +4,7 @@ import io.journalkeeper.base.ReplicableIterator;
 import io.journalkeeper.core.api.*;
 import io.journalkeeper.core.api.transaction.UUIDTransactionId;
 import io.journalkeeper.core.entry.internal.*;
+import io.journalkeeper.core.event.EventSupport;
 import io.journalkeeper.core.metric.MetricNames;
 import io.journalkeeper.core.monitor.MonitoredVoter;
 import io.journalkeeper.core.metric.MetricProvider;
@@ -84,6 +85,7 @@ public class VoterActor {
     private final int cacheRequests;
     private final List<ReplicationDestination> replicationDestinations = new ArrayList<>(); // Followers
     private JMetric updateClusterStateMetric;
+    private final EventSupport eventSupport;
 
 
     // Observer Only
@@ -115,6 +117,7 @@ public class VoterActor {
                 .addState(VoterState.CANDIDATE, new HashSet<>(Collections.singletonList(VoterState.PRE_VOTING)))
                 .addState(VoterState.PRE_VOTING, new HashSet<>(Collections.singletonList(VoterState.FOLLOWER)))
                 .build();
+        this.eventSupport = new EventSupport(actor);
         if (roll == RaftServer.Roll.VOTER) {
             convertToFollower();
         } else {
@@ -816,7 +819,7 @@ public class VoterActor {
         }
 
         if (!events.isEmpty()) {
-            actor.send("EventBus", "fireEvents", events);
+            eventSupport.fireEvents(events);
         }
     }
 
@@ -886,10 +889,6 @@ public class VoterActor {
 
     @ActorSubscriber
     private void onInternalEntryApply(InternalEntryType type, byte [] internalEntry) {
-        if (type == InternalEntryType.TYPE_LEADER_ANNOUNCEMENT) {
-            LeaderAnnouncementEntry leaderAnnouncementEntry = InternalEntriesSerializeSupport.parse(internalEntry);
-            fireOnLeaderChangeEvent(leaderAnnouncementEntry.getTerm(), leaderAnnouncementEntry.getLeaderUri());
-        }
         if (raftState.current() != VoterState.LEADER) {
             return;
         }
@@ -897,6 +896,8 @@ public class VoterActor {
             LeaderAnnouncementEntry leaderAnnouncementEntry = InternalEntriesSerializeSupport.parse(internalEntry);
             if (raftState.current() == VoterState.LEADER && !isAnnounced && leaderAnnouncementEntry.getTerm() == this.term) {
                 this.isAnnounced = true;
+                eventSupport.fireEvent( new Event(EventType.ON_LEADER_CHANGE,
+                        InternalEntriesSerializeSupport.serialize(new OnLeaderChangeEvent(leaderUri, term))));
                 logger.info("Leader announcement applied! Leader: {}, term: {}, last applied: {}.", state.getLocalUri(), term, state.lastApplied());
             }
         } else if (type == TYPE_UPDATE_VOTERS_S1) {
@@ -925,12 +926,7 @@ public class VoterActor {
         }
     }
 
-    private void fireOnLeaderChangeEvent(int term, URI leaderUri) {
-        if(config.get("enable_events")) {
-            actor.send("EventBus", "fireEvent", new Event(EventType.ON_LEADER_CHANGE,
-                    InternalEntriesSerializeSupport.serialize(new OnLeaderChangeEvent(leaderUri, term))));
-        }
-    }
+
 
     private void takeSnapshotPeriodically() {
         if (raftState.current() != VoterState.LEADER) {

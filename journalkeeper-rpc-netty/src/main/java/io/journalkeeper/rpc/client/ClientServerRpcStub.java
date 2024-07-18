@@ -140,16 +140,6 @@ public class ClientServerRpcStub implements ClientServerRpc {
     }
 
     @Override
-    public CompletableFuture<AddPullWatchResponse> addPullWatch() {
-        return sendRequest(null, RpcTypes.ADD_PULL_WATCH_REQUEST);
-    }
-
-    @Override
-    public CompletableFuture<RemovePullWatchResponse> removePullWatch(RemovePullWatchRequest request) {
-        return sendRequest(request, RpcTypes.REMOVE_PULL_WATCH_REQUEST);
-    }
-
-    @Override
     public CompletableFuture<UpdateVotersResponse> updateVoters(UpdateVotersRequest request) {
         return sendRequest(request, RpcTypes.UPDATE_VOTERS_REQUEST);
     }

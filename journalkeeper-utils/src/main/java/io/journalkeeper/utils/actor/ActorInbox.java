@@ -191,7 +191,10 @@ class ActorInbox {
                 .collect(Collectors.toSet());
     }
 
-    private boolean tryInvoke(InvocationTarget invocationTarget, ActorMsg msg) throws IllegalAccessException {
+    // FIXME：目前一个消息支持多个监听函数，但如果是需要应答的消息，目前的逻辑有点儿问题：
+    // 1. 消息可能会被应答多次；
+    // 2. 如果找不到监听函数，消息不会被应答，也没有提示，会导致等待应答的线程卡住。
+    private void tryInvoke(InvocationTarget invocationTarget, ActorMsg msg) throws IllegalAccessException {
         if (invocationTarget != null) {
             Object instance = invocationTarget.getTarget();
             Method method = invocationTarget.getMethod();
@@ -204,11 +207,11 @@ class ActorInbox {
                 } else {
                     // 看参数个数和类型是否匹配
                     if (method.getParameterCount() != msg.getPayloads().length) {
-                        return false;
+                        return;
                     }
                     for (int i = 0; i < msg.getPayloads().length; i++) {
                         if (msg.getPayloads()[i] != null &&!ClassUtils.isAssignable( msg.getPayloads()[i].getClass(), method.getParameters()[i].getType())) {
-                            return false;
+                            return;
                         }
                     }
                     method.setAccessible(true);
@@ -229,9 +232,7 @@ class ActorInbox {
                 logger.info("Invoke message handler failed, cause: illegal argument, handler: {}, msg: {}.", instance.getClass().getName() + "." + method.getName() + "(...)", msg);
 
             }
-            return true;
         }
-        return false;
     }
 
 
@@ -282,11 +283,10 @@ class ActorInbox {
                 List<InvocationTarget> targets = actorListeners.get(msg.getTopic());
 
                 if (null != targets && !targets.isEmpty()) {
-                    boolean ret = false;
                     for (InvocationTarget invocationTarget : targets) {
-                        ret |= tryInvoke(invocationTarget, msg);
+                        tryInvoke(invocationTarget, msg);
                     }
-                    return ret;
+                    return true;
                 }
 
 

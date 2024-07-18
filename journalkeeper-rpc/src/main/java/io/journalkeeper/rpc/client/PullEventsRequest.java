@@ -21,27 +21,18 @@ package io.journalkeeper.rpc.client;
  * Date: 2019-04-22
  */
 public class PullEventsRequest {
-    private final long pullWatchId;
-    private final long ackSequence;
+    private final long index;
 
-    public PullEventsRequest(long pullWatchId, long ackSequence) {
-        this.pullWatchId = pullWatchId;
-        this.ackSequence = ackSequence;
+    public PullEventsRequest(long index) {
+        this.index = index;
     }
 
     /**
-     * 获取监听ID
-     * @return 监听ID
+     * 获取事件起始index
+     * @return 事件起始index
      */
-    public long getPullWatchId() {
-        return pullWatchId;
+    public long getIndex() {
+        return index;
     }
 
-    /**
-     * 获取确认位置，用于确认已收到的事件。
-     * @return 确认位置。如果确认位置小于0，则本次请求不进行确认事件操作。
-     */
-    public long getAckSequence() {
-        return ackSequence;
-    }
 }

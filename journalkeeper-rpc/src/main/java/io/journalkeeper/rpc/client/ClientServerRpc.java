@@ -94,20 +94,6 @@ public interface ClientServerRpc {
      */
     CompletableFuture<GetServerStatusResponse> getServerStatus();
 
-    /**
-     * 添加pull模式事件监听。
-     * @see EventBus
-     * @return See {@link AddPullWatchResponse}
-     */
-    CompletableFuture<AddPullWatchResponse> addPullWatch();
-
-    /**
-     * 删除pull事件监听。
-     * @see EventBus
-     * @param request See {@link RemovePullWatchRequest}
-     * @return See {@link RemovePullWatchResponse}
-     */
-    CompletableFuture<RemovePullWatchResponse> removePullWatch(RemovePullWatchRequest request);
 
     /**
      * 变更集群配置
@@ -117,7 +103,7 @@ public interface ClientServerRpc {
     CompletableFuture<UpdateVotersResponse> updateVoters(UpdateVotersRequest request);
 
     /**
-     * 拉取事件，并确认已拉取的事件位置。
+     * 拉取事件。
      * @param request See {@link PullEventsRequest}
      * @see EventBus
      * @return See {@link PullEventsResponse}
@@ -164,4 +150,6 @@ public interface ClientServerRpc {
     CompletableFuture<CheckLeadershipResponse> checkLeadership();
 
     void stop();
+
+
 }

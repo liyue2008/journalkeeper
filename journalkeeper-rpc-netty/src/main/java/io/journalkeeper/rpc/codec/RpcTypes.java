@@ -39,10 +39,7 @@ public class RpcTypes {
     public final static int UPDATE_VOTERS_RESPONSE = -7;
     public final static int UPDATE_OBSERVERS_REQUEST = 8;
     public final static int UPDATE_OBSERVERS_RESPONSE = -8;
-    public final static int ADD_PULL_WATCH_REQUEST = 9;
-    public final static int ADD_PULL_WATCH_RESPONSE = -9;
-    public final static int REMOVE_PULL_WATCH_REQUEST = 10;
-    public final static int REMOVE_PULL_WATCH_RESPONSE = -10;
+
     public final static int PULL_EVENTS_REQUEST = 11;
     public final static int PULL_EVENTS_RESPONSE = -11;
     public static final int CONVERT_ROLL_REQUEST = 12;

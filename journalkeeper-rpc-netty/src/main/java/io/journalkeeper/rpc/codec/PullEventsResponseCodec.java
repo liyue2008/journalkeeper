@@ -31,6 +31,7 @@ public class PullEventsResponseCodec extends ResponseCodec<PullEventsResponse> i
     @Override
     protected void encodeResponse(JournalKeeperHeader header, PullEventsResponse response, ByteBuf buffer) {
         //boolean success, long journalIndex, int term, int entryCount
+        CodecSupport.encodeLong(buffer, response.getLatestIndex());
         CodecSupport.encodeList(buffer, response.getPullEvents(),
                 (obj, buffer1) -> {
                     PullEvent pullEvent = (PullEvent) obj;
@@ -44,6 +45,7 @@ public class PullEventsResponseCodec extends ResponseCodec<PullEventsResponse> i
     @Override
     protected PullEventsResponse decodeResponse(JournalKeeperHeader header, ByteBuf buffer) {
         return new PullEventsResponse(
+                CodecSupport.decodeLong(buffer),
                 CodecSupport.decodeList(buffer, buffer1 -> new PullEvent(
                         CodecSupport.decodeInt(buffer1),
                         CodecSupport.decodeLong(buffer1),
@@ -57,16 +59,4 @@ public class PullEventsResponseCodec extends ResponseCodec<PullEventsResponse> i
         return RpcTypes.PULL_EVENTS_RESPONSE;
     }
 
-    private static class StringCodec implements Encoder, Decoder {
-
-        @Override
-        public Object decode(ByteBuf buffer) throws TransportException.CodecException {
-            return CodecSupport.decodeString(buffer);
-        }
-
-        @Override
-        public void encode(Object obj, ByteBuf buffer) throws TransportException.CodecException {
-            CodecSupport.encodeString(buffer, (String) obj);
-        }
-    }
 }

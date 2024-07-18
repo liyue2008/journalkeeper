@@ -45,9 +45,10 @@ public abstract class AbstractClient implements ClusterReadyAware, ServerConfigA
     private static final Logger logger = LoggerFactory.getLogger(AbstractClient.class);
     protected AsyncLoopThread pullEventThread = null;
     protected EventBus eventBus = null;
-    protected long pullWatchId = -1L;
-    protected long ackSequence = -1L;
+    protected long eventIndex = -1L;
+    protected long eventLastIndex = Long.MAX_VALUE;
     final ClientRpc clientRpc;
+    final long pullInterval = 100L;
 
     AbstractClient(ClientRpc clientRpc) {
         this.clientRpc = clientRpc;
@@ -110,24 +111,19 @@ public abstract class AbstractClient implements ClusterReadyAware, ServerConfigA
 
     private void initPullEvent() {
         try {
-            AddPullWatchResponse addPullWatchResponse = clientRpc.invokeClientServerRpc(ClientServerRpc::addPullWatch).get();
-            if (addPullWatchResponse.success()) {
+
                 eventBus = new EventBus();
-                this.pullWatchId = addPullWatchResponse.getPullWatchId();
-                this.ackSequence = -1L;
-                long pullInterval = addPullWatchResponse.getPullIntervalMs();
-                pullEventThread = buildPullEventsThread(pullInterval);
+
+                pullEventThread = buildPullEventsThread();
                 pullEventThread.start();
-            } else {
-                throw new RpcException(addPullWatchResponse);
-            }
+
         } catch (Throwable t) {
             throw new RpcException(t);
         }
 
     }
 
-    private AsyncLoopThread buildPullEventsThread(long pullInterval) {
+    private AsyncLoopThread buildPullEventsThread() {
         return ThreadBuilder.builder()
                 .name("PullEventsThread")
                 .doWork(this::pullRemoteEvents)
@@ -138,15 +134,22 @@ public abstract class AbstractClient implements ClusterReadyAware, ServerConfigA
     }
 
     private void pullRemoteEvents() {
-        clientRpc.invokeClientServerRpc(clientServerRpc -> clientServerRpc.pullEvents(new PullEventsRequest(pullWatchId, ackSequence)))
+
+        clientRpc.invokeClientServerRpc(clientServerRpc -> clientServerRpc.pullEvents(new PullEventsRequest(pullInterval)))
                 .thenAccept(response -> {
                     if (response.success()) {
                         if (null != response.getPullEvents()) {
                             response.getPullEvents().forEach(pullEvent -> {
                                 eventBus.fireEvent(pullEvent);
-                                ackSequence = pullEvent.getSequence();
                             });
                         }
+                        if (eventIndex < 0) {
+                            eventIndex = response.getLatestIndex();
+                        } else {
+                            eventIndex += response.getPullEvents().size();
+                        }
+                        eventLastIndex = response.getLatestIndex();
+                        logger.info("Pull event success, index: {}, latest index: {}", eventIndex, eventLastIndex);
                     } else {
                         logger.warn("Pull event error: {}", response.getError());
                     }
@@ -171,22 +174,10 @@ public abstract class AbstractClient implements ClusterReadyAware, ServerConfigA
         }
         if (null != pullEventThread) {
             pullEventThread.stop();
-            eventBus = null;
+            pullEventThread = null;
         }
-        if (pullWatchId >= 0) {
-            try {
-                RemovePullWatchResponse response = clientRpc.invokeClientServerRpc(clientServerRpc -> clientServerRpc.removePullWatch(new RemovePullWatchRequest(pullWatchId)))
-                        .get();
-                if (!response.success()) {
-                    throw new RpcException(response);
-                }
-            } catch (Throwable t) {
-                logger.warn("Remove pull watch exception: ", t);
-            } finally {
-                pullWatchId = -1L;
-            }
-        }
-
+        eventLastIndex = Long.MAX_VALUE;
+        eventIndex = -1L;
     }
 
 
