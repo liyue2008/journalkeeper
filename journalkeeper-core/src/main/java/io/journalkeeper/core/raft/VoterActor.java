@@ -800,7 +800,7 @@ public class VoterActor {
         }
         List<Event> events = new ArrayList<>();
         for (StateResult stateResult : stateResults) {
-            if(config.get("enable_events")) {
+            if(config.<Boolean>get("enable_events") && stateResult.getPartition() != EventSupport.EVENT_PARTITION) {
                 OnStateChangeEvent event = new OnStateChangeEvent(stateResult.getLastApplied());
                 byte [] serializedEvent =  InternalEntriesSerializeSupport.serialize(event);
                 events.add(new Event(EventType.ON_STATE_CHANGE, serializedEvent));

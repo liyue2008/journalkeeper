@@ -5,6 +5,7 @@ import io.journalkeeper.core.api.ResponseConfig;
 import io.journalkeeper.rpc.client.UpdateClusterStateRequest;
 import io.journalkeeper.rpc.client.UpdateClusterStateResponse;
 import io.journalkeeper.utils.actor.Actor;
+import io.journalkeeper.utils.actor.ActorMsg;
 import io.journalkeeper.utils.event.Event;
 import io.journalkeeper.utils.event.EventInterceptor;
 import io.journalkeeper.utils.event.Fireable;
@@ -40,7 +41,7 @@ public class EventSupport implements Fireable {
         if (null == events) {
             return;
         }
-
+        // TODO: 改为批量调用interceptor.onEvents
         Iterator<Event> eventIterator = events.iterator();
         while (eventIterator.hasNext()) {
             Event event = eventIterator.next();
@@ -59,15 +60,8 @@ public class EventSupport implements Fireable {
         }
 
         byte [] eventsRaw = encodeEvents(events);
-        UpdateClusterStateRequest updateClusterStateRequest = new UpdateClusterStateRequest(eventsRaw, EVENT_PARTITION, events.size(), false, ResponseConfig.REPLICATION);
-        actor.<UpdateClusterStateResponse>sendThen("Voter", "updateClusterState", updateClusterStateRequest)
-                .whenComplete((r, t) -> {
-                    if (null != t) {
-                        logger.warn("Fire event exception: ", t);
-                    } else if (!r.success()) {
-                        logger.warn("Fire event error: {}", r.errorString());
-                    }
-                });
+        UpdateClusterStateRequest updateClusterStateRequest = new UpdateClusterStateRequest(eventsRaw, EVENT_PARTITION, events.size(), false, ResponseConfig.RECEIVE);
+        actor.send("Voter", "updateClusterState", ActorMsg.Response.IGNORE,updateClusterStateRequest);
     }
 
     private static byte [] encodeEvents(List<Event> events) {

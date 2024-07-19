@@ -870,15 +870,12 @@ public class KvTest {
         public void accept(OnLeaderChangeEvent event) {
             this.event = event;
             latch.countDown();
-            logger.info("OnLeaderChangeEvent: {}.", event);
         }
 
         public OnLeaderChangeEvent getEvent() {
             return event;
         }
     }
-    // TODO: 可靠的事件通知
-    @Ignore
     @Test
     public void eventTest() throws Exception {
         Path path = TestPathUtils.prepareBaseDir("EventTest");

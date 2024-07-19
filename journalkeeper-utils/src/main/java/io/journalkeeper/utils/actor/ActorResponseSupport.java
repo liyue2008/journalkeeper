@@ -63,7 +63,9 @@ class ActorResponseSupport {
     }
 
     void reply(ActorMsg request, Object result) {
-        this.outbox.send(this.outbox.createResponse(request, result, null));
+        if (request.getContext().getResponseConfig() != ActorMsg.Response.IGNORE) {
+            this.outbox.send(this.outbox.createResponse(request, result, null));
+        }
     }
 
     void setDefaultHandlerFunction(Consumer<ActorMsg> handler) {

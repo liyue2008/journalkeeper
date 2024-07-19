@@ -135,7 +135,7 @@ public abstract class AbstractClient implements ClusterReadyAware, ServerConfigA
 
     private void pullRemoteEvents() {
 
-        clientRpc.invokeClientServerRpc(clientServerRpc -> clientServerRpc.pullEvents(new PullEventsRequest(pullInterval)))
+        clientRpc.invokeClientServerRpc(clientServerRpc -> clientServerRpc.pullEvents(new PullEventsRequest(eventIndex)))
                 .thenAccept(response -> {
                     if (response.success()) {
                         if (null != response.getPullEvents()) {
@@ -149,7 +149,6 @@ public abstract class AbstractClient implements ClusterReadyAware, ServerConfigA
                             eventIndex += response.getPullEvents().size();
                         }
                         eventLastIndex = response.getLatestIndex();
-                        logger.info("Pull event success, index: {}, latest index: {}", eventIndex, eventLastIndex);
                     } else {
                         logger.warn("Pull event error: {}", response.getError());
                     }

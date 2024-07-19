@@ -25,6 +25,10 @@
  */
 package io.journalkeeper.core.api;
 
+import java.util.Arrays;
+
+import static io.journalkeeper.core.api.RaftJournal.DEFAULT_PARTITION;
+
 /**
  * @author LiYue
  * Date: 2019/11/20
@@ -33,6 +37,7 @@ public class StateResult {
     private final byte[] userResult;
     private final byte[] eventData;
     private long lastApplied;
+    private int partition;
 
     public StateResult(byte[] userResult) {
         this(userResult, null);
@@ -57,5 +62,21 @@ public class StateResult {
 
     public void setLastApplied(long lastApplied) {
         this.lastApplied = lastApplied;
+    }
+
+    public int getPartition() {
+        return partition;
+    }
+
+    public void setPartition(int partition) {
+        this.partition = partition;
+    }
+
+    @Override
+    public String toString() {
+        return "StateResult{" +
+                "lastApplied=" + lastApplied +
+                ", partition=" + partition +
+                '}';
     }
 }

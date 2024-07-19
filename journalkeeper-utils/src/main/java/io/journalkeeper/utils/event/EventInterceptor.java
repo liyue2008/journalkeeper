@@ -13,6 +13,10 @@
  */
 package io.journalkeeper.utils.event;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
+
 /**
  * 事件拦截器
  * @author LiYue
@@ -26,4 +30,13 @@ public interface EventInterceptor {
      */
     @SuppressWarnings("SameReturnValue")
     boolean onEvent(Event event, Fireable fireable);
+
+    default List<Boolean> onEvents(List<Event> events, Fireable fireable) {
+        List<Event> eventsToFire = new ArrayList<>();
+        List<Boolean> ret =  events.stream().map(event -> onEvent(event, eventsToFire::add)).collect(Collectors.toList());
+        fireable.fireEvents(eventsToFire);
+        return ret;
+    }
+
+
 }

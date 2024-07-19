@@ -743,7 +743,10 @@ public class StateActor implements RaftState{
         while (state.lastApplied() < journal.commitIndex()) {
             long offset = journal.readOffset(state.lastApplied());
             JournalEntry entryHeader = journal.readEntryHeaderByOffset(offset);
-            resultList.add(state.applyEntry(entryHeader, new EntryFutureImpl(journal, offset), journal));
+            StateResult stateResult = state.applyEntry(entryHeader, new EntryFutureImpl(journal, offset), journal);
+            if (stateResult.getPartition() != EVENT_PARTITION) {
+                resultList.add(stateResult);
+            }
         }
         if (!resultList.isEmpty()) {
             actor.pub("onStateChange", resultList);

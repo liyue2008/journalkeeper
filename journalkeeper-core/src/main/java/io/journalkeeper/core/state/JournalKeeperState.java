@@ -233,6 +233,7 @@ public class JournalKeeperState implements Flushable {
             internalState.setLastIncludedTerm(entryHeader.getTerm());
             internalState.next();
             result.setLastApplied(lastApplied());
+            result.setPartition(partition);
         }
         finally {
             stateLock.unlockWrite(stamp);

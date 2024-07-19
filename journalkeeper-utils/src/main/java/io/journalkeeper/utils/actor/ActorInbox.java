@@ -205,15 +205,6 @@ class ActorInbox {
                     method.setAccessible(true);
                     ret = method.invoke(instance, msg);
                 } else {
-                    // 看参数个数和类型是否匹配
-                    if (method.getParameterCount() != msg.getPayloads().length) {
-                        return;
-                    }
-                    for (int i = 0; i < msg.getPayloads().length; i++) {
-                        if (msg.getPayloads()[i] != null &&!ClassUtils.isAssignable( msg.getPayloads()[i].getClass(), method.getParameters()[i].getType())) {
-                            return;
-                        }
-                    }
                     method.setAccessible(true);
                     ret = method.invoke(instance, msg.getPayloads());
                 }
@@ -235,7 +226,41 @@ class ActorInbox {
         }
     }
 
+    private boolean isMethodSignatureMatch(InvocationTarget invocationTarget, ActorMsg msg) {
+        Method method = invocationTarget.getMethod();
 
+        if (method.getParameterCount() == 1 && method.getParameters()[0].isAnnotationPresent(ActorMessage.class) && ClassUtils.isAssignable(ActorMsg.class, method.getParameters()[0].getType())) {
+            // 优先看参数个数是否是1，且带有@ActorMessage注解
+            return true;
+        }
+
+        // 看参数个数和类型是否匹配
+        if (method.getParameterCount() != msg.getPayloads().length) {
+            return false;
+        }
+        for (int i = 0; i < msg.getPayloads().length; i++) {
+            if (msg.getPayloads()[i] != null &&!ClassUtils.isAssignable(msg.getPayloads()[i].getClass(), method.getParameters()[i].getType())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+
+    private InvocationTarget selectInvocationTarget(List<InvocationTarget> targets, ActorMsg msg) throws InvocationTargetException {
+        // 选择一个签名匹配的方法
+        if(null == targets) {
+            return null;
+        }
+        List<InvocationTarget> matchTargets = targets.stream().filter(target -> isMethodSignatureMatch(target, msg)).collect(Collectors.toList());
+        if (matchTargets.size() > 1) {
+            throw new InvocationTargetException(new IllegalStateException("More than one target matched."));
+        } else if (matchTargets.size() == 1) {
+            return matchTargets.get(0);
+        } else {
+            return null;
+        }
+    }
 
     private boolean needResponse(ActorMsg msg, Method method) {
         return (msg.getContext().getResponseConfig() == ActorMsg.Response.REQUIRED
@@ -282,10 +307,10 @@ class ActorInbox {
 
                 List<InvocationTarget> targets = actorListeners.get(msg.getTopic());
 
-                if (null != targets && !targets.isEmpty()) {
-                    for (InvocationTarget invocationTarget : targets) {
-                        tryInvoke(invocationTarget, msg);
-                    }
+                // 选择一个签名匹配的方法
+                InvocationTarget invocationTarget = selectInvocationTarget(targets, msg);
+                if (null != invocationTarget) {
+                    tryInvoke(invocationTarget, msg);
                     return true;
                 }
 
