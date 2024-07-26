@@ -47,7 +47,7 @@ private static final Logger logger = LoggerFactory.getLogger(Snapshot.class);
                     String.format("Incomplete snapshot: %s!", path)
             );
         }
-        super.recover(path, properties, false);
+        super.recover(path, properties);
     }
 
     public void createSnapshot(RaftJournal journal) throws IOException {
