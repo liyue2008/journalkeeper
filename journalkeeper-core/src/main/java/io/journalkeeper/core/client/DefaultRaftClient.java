@@ -29,13 +29,10 @@ import io.journalkeeper.rpc.client.QueryStateRequest;
 import io.journalkeeper.rpc.client.QueryStateResponse;
 import io.journalkeeper.rpc.client.UpdateClusterStateRequest;
 import io.journalkeeper.rpc.client.UpdateClusterStateResponse;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
@@ -46,10 +43,8 @@ import java.util.stream.Collectors;
  * Date: 2019-03-25
  */
 public class DefaultRaftClient extends AbstractClient implements RaftClient {
-    private static final Logger logger = LoggerFactory.getLogger(DefaultRaftClient.class);
     private final AtomicLong lastApplied = new AtomicLong(-1L);
-    public DefaultRaftClient(ClientRpc clientRpc,
-                             Properties properties) {
+    public DefaultRaftClient(ClientRpc clientRpc) {
         super(clientRpc);
     }
 

@@ -28,7 +28,6 @@ public abstract class Activity {
     // 锁
     protected final ReentrantReadWriteLock rwLock = new ReentrantReadWriteLock();
     // 锁
-    protected final Lock readLock = rwLock.readLock();
     // 锁
     protected final Lock writeLock = rwLock.writeLock();
     // 是否启动
@@ -233,49 +232,12 @@ public abstract class Activity {
     }
 
     /**
-     * 等待一段时间，如果服务已经关闭则立即返回
-     *
-     * @param time 时间
-     */
-    protected void await(final long time) {
-        if (!isStarted()) {
-            return;
-        }
-        synchronized (signal) {
-            try {
-                signal.wait(time);
-            } catch (InterruptedException e) {
-                // 当前线程终止
-                Thread.currentThread().interrupt();
-            }
-        }
-    }
-
-    /**
      * 是否就绪
      *
      * @return 就绪标示
      */
     protected boolean isReady() {
         return serviceState.get() == ServiceState.STARTED;
-    }
-
-    /**
-     * 获取写锁
-     *
-     * @return 写锁
-     */
-    protected Lock getWriteLock() {
-        return writeLock;
-    }
-
-    /**
-     * 获取读锁
-     *
-     * @return 读锁
-     */
-    protected Lock getReadLock() {
-        return rwLock.readLock();
     }
 
     /**

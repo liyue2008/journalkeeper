@@ -43,7 +43,6 @@ import io.netty.channel.ChannelInitializer;
 public class DefaultTransportServer extends TransportServerSupport {
 
     private final Codec codec;
-    private final ExceptionHandler exceptionHandler;
     private final RequestBarrier requestBarrier;
     private final RequestHandler requestHandler;
     private final ResponseHandler responseHandler;
@@ -54,7 +53,6 @@ public class DefaultTransportServer extends TransportServerSupport {
                                   EventBus<TransportEvent> transportEventBus) {
         super(serverConfig, host, port);
         this.codec = codec;
-        this.exceptionHandler = exceptionHandler;
         this.requestBarrier = requestBarrier;
         this.requestHandler = requestHandler;
         this.responseHandler = responseHandler;
@@ -71,7 +69,7 @@ public class DefaultTransportServer extends TransportServerSupport {
                         .addLast(new NettyDecoder(codec))
                         .addLast(new NettyEncoder(codec))
                         .addLast(new TransportEventHandler(requestBarrier, transportEventBus))
-                        .addLast(new ExceptionChannelHandler(exceptionHandler, requestBarrier))
+                        .addLast(new ExceptionChannelHandler())
                         .addLast(new CommandInvocation(commandDispatcher));
             }
         };

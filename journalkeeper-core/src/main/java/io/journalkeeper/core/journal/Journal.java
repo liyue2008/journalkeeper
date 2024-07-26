@@ -338,7 +338,7 @@ public class Journal implements RaftJournal, Flushable, Closeable {
     private void appendPartitionIndex(byte[] offset, int partition, int batchSize) throws IOException {
         // Create partition which not exists
         if (!partitionMap.containsKey(partition)) {
-            addPartition(partition, 0L);
+            addPartition(partition);
         }
         byte[] bytes;
         if (batchSize > 1) {
@@ -875,7 +875,7 @@ public class Journal implements RaftJournal, Flushable, Closeable {
             synchronized (partitionMap) {
                 for (int partition : partitions) {
                     if (!partitionMap.containsKey(partition)) {
-                        addPartition(partition, 0L);
+                        addPartition(partition);
                     }
                 }
 
@@ -964,16 +964,12 @@ public class Journal implements RaftJournal, Flushable, Closeable {
     }
 
     public void addPartition(int partition) throws IOException {
-        addPartition(partition, 0L);
-    }
-
-    private void addPartition(int partition, long minIndex) throws IOException {
         synchronized (partitionMap) {
             if (!partitionMap.containsKey(partition)) {
                 JournalPersistence partitionPersistence = persistenceFactory.createJournalPersistenceInstance();
                 partitionPersistence.recover(
                         basePath.resolve(PARTITION_PATH).resolve(String.valueOf(partition)),
-                        minIndex * INDEX_STORAGE_SIZE,
+                        0L,
                         indexProperties);
                 partitionMap.put(partition, partitionPersistence);
             }

@@ -24,6 +24,5 @@ public class EventType {
 
     // 1000 - 1999 Journal Keeper Configuration API（JK-C API）
     public static final int ON_LEADER_CHANGE = 1000;
-    public static final int ON_VOTERS_CHANGE = 1001;
     public static final int ON_SERVER_SHUTDOWN = 1002;
 }

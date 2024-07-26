@@ -70,7 +70,7 @@ public class DefaultEncoder implements Encoder {
                 headerCodec.encode(header, buffer);
             }
 
-            writeLength(obj, buffer);
+            writeLength( buffer);
 
         } catch (Exception e) {
             logger.error("encode exception, payload: {}", obj, e);
@@ -78,7 +78,7 @@ public class DefaultEncoder implements Encoder {
         }
     }
 
-    protected void writeLength(Object obj, ByteBuf buffer) {
+    protected void writeLength(ByteBuf buffer) {
         buffer.setInt(0, buffer.writerIndex());
     }
 }

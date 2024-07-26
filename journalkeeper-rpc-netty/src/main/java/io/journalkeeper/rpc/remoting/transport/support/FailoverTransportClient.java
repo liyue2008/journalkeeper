@@ -34,12 +34,10 @@ import java.net.SocketAddress;
 public class FailoverTransportClient implements TransportClient {
 
     private final TransportClient delegate;
-    private final TransportConfig config;
     private final EventBus<TransportEvent> transportEventBus;
 
     public FailoverTransportClient(TransportClient delegate, TransportConfig config, EventBus<TransportEvent> transportEventBus) {
         this.delegate = delegate;
-        this.config = config;
         this.transportEventBus = transportEventBus;
     }
 
@@ -61,7 +59,7 @@ public class FailoverTransportClient implements TransportClient {
     @Override
     public Transport createTransport(SocketAddress address, long connectionTimeout) throws TransportException {
         ChannelTransport transport = (ChannelTransport) delegate.createTransport(address, connectionTimeout);
-        return new FailoverChannelTransport(transport, address, connectionTimeout, delegate, config, transportEventBus);
+        return new FailoverChannelTransport(transport, address, connectionTimeout, delegate, transportEventBus);
     }
 
     @Override

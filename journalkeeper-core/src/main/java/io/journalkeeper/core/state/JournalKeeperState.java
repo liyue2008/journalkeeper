@@ -156,28 +156,22 @@ public class JournalKeeperState implements Flushable {
         metadataPersistence.save(internalStateFile, new PersistInternalState().fromInternalState(internalState));
     }
 
-    public void recover(Path path, Properties properties) {
-        recover(path, properties, false);
-    }
-
-    void recover(Path path, Properties properties, boolean internalStateOnly) {
+    void recover(Path path, Properties properties) {
         stateFilesLock.writeLock().lock();
         try {
-            recoverUnsafe(path, properties, internalStateOnly);
+            recoverUnsafe(path, properties);
         } finally {
             stateFilesLock.writeLock().unlock();
         }
     }
 
-    private void recoverUnsafe(Path path, Properties properties, boolean internalStateOnly) {
+    private void recoverUnsafe(Path path, Properties properties) {
         this.path = path;
         this.properties = properties;
         try {
             Files.createDirectories(path);
             this.internalState = recoverInternalState(internalStateFile(path));
-            if (!internalStateOnly) {
-                recoverUserStateUnsafe();
-            }
+            recoverUserStateUnsafe();
         } catch (IOException e) {
             throw new StateRecoverException(e);
         }
@@ -227,7 +221,7 @@ public class JournalKeeperState implements Flushable {
             } else {
 
                 for (ApplyReservedEntryInterceptor reservedEntryInterceptor : reservedEntryInterceptors) {
-                    reservedEntryInterceptor.applyReservedEntry(entryHeader, entryFuture, lastApplied());
+                    reservedEntryInterceptor.applyReservedEntry(entryHeader, entryFuture);
                 }
             }
             internalState.setLastIncludedTerm(entryHeader.getTerm());

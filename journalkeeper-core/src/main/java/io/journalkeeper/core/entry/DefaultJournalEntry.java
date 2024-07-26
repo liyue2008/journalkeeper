@@ -117,10 +117,6 @@ public class DefaultJournalEntry implements JournalEntry {
         return JournalEntryParseSupport.getInt(serializedBuffer(), JournalEntryParseSupport.LENGTH);
     }
 
-    private void setLength(int length) {
-        JournalEntryParseSupport.setInt(serializedBuffer(), JournalEntryParseSupport.LENGTH, length);
-    }
-
     @Override
     public long getTimestamp() {
         return JournalEntryParseSupport.getLong(serializedBuffer(), JournalEntryParseSupport.TIMESTAMP);

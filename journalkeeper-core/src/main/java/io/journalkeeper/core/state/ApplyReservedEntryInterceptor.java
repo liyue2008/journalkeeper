@@ -33,5 +33,5 @@ import io.journalkeeper.core.api.JournalEntry;
  * Date: 2019/11/20
  */
 public interface ApplyReservedEntryInterceptor {
-    void applyReservedEntry(JournalEntry entryHeader, EntryFuture entryFuture, long index);
+    void applyReservedEntry(JournalEntry entryHeader, EntryFuture entryFuture);
 }

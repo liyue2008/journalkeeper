@@ -306,7 +306,7 @@ public class VoterActor {
         announceLeader();
         this.journalTransactionManager = new JournalTransactionManager(journal, actor, config.get("transaction_timeout_ms"));
         journalTransactionManager.start();
-        this.journalTransactionInterceptor = (entryHeader, entryFuture, index) -> journalTransactionManager.applyEntry(entryHeader, entryFuture);
+        this.journalTransactionInterceptor = (entryHeader, entryFuture) -> journalTransactionManager.applyEntry(entryHeader, entryFuture);
         actor.send("State", "addInterceptor", this.journalTransactionInterceptor);
         this.updateClusterStateMetric = metricProvider.getMetric(MetricNames.METRIC_UPDATE_CLUSTER_STATE);
         this.replicationDestinations.forEach(ReplicationDestination::reset);

@@ -390,7 +390,7 @@ public class PositioningStore implements JournalPersistence, MonitoredPersistenc
     /**
      * 删除 position之前的文件
      */
-    public long compact(long givenMin) throws IOException {
+    public long compact(long givenMin) {
         synchronized (fileMapMutex) {
             if (givenMin <= min()) {
                 return 0L;

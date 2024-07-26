@@ -23,7 +23,6 @@ import io.journalkeeper.rpc.remoting.transport.TransportClient;
 import io.journalkeeper.rpc.remoting.transport.TransportState;
 import io.journalkeeper.rpc.remoting.transport.command.Command;
 import io.journalkeeper.rpc.remoting.transport.command.CommandCallback;
-import io.journalkeeper.rpc.remoting.transport.config.TransportConfig;
 import io.journalkeeper.rpc.remoting.transport.exception.TransportException;
 import io.netty.channel.Channel;
 import org.slf4j.Logger;
@@ -52,7 +51,7 @@ public class FailoverChannelTransport implements ChannelTransport {
     private final EventBus<TransportEvent> transportEventBus;
     private volatile long lastReconnect;
 
-    public FailoverChannelTransport(ChannelTransport delegate, SocketAddress address, long connectionTimeout, TransportClient transportClient, TransportConfig config, EventBus<TransportEvent> transportEventBus) {
+    public FailoverChannelTransport(ChannelTransport delegate, SocketAddress address, long connectionTimeout, TransportClient transportClient, EventBus<TransportEvent> transportEventBus) {
         this.delegate = delegate;
         this.address = address;
         this.connectionTimeout = connectionTimeout;

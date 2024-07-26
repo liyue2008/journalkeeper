@@ -13,8 +13,6 @@
  */
 package io.journalkeeper.rpc.handler;
 
-import io.journalkeeper.rpc.remoting.transport.RequestBarrier;
-import io.journalkeeper.rpc.remoting.transport.command.handler.ExceptionHandler;
 import io.journalkeeper.rpc.remoting.transport.exception.TransportException;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
@@ -29,9 +27,6 @@ import org.slf4j.LoggerFactory;
  */
 public class ExceptionChannelHandler extends ChannelInboundHandlerAdapter  {
     private static final Logger logger = LoggerFactory.getLogger(ExceptionChannelHandler.class);
-
-    public ExceptionChannelHandler(ExceptionHandler exceptionHandler, RequestBarrier requestBarrier) {
-    }
 
     public void channelRegistered(ChannelHandlerContext ctx) {
         ctx.fireChannelRegistered();

@@ -205,20 +205,13 @@ public class StateActor implements RaftState{
         partialSnapshot.installTrunk(offset, data, snapshotPath);
 
         if (isDone) {
-            Snapshot snapshot;
             logger.info("All snapshot files received, discard any existing snapshot with a same or smaller index...");
             // discard any existing snapshot with a same or smaller index
-            NavigableMap<Long, Snapshot> headMap = snapshots.headMap(lastApplied, true);
-            while (!headMap.isEmpty()) {
-                snapshot = headMap.remove(headMap.firstKey());
-                logger.info("Discard snapshot: {}.", snapshot.getPath());
-                snapshot.close();
-                snapshot.clear();
-            }
+            discardSnapshots(lastApplied, true);
             partialSnapshot.finish();
             logger.info("add the installed snapshot to snapshots: {}...", snapshotPath);
             // add the installed snapshot to snapshots.
-            snapshot = new Snapshot(stateFactory, metadataPersistence);
+            Snapshot snapshot = new Snapshot(stateFactory, metadataPersistence);
             snapshot.recover(snapshotPath, properties);
             snapshots.put(lastApplied, snapshot);
 
@@ -783,18 +776,23 @@ public class StateActor implements RaftState{
                 JournalSnapshot journalSnapshot = snapshot.getJournalSnapshot();
                 actor.send("Journal", "compact", journalSnapshot);
 
-                NavigableMap<Long, Snapshot> headMap = snapshots.headMap(index, false);
-                while (!headMap.isEmpty()) {
-                    snapshot = headMap.remove(headMap.firstKey());
-                    logger.info("Discard snapshot: {}.", snapshot.getPath());
-                    snapshot.close();
-                    snapshot.clear();
-                }
+                discardSnapshots(index, false);
             } else {
                 logger.warn("Compact journal failed! Cause no snapshot at index: {}.", index);
             }
         } catch (Throwable e) {
             logger.warn("Compact journal exception!", e);
+        }
+    }
+
+    private void discardSnapshots(long index, boolean inclusive) throws IOException {
+        Snapshot snapshot;
+        NavigableMap<Long, Snapshot> headMap = snapshots.headMap(index, inclusive);
+        while (!headMap.isEmpty()) {
+            snapshot = headMap.remove(headMap.firstKey());
+            logger.info("Discard snapshot: {}.", snapshot.getPath());
+            snapshot.close();
+            snapshot.clear();
         }
     }
 

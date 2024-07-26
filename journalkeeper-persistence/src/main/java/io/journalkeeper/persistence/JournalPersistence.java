@@ -72,9 +72,8 @@ public interface JournalPersistence extends Closeable {
      * 不要求精确删除到给定位置。但不能删除给定位置之后的数据。
      * @param givenMin 给定删除位置，这个位置之前都可以删除。
      * @return 删除后当前最小位置。
-     * @throws IOException 发生IO异常时抛出
      */
-    long compact(long givenMin) throws IOException;
+    long compact(long givenMin);
 
     /**
      * 追加写入，保证原子性

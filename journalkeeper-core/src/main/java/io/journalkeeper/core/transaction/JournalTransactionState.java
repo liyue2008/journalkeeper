@@ -311,11 +311,8 @@ class JournalTransactionState extends ServerStateMachine {
                                         .thenAccept(response -> {
                                             if (response.success()) {
                                                 unFinishedRequests.decrementAndGet();
-                                            } else {
-                                                logger.warn("Transaction commit {} failed! Cause: {}.",
-                                                        transactionId,
-                                                        response.errorString());
                                             }
+                                            logResponse(transactionId, false, response);
                                         })
                         );
                     }
@@ -332,11 +329,8 @@ class JournalTransactionState extends ServerStateMachine {
                                         .thenAccept(response -> {
                                             if (response.success()) {
                                                 unFinishedRequests.decrementAndGet();
-                                            } else {
-                                                logger.warn("Transaction commit {} failed! Cause: {}.",
-                                                        transactionId ,
-                                                        response.errorString());
                                             }
+                                            logResponse(transactionId, true, response);
                                         })
                         );
                     }
@@ -391,16 +385,7 @@ class JournalTransactionState extends ServerStateMachine {
                             )
                     ))
                     .exceptionally(UpdateClusterStateResponse::new)
-                    .thenAccept(response -> {
-                        if (response.success()) {
-                            logger.info("Transaction {} {}.", transactionId.toString(), commitOrAbort ? "committed" : "aborted");
-                        } else {
-                            logger.warn("Transaction {} {} failed! Cause: {}.",
-                                    transactionId.toString(),
-                                    commitOrAbort ? "commit" : "abort",
-                                    response.errorString());
-                        }
-                    });
+                    .thenAccept(response -> logResponse(transactionId, commitOrAbort, response));
         }
         if (null != actor) {
             actor.<UpdateClusterStateResponse>sendThen("Voter", "updateClusterState", new UpdateClusterStateRequest(
@@ -408,16 +393,18 @@ class JournalTransactionState extends ServerStateMachine {
                             serializedEntry, partition, 1
                     )
             )).exceptionally(UpdateClusterStateResponse::new)
-                    .thenAccept(response -> {
-                        if (response.success()) {
-                            logger.info("Transaction {} {}.", transactionId.toString(), commitOrAbort ? "committed" : "aborted");
-                        } else {
-                            logger.warn("Transaction {} {} failed! Cause: {}.",
-                                    transactionId.toString(),
-                                    commitOrAbort ? "commit" : "abort",
-                                    response.errorString());
-                        }
-                    });
+                    .thenAccept(response -> logResponse(transactionId, commitOrAbort, response));
+        }
+    }
+
+    private static void logResponse(UUID transactionId, boolean commitOrAbort, UpdateClusterStateResponse response) {
+        if (response.success()) {
+            logger.info("Transaction {} {}.", transactionId.toString(), commitOrAbort ? "committed" : "aborted");
+        } else {
+            logger.warn("Transaction {} {} failed! Cause: {}.",
+                    transactionId.toString(),
+                    commitOrAbort ? "commit" : "abort",
+                    response.errorString());
         }
     }
 
@@ -475,10 +462,6 @@ class JournalTransactionState extends ServerStateMachine {
         @Override
         public int hashCode() {
             return Objects.hash(transactionId, partition);
-        }
-
-        public long getExpireTimeMs() {
-            return expireTimeMs;
         }
 
         @Override

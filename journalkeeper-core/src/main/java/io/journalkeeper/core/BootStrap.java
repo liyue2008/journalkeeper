@@ -33,8 +33,6 @@ import io.journalkeeper.utils.retry.ExponentialRetryPolicy;
 import io.journalkeeper.utils.retry.RetryPolicy;
 import io.journalkeeper.utils.spi.ServiceSupport;
 import io.journalkeeper.utils.threads.NamedThreadFactory;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 import java.util.List;
@@ -48,7 +46,6 @@ import java.util.concurrent.ScheduledExecutorService;
  * Date: 2019-03-25
  */
 public class BootStrap implements ClusterAccessPoint {
-    private static final Logger logger = LoggerFactory.getLogger(BootStrap.class);
     private final static int SCHEDULE_EXECUTOR_QUEUE_SIZE = 128;
 
     private final StateFactory stateFactory;
@@ -124,7 +121,7 @@ public class BootStrap implements ClusterAccessPoint {
     public RaftClient getRaftClient() {
         if (null == client) {
             RemoteClientRpc clientRpc = createRemoteClientRpc();
-            client = new DefaultRaftClient(clientRpc, properties);
+            client = new DefaultRaftClient(clientRpc);
         }
         return client;
     }
@@ -134,7 +131,7 @@ public class BootStrap implements ClusterAccessPoint {
 
         if (null == localClient) {
             LocalClientRpc clientRpc = createLocalClientRpc();
-            localClient = new DefaultRaftClient(clientRpc, properties);
+            localClient = new DefaultRaftClient(clientRpc);
         }
         return localClient;
     }
@@ -205,7 +202,7 @@ public class BootStrap implements ClusterAccessPoint {
     public AdminClient getAdminClient() {
         if (null == adminClient) {
             ClientRpc clientRpc = createRemoteClientRpc();
-            adminClient = new DefaultAdminClient(clientRpc, properties);
+            adminClient = new DefaultAdminClient(clientRpc);
         }
         return adminClient;
     }
@@ -214,7 +211,7 @@ public class BootStrap implements ClusterAccessPoint {
     public AdminClient getLocalAdminClient() {
         if (null == localAdminClient) {
             ClientRpc clientRpc = createLocalClientRpc();
-            localAdminClient = new DefaultAdminClient(clientRpc, properties);
+            localAdminClient = new DefaultAdminClient(clientRpc);
         }
         return localAdminClient;
     }

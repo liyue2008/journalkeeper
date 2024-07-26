@@ -139,9 +139,7 @@ public abstract class AbstractClient implements ClusterReadyAware, ServerConfigA
                 .thenAccept(response -> {
                     if (response.success()) {
                         if (null != response.getPullEvents()) {
-                            response.getPullEvents().forEach(pullEvent -> {
-                                eventBus.fireEvent(pullEvent);
-                            });
+                            response.getPullEvents().forEach(pullEvent -> eventBus.fireEvent(pullEvent));
                         }
                         if (eventIndex < 0) {
                             eventIndex = response.getLatestIndex();

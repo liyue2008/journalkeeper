@@ -38,7 +38,6 @@ import io.journalkeeper.rpc.client.UpdateVotersRequest;
 import java.net.URI;
 import java.util.Collections;
 import java.util.List;
-import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
@@ -49,7 +48,7 @@ import java.util.concurrent.CompletableFuture;
 public class DefaultAdminClient extends AbstractClient implements AdminClient {
 
 
-    public DefaultAdminClient(ClientRpc clientRpc, Properties properties) {
+    public DefaultAdminClient(ClientRpc clientRpc) {
         super(clientRpc);
     }
 

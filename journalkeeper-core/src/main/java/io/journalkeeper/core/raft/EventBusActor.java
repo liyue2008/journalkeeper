@@ -80,7 +80,7 @@ public class EventBusActor implements ApplyReservedEntryInterceptor{
     }
 
     @Override
-    public void applyReservedEntry(JournalEntry entryHeader, EntryFuture entryFuture, long index) {
+    public void applyReservedEntry(JournalEntry entryHeader, EntryFuture entryFuture) {
         if (entryHeader.getPartition() == EVENT_PARTITION) {
             appliedEventIndex += entryHeader.getBatchSize();
         }

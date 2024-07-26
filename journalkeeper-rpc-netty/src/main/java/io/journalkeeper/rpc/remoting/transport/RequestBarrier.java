@@ -106,8 +106,6 @@ public class RequestBarrier {
                         logger.error("clear timeout response exception", e);
                     }
                 }
-//                logger.info("remove timeout request id={} begin={} timeout={}", future.getRequestId(),
-//                        future.getBeginTime(), timeout);
             }
         }
     }

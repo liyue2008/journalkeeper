@@ -3,7 +3,6 @@ package io.journalkeeper.core.event;
 import io.journalkeeper.core.api.JournalEntry;
 import io.journalkeeper.core.api.ResponseConfig;
 import io.journalkeeper.rpc.client.UpdateClusterStateRequest;
-import io.journalkeeper.rpc.client.UpdateClusterStateResponse;
 import io.journalkeeper.utils.actor.Actor;
 import io.journalkeeper.utils.actor.ActorMsg;
 import io.journalkeeper.utils.event.Event;
@@ -41,7 +40,6 @@ public class EventSupport implements Fireable {
         if (null == events) {
             return;
         }
-        // TODO: 改为批量调用interceptor.onEvents
         Iterator<Event> eventIterator = events.iterator();
         while (eventIterator.hasNext()) {
             Event event = eventIterator.next();

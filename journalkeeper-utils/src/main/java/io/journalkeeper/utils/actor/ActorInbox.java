@@ -191,9 +191,6 @@ class ActorInbox {
                 .collect(Collectors.toSet());
     }
 
-    // FIXME：目前一个消息支持多个监听函数，但如果是需要应答的消息，目前的逻辑有点儿问题：
-    // 1. 消息可能会被应答多次；
-    // 2. 如果找不到监听函数，消息不会被应答，也没有提示，会导致等待应答的线程卡住。
     private void tryInvoke(InvocationTarget invocationTarget, ActorMsg msg) throws IllegalAccessException {
         if (invocationTarget != null) {
             Object instance = invocationTarget.getTarget();

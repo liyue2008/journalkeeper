@@ -14,8 +14,6 @@
 package io.journalkeeper.journalstore;
 
 import io.journalkeeper.utils.files.DoubleCopy;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
@@ -31,7 +29,6 @@ import java.util.concurrent.ConcurrentHashMap;
  * Date: 2019-05-20
  */
 public class AppliedIndicesFile extends DoubleCopy implements Map<Integer, Long> {
-    private static final Logger logger = LoggerFactory.getLogger(AppliedIndicesFile.class);
     private final Map<Integer, Long> appliedIndices = new ConcurrentHashMap<>();
 
     /**

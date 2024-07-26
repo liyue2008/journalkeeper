@@ -15,7 +15,6 @@ package io.journalkeeper.rpc.client;
 
 /**
  * RPC 方法
- * {@link ClientServerRpc#removePullWatch(RemovePullWatchRequest)}
  * 请求参数
  * @author LiYue
  * Date: 2019-04-22

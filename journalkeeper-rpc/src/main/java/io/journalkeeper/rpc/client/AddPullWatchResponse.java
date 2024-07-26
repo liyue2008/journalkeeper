@@ -18,7 +18,6 @@ import io.journalkeeper.rpc.StatusCode;
 
 /**
  * RPC 方法
- * {@link ClientServerRpc#addPullWatch() addPullWatch()}
  * 返回响应。
  *
  * @author LiYue
