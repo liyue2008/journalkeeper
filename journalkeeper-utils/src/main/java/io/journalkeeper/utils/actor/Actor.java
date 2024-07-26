@@ -15,8 +15,8 @@ import java.util.function.*;
 @SuppressWarnings("UnusedReturnValue")
 public class Actor {
 
-    private final static int DEFAULT_INBOX_CAPACITY = 1024;
-    private final static int DEFAULT_OUTBOX_CAPACITY = 1024;
+    private final static int DEFAULT_INBOX_CAPACITY = 65536;
+    private final static int DEFAULT_OUTBOX_CAPACITY = 65536;
     // 地址
     private final String addr;
     // 收件箱，所有收到的消息放入收件箱暂存，然后单线程顺序处理。

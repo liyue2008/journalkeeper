@@ -59,7 +59,7 @@ public class EventSupport implements Fireable {
 
         byte [] eventsRaw = encodeEvents(events);
         UpdateClusterStateRequest updateClusterStateRequest = new UpdateClusterStateRequest(eventsRaw, EVENT_PARTITION, events.size(), false, ResponseConfig.RECEIVE);
-        actor.send("Voter", "updateClusterState", ActorMsg.Response.IGNORE,updateClusterStateRequest);
+        actor.send("Voter", "updateClusterStateInternal", ActorMsg.Response.IGNORE ,updateClusterStateRequest);
     }
 
     private static byte [] encodeEvents(List<Event> events) {

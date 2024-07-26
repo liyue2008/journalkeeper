@@ -104,8 +104,6 @@ public class VoterActor {
         this.cacheRequests = config.get("cache_requests");
         this.waitingResponses = new ArrayList<>(cacheRequests);
         this.actor = Actor.builder().addr("Voter")
-                .addTopicQueue("updateClusterState", 1024)
-                .addTopicQueue("asyncAppendEntries", 1024)
                 .setHandlerInstance(this)
                 .privatePostman(true)
                 .enableMetric()
@@ -575,7 +573,7 @@ public class VoterActor {
         UpdateVotersS1Entry updateVotersS1Entry = new UpdateVotersS1Entry(request.getOldConfig(), request.getNewConfig(), state.getConfigState().getEpoch() + 1);
         byte [] entry = InternalEntriesSerializeSupport.serialize(updateVotersS1Entry);
         UpdateClusterStateRequest updateClusterStateRequest = new UpdateClusterStateRequest(new UpdateRequest(entry, INTERNAL_PARTITION, 1));
-        actor.<UpdateClusterStateResponse>sendThen("Voter", "updateClusterState", updateClusterStateRequest)
+        actor.<UpdateClusterStateResponse>sendThen("Voter", "updateClusterStateInternal", updateClusterStateRequest)
                 .whenComplete((response, exception) -> {
                    if (null != exception) {
                        actor.reply(msg, new UpdateVotersResponse(exception));
@@ -590,6 +588,11 @@ public class VoterActor {
     }
 
 
+    @ActorListener
+    @ResponseManually
+    private void updateClusterStateInternal(@ActorMessage ActorMsg msg) {
+        updateClusterState(msg);
+    }
     // Leader Only
     
     @ActorListener
@@ -905,7 +908,7 @@ public class VoterActor {
             byte[] s2Entry = InternalEntriesSerializeSupport.serialize(new UpdateVotersS2Entry(votersConfigStateMachine.getConfigOld(), votersConfigStateMachine.getConfigNew(), votersConfigStateMachine.getEpoch() + 1));
             try {
                 if (votersConfigStateMachine.isJointConsensus()) {
-                    actor.send("Voter", "updateClusterState",
+                    actor.send("Voter", "updateClusterStateInternal",
                     new UpdateClusterStateRequest(
                             Collections.singletonList(
                                     new UpdateRequest(
@@ -934,7 +937,7 @@ public class VoterActor {
         }
         if (state.lastApplied() > state.getSnapshots().lastKey()) {
             logger.info("Send create snapshot request.");
-            actor.send("Voter", "updateClusterState", new UpdateClusterStateRequest(
+            actor.send("Voter", "updateClusterStateInternal", new UpdateClusterStateRequest(
                     new UpdateRequest(InternalEntriesSerializeSupport.serialize(
                             new CreateSnapshotEntry()), RaftJournal.INTERNAL_PARTITION, 1
                     )));

@@ -320,7 +320,7 @@ class JournalTransactionState extends ServerStateMachine {
                     if (null != actor) {
                         futures.add(
                                 actor
-                                        .<UpdateClusterStateResponse>sendThen("Voter", "updateClusterState", new UpdateClusterStateRequest(
+                                        .<UpdateClusterStateResponse>sendThen("Voter", "updateClusterStateInternal", new UpdateClusterStateRequest(
                                                 new UpdateRequest(
                                                         te.getEntry(), bizPartition, te.getBatchSize()
                                                 )
@@ -388,7 +388,7 @@ class JournalTransactionState extends ServerStateMachine {
                     .thenAccept(response -> logResponse(transactionId, commitOrAbort, response));
         }
         if (null != actor) {
-            actor.<UpdateClusterStateResponse>sendThen("Voter", "updateClusterState", new UpdateClusterStateRequest(
+            actor.<UpdateClusterStateResponse>sendThen("Voter", "updateClusterStateInternal", new UpdateClusterStateRequest(
                     new UpdateRequest(
                             serializedEntry, partition, 1
                     )

@@ -70,7 +70,7 @@ public class JournalTransactionManager extends ServerStateMachine {
         CompletableFuture<UpdateClusterStateResponse> future = null;
         UpdateClusterStateRequest request = new UpdateClusterStateRequest(new UpdateRequest(serializedEntry, partition, 1));
 
-        return actor.<UpdateClusterStateResponse>sendThen("Voter", "updateClusterState", request)
+        return actor.<UpdateClusterStateResponse>sendThen("Voter", "updateClusterStateInternal", request)
                 .thenApply(response -> {
                     if (response.success()) {
                         return new JournalKeeperTransactionContext(
@@ -91,7 +91,7 @@ public class JournalTransactionManager extends ServerStateMachine {
         pendingCompleteTransactionFutures.put(transactionId, future);
         UpdateClusterStateRequest request = new UpdateClusterStateRequest(new UpdateRequest(serializedEntry, partition, 1));
 
-        actor.<UpdateClusterStateResponse>sendThen("Voter", "updateClusterState", request)
+        actor.<UpdateClusterStateResponse>sendThen("Voter", "updateClusterStateInternal", request)
                 .thenAccept(response -> {
                     if (!response.success()) {
                         CompletableFuture<Void> retFuture = pendingCompleteTransactionFutures.remove(transactionId);

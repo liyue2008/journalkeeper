@@ -46,11 +46,10 @@ public class ServerRpcActor implements ServerRpc {
     }
 
     private Map<String, InFlightRequestRateLimiter> createRateLimiterMap() {
-        InFlightRequestRateLimiter updateLimiter = new InFlightRequestRateLimiter(100);
-        InFlightRequestRateLimiter queryLimiter = new InFlightRequestRateLimiter(100);
+        InFlightRequestRateLimiter updateLimiter = new InFlightRequestRateLimiter(1024);
+        InFlightRequestRateLimiter queryLimiter = new InFlightRequestRateLimiter(1024);
         Map<String, InFlightRequestRateLimiter> rateLimiterMap = new ConcurrentHashMap<>();
         rateLimiterMap.put("updateClusterState", updateLimiter);
-//        rateLimiterMap.put("asyncAppendEntries", updateLimiter);
         rateLimiterMap.put("queryClusterState", queryLimiter);
         rateLimiterMap.put("queryServerState", queryLimiter);
         rateLimiterMap.put("getServerEntries", queryLimiter);
