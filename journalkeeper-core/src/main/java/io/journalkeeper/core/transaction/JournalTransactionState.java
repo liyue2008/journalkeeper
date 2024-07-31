@@ -113,6 +113,8 @@ class JournalTransactionState extends ServerStateMachine {
         if (null != checkOutdatedTransactionsScheduledFuture) {
             checkOutdatedTransactionsScheduledFuture.cancel(false);
         }
+        actor.removeScheduler(this::retryCompleteTransactions);
+        actor.removeScheduler(this::abortOutdatedTransactions);
         super.doStop();
     }
 
