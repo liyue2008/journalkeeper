@@ -25,10 +25,7 @@ import io.journalkeeper.rpc.LeaderResponse;
 import io.journalkeeper.rpc.client.ClientServerRpc;
 import io.journalkeeper.rpc.client.ClientServerRpcAccessPoint;
 import io.journalkeeper.rpc.client.GetServersResponse;
-import io.journalkeeper.utils.retry.CheckRetry;
-import io.journalkeeper.utils.retry.CompletableRetry;
-import io.journalkeeper.utils.retry.RandomDestinationSelector;
-import io.journalkeeper.utils.retry.RetryPolicy;
+import io.journalkeeper.utils.retry.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,8 +36,7 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executor;
-import java.util.concurrent.ScheduledExecutorService;
+
 
 /**
  * @author LiYue
@@ -49,39 +45,36 @@ import java.util.concurrent.ScheduledExecutorService;
 public class RemoteClientRpc implements ClientRpc {
     private static final Logger logger = LoggerFactory.getLogger(RemoteClientRpc.class);
     private final ClientServerRpcAccessPoint clientServerRpcAccessPoint;
-    private final CompletableRetry<URI> completableRetry;
+    private final RetrySupport<URI> completableRetry;
     private final RandomDestinationSelector<URI> uriSelector;
     private final ClientCheckRetry clientCheckRetry = new ClientCheckRetry();
-    private final Executor executor;
-    private final ScheduledExecutorService scheduledExecutor;
     private URI leaderUri = null;
     private URI preferredServer = null;
 
-    public RemoteClientRpc(List<URI> servers, ClientServerRpcAccessPoint clientServerRpcAccessPoint, RetryPolicy retryPolicy, Executor executor, ScheduledExecutorService scheduledExecutor) {
-        this.executor = executor;
-        this.scheduledExecutor = scheduledExecutor;
+
+    public RemoteClientRpc(List<URI> servers, ClientServerRpcAccessPoint clientServerRpcAccessPoint, RetryPolicy retryPolicy) {
         if (servers == null || servers.isEmpty()) {
             throw new IllegalArgumentException("Argument servers can not be empty!");
         }
         this.clientServerRpcAccessPoint = clientServerRpcAccessPoint;
         uriSelector = new PreferredServerRandomUriSelector(servers);
-        completableRetry = new CompletableRetry<>(retryPolicy,
+        completableRetry = new RetrySupport<>(retryPolicy,
                 uriSelector);
     }
 
 
     @Override
-    public final <O extends BaseResponse> CompletableFuture<O> invokeClientServerRpc(CompletableRetry.RpcInvoke<O, ClientServerRpc> invoke) {
-        return completableRetry.retry(uri -> invoke.invoke(clientServerRpcAccessPoint.getClintServerRpc(uri)), clientCheckRetry, executor, scheduledExecutor);
+    public final <O extends BaseResponse> CompletableFuture<O> invokeClientServerRpc(RetrySupport.RpcInvoke<O, ClientServerRpc> invoke) {
+        return completableRetry.retry(uri -> invoke.invoke(clientServerRpcAccessPoint.getClintServerRpc(uri)), clientCheckRetry);
     }
 
     @Override
-    public <O extends BaseResponse> CompletableFuture<O> invokeClientServerRpc(URI uri, CompletableRetry.RpcInvoke<O, ClientServerRpc> invoke) {
-        return completableRetry.retry(uri1 -> invoke.invoke(clientServerRpcAccessPoint.getClintServerRpc(uri1)), clientCheckRetry, uri, executor, scheduledExecutor);
+    public <O extends BaseResponse> CompletableFuture<O> invokeClientServerRpc(URI uri, RetrySupport.RpcInvoke<O, ClientServerRpc> invoke) {
+        return completableRetry.retry(uri1 -> invoke.invoke(clientServerRpcAccessPoint.getClintServerRpc(uri1)), clientCheckRetry, uri);
     }
 
     @Override
-    public final <O extends BaseResponse> CompletableFuture<O> invokeClientLeaderRpc(CompletableRetry.RpcInvoke<O, ClientServerRpc> invoke) {
+    public final <O extends BaseResponse> CompletableFuture<O> invokeClientLeaderRpc(RetrySupport.RpcInvoke<O, ClientServerRpc> invoke) {
         return invokeClientServerRpc(rpc ->
                 unSetLeaderUriWhenLeaderRpcFailed(getCachedLeaderRpc(rpc).thenCompose(invoke::invoke))
         );

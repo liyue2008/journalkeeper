@@ -90,8 +90,6 @@ public class JournalStoreClient implements PartitionedJournalStore, Transactiona
         BootStrap bootStrap = BootStrap.builder()
                 .servers(servers)
                 .properties(properties)
-                .clientAsyncExecutor(asyncExecutor)
-                .clientScheduledExecutor(scheduledExecutor)
                 .build();
 
         raftClient = bootStrap.getRaftClient();

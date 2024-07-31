@@ -16,7 +16,7 @@ package io.journalkeeper.core.client;
 import io.journalkeeper.core.api.ServerConfigAware;
 import io.journalkeeper.rpc.BaseResponse;
 import io.journalkeeper.rpc.client.ClientServerRpc;
-import io.journalkeeper.utils.retry.CompletableRetry;
+import io.journalkeeper.utils.retry.RetrySupport;
 
 import java.net.URI;
 import java.util.concurrent.CompletableFuture;
@@ -26,11 +26,11 @@ import java.util.concurrent.CompletableFuture;
  * Date: 2019/10/16
  */
 public interface ClientRpc extends ServerConfigAware {
-    <O extends BaseResponse> CompletableFuture<O> invokeClientServerRpc(CompletableRetry.RpcInvoke<O, ClientServerRpc> invoke);
+    <O extends BaseResponse> CompletableFuture<O> invokeClientServerRpc(RetrySupport.RpcInvoke<O, ClientServerRpc> invoke);
 
-    <O extends BaseResponse> CompletableFuture<O> invokeClientServerRpc(URI uri, CompletableRetry.RpcInvoke<O, ClientServerRpc> invoke);
+    <O extends BaseResponse> CompletableFuture<O> invokeClientServerRpc(URI uri, RetrySupport.RpcInvoke<O, ClientServerRpc> invoke);
 
-    <O extends BaseResponse> CompletableFuture<O> invokeClientLeaderRpc(CompletableRetry.RpcInvoke<O, ClientServerRpc> invoke);
+    <O extends BaseResponse> CompletableFuture<O> invokeClientLeaderRpc(RetrySupport.RpcInvoke<O, ClientServerRpc> invoke);
 
     URI getPreferredServer();
 

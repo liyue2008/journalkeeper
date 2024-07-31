@@ -26,8 +26,6 @@ import java.net.URI;
 import java.util.List;
 import java.util.Properties;
 import java.util.Set;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.ScheduledExecutorService;
 
 /**
  * @author LiYue
@@ -48,26 +46,6 @@ public class JournalStoreServer implements StateServer {
                 .journalEntryParser(journalEntryParser)
                 .properties(properties)
                 .build();
-    }
-
-    public JournalStoreServer(
-            RaftServer.Roll roll,
-            JournalEntryParser journalEntryParser,
-            ExecutorService clientAsyncExecutor,
-            ScheduledExecutorService clientScheduledExecutor,
-            ExecutorService serverAsyncExecutor,
-            ScheduledExecutorService serverScheduledExecutor,
-            Properties properties) {
-        bootStrap = BootStrap.builder()
-                .roll(roll)
-                .stateFactory(new JournalStoreStateFactory(journalEntryParser))
-                .journalEntryParser(journalEntryParser)
-                .clientAsyncExecutor(clientAsyncExecutor)
-                .clientScheduledExecutor(clientScheduledExecutor)
-                .serverAsyncExecutor(serverAsyncExecutor)
-                .serverScheduledExecutor(serverScheduledExecutor)
-                .properties(properties).build();
-
     }
 
     public void init(URI uri, List<URI> voters) {

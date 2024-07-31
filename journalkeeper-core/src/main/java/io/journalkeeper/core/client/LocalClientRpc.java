@@ -16,17 +16,13 @@ package io.journalkeeper.core.client;
 import io.journalkeeper.exceptions.ServerBusyException;
 import io.journalkeeper.rpc.BaseResponse;
 import io.journalkeeper.rpc.client.ClientServerRpc;
-import io.journalkeeper.utils.retry.CheckRetry;
-import io.journalkeeper.utils.retry.CompletableRetry;
-import io.journalkeeper.utils.retry.DestinationSelector;
-import io.journalkeeper.utils.retry.RetryPolicy;
+import io.journalkeeper.utils.retry.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeoutException;
 
 /**
@@ -37,27 +33,25 @@ import java.util.concurrent.TimeoutException;
 public class LocalClientRpc implements ClientRpc {
     private static final Logger logger = LoggerFactory.getLogger(LocalClientRpc.class);
     private final ClientServerRpc localServer;
-    private final CompletableRetry<URI> completableRetry;
+    private final RetrySupport<URI> completableRetry;
     private final CheckRetry<BaseResponse> checkRetry = new LocalClientCheckRetry();
-    private final ScheduledExecutorService scheduledExecutor;
     private final URI localUri;
-    public LocalClientRpc(ClientServerRpc localServer, RetryPolicy retryPolicy, ScheduledExecutorService scheduledExecutor) {
+    public LocalClientRpc(ClientServerRpc localServer, RetryPolicy retryPolicy) {
         this.localServer = localServer;
-        this.scheduledExecutor = scheduledExecutor;
         localUri = localServer.serverUri();
         DestinationSelector<URI> uriSelector = uriSet -> localUri;
 
-        this.completableRetry = new CompletableRetry<>(retryPolicy, uriSelector);
+        this.completableRetry = new RetrySupport<>(retryPolicy, uriSelector);
 
     }
 
     @Override
-    public <O extends BaseResponse> CompletableFuture<O> invokeClientServerRpc(CompletableRetry.RpcInvoke<O, ClientServerRpc> invoke) {
-        return completableRetry.retry(uri -> invoke.invoke(localServer), checkRetry, localUri, null, scheduledExecutor);
+    public <O extends BaseResponse> CompletableFuture<O> invokeClientServerRpc(RetrySupport.RpcInvoke<O, ClientServerRpc> invoke) {
+        return completableRetry.retry(uri -> invoke.invoke(localServer), checkRetry, localUri);
     }
 
     @Override
-    public <O extends BaseResponse> CompletableFuture<O> invokeClientServerRpc(URI uri, CompletableRetry.RpcInvoke<O, ClientServerRpc> invoke) {
+    public <O extends BaseResponse> CompletableFuture<O> invokeClientServerRpc(URI uri, RetrySupport.RpcInvoke<O, ClientServerRpc> invoke) {
         if (localServer.serverUri().equals(uri)) {
             return invokeClientServerRpc(invoke);
         } else {
@@ -70,7 +64,7 @@ public class LocalClientRpc implements ClientRpc {
     }
 
     @Override
-    public <O extends BaseResponse> CompletableFuture<O> invokeClientLeaderRpc(CompletableRetry.RpcInvoke<O, ClientServerRpc> invoke) {
+    public <O extends BaseResponse> CompletableFuture<O> invokeClientLeaderRpc(RetrySupport.RpcInvoke<O, ClientServerRpc> invoke) {
         return invokeClientServerRpc(invoke);
     }
 

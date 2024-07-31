@@ -32,14 +32,10 @@ import io.journalkeeper.rpc.client.ClientServerRpcAccessPoint;
 import io.journalkeeper.utils.retry.ExponentialRetryPolicy;
 import io.journalkeeper.utils.retry.RetryPolicy;
 import io.journalkeeper.utils.spi.ServiceSupport;
-import io.journalkeeper.utils.threads.NamedThreadFactory;
 
 import java.net.URI;
 import java.util.List;
 import java.util.Properties;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 
 /**
  * @author LiYue
@@ -62,9 +58,6 @@ public class BootStrap implements ClusterAccessPoint {
     private final JournalEntryParser journalEntryParser;
     private final RetryPolicy remoteRetryPolicy =
             new ExponentialRetryPolicy(10L, 3000L, 10);
-    private final boolean isExecutorProvided;
-    private ScheduledExecutorService serverScheduledExecutor, clientScheduledExecutor;
-    private ExecutorService serverAsyncExecutor, clientAsyncExecutor;
     private RaftClient client = null;
     private AdminClient adminClient = null;
     private RaftClient localClient = null;
@@ -74,10 +67,6 @@ public class BootStrap implements ClusterAccessPoint {
 
     private BootStrap(RaftServer.Roll roll, List<URI> servers, StateFactory stateFactory,
                       JournalEntryParser journalEntryParser,
-                      ExecutorService clientAsyncExecutor,
-                      ScheduledExecutorService clientScheduledExecutor,
-                      ExecutorService serverAsyncExecutor,
-                      ScheduledExecutorService serverScheduledExecutor,
                       Properties properties) {
         this.stateFactory = stateFactory;
         if (properties == null) {
@@ -86,30 +75,17 @@ public class BootStrap implements ClusterAccessPoint {
         this.properties = properties;
         this.roll = roll;
         this.rpcAccessPointFactory = ServiceSupport.load(RpcAccessPointFactory.class);
-        this.isExecutorProvided = (
-                clientAsyncExecutor != null ||
-                        clientScheduledExecutor != null ||
-                        serverAsyncExecutor != null ||
-                        serverScheduledExecutor != null);
+
         if (null == journalEntryParser) {
             journalEntryParser = new DefaultJournalEntryParser();
         }
         this.journalEntryParser = journalEntryParser;
-        this.clientAsyncExecutor = clientAsyncExecutor;
-        this.serverAsyncExecutor = serverAsyncExecutor;
-        this.clientScheduledExecutor = clientScheduledExecutor;
-        this.serverScheduledExecutor = serverScheduledExecutor;
+
         this.server = createServer();
         this.servers = servers;
     }
 
     private RaftServerActor createServer() {
-        if (null == serverScheduledExecutor && !isExecutorProvided) {
-            this.serverScheduledExecutor = Executors.newScheduledThreadPool(SCHEDULE_EXECUTOR_QUEUE_SIZE, new NamedThreadFactory("JournalKeeper-Server-Scheduled-Executor"));
-        }
-        if (null == serverAsyncExecutor && !isExecutorProvided) {
-            this.serverAsyncExecutor = Executors.newCachedThreadPool(new NamedThreadFactory("JournalKeeper-Server-Async-Executor"));
-        }
 
         if (null != roll) {
             return new RaftServerActor(roll, stateFactory, journalEntryParser, properties);
@@ -137,35 +113,23 @@ public class BootStrap implements ClusterAccessPoint {
     }
 
     private LocalClientRpc createLocalClientRpc() {
-        if (null == clientAsyncExecutor && !isExecutorProvided) {
-            this.clientAsyncExecutor = Executors.newCachedThreadPool(new NamedThreadFactory("JournalKeeper-Client-Async-Executor"));
-        }
-        if (null == clientScheduledExecutor && !isExecutorProvided) {
-            this.clientScheduledExecutor = Executors.newScheduledThreadPool(SCHEDULE_EXECUTOR_QUEUE_SIZE, new NamedThreadFactory("JournalKeeper-Client-Scheduled-Executor"));
-        }
 
         if (this.server != null) {
-            return new LocalClientRpc(server.getServerRpc(), remoteRetryPolicy, clientScheduledExecutor);
+            return new LocalClientRpc(server.getServerRpc(), remoteRetryPolicy);
         } else {
             throw new IllegalStateException("No local server!");
         }
     }
 
     private RemoteClientRpc createRemoteClientRpc() {
-        if (null == clientAsyncExecutor && !isExecutorProvided) {
-            this.clientAsyncExecutor = Executors.newCachedThreadPool(new NamedThreadFactory("JournalKeeper-Client-Async-Executor"));
-        }
-        if (null == clientScheduledExecutor && !isExecutorProvided) {
-            this.clientScheduledExecutor = Executors.newScheduledThreadPool(SCHEDULE_EXECUTOR_QUEUE_SIZE, new NamedThreadFactory("JournalKeeper-Client-Scheduled-Executor"));
-        }
 
         ClientServerRpcAccessPoint clientServerRpcAccessPoint = rpcAccessPointFactory.createClientServerRpcAccessPoint(this.properties);
         RemoteClientRpc clientRpc;
         if (this.server == null) {
-            clientRpc = new RemoteClientRpc(getServersForClient(), clientServerRpcAccessPoint, remoteRetryPolicy, clientAsyncExecutor, clientScheduledExecutor);
+            clientRpc = new RemoteClientRpc(getServersForClient(), clientServerRpcAccessPoint, remoteRetryPolicy);
         } else {
             clientServerRpcAccessPoint = new LocalDefaultRpcAccessPoint(server.getServerRpc(), clientServerRpcAccessPoint);
-            clientRpc = new RemoteClientRpc(getServersForClient(), clientServerRpcAccessPoint, remoteRetryPolicy, clientAsyncExecutor, clientScheduledExecutor);
+            clientRpc = new RemoteClientRpc(getServersForClient(), clientServerRpcAccessPoint, remoteRetryPolicy);
             clientRpc.setPreferredServer(server.serverUri());
         }
         return clientRpc;
@@ -178,13 +142,6 @@ public class BootStrap implements ClusterAccessPoint {
         }
         if (null != adminClient) {
             adminClient.stop();
-        }
-
-        if (!isExecutorProvided) {
-            shutdownExecutorService(serverScheduledExecutor);
-            shutdownExecutorService(serverAsyncExecutor);
-            shutdownExecutorService(clientScheduledExecutor);
-            shutdownExecutorService(clientAsyncExecutor);
         }
 
         if (null != server) {
@@ -229,12 +186,6 @@ public class BootStrap implements ClusterAccessPoint {
         }
     }
 
-    private void shutdownExecutorService(ExecutorService executor) {
-        if (null != executor) {
-            executor.shutdown();
-        }
-    }
-
     public JournalEntryParser getJournalEntryParser() {
         return this.journalEntryParser;
     }
@@ -248,17 +199,12 @@ public class BootStrap implements ClusterAccessPoint {
         private RaftServer.Roll roll;
         private StateFactory stateFactory;
         private JournalEntryParser journalEntryParser;
-        private ExecutorService clientAsyncExecutor;
-        private ScheduledExecutorService clientScheduledExecutor;
-        private ExecutorService serverAsyncExecutor;
-        private ScheduledExecutorService serverScheduledExecutor;
         private Properties properties;
         private List<URI> servers;
 
         private Builder() {
 
         }
-
 
         public Builder roll(RaftServer.Roll roll) {
             this.roll = roll;
@@ -280,33 +226,13 @@ public class BootStrap implements ClusterAccessPoint {
             return this;
         }
 
-        public Builder clientAsyncExecutor(ExecutorService clientAsyncExecutor) {
-            this.clientAsyncExecutor = clientAsyncExecutor;
-            return this;
-        }
-
-        public Builder clientScheduledExecutor(ScheduledExecutorService clientScheduledExecutor) {
-            this.clientScheduledExecutor = clientScheduledExecutor;
-            return this;
-        }
-
-        public Builder serverAsyncExecutor(ExecutorService serverAsyncExecutor) {
-            this.serverAsyncExecutor = serverAsyncExecutor;
-            return this;
-        }
-
-        public Builder serverScheduledExecutor(ScheduledExecutorService serverScheduledExecutor) {
-            this.serverScheduledExecutor = serverScheduledExecutor;
-            return this;
-        }
-
         public Builder properties(Properties properties) {
             this.properties = properties;
             return this;
         }
 
         public BootStrap build() {
-            return new BootStrap(roll, servers, stateFactory, journalEntryParser, clientAsyncExecutor, clientScheduledExecutor, serverAsyncExecutor, serverScheduledExecutor, properties);
+            return new BootStrap(roll, servers, stateFactory, journalEntryParser, properties);
         }
     }
 }
