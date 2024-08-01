@@ -807,6 +807,10 @@ public class VoterActor {
                 OnStateChangeEvent event = new OnStateChangeEvent(stateResult.getLastApplied());
                 byte [] serializedEvent =  InternalEntriesSerializeSupport.serialize(event);
                 events.add(new Event(EventType.ON_STATE_CHANGE, serializedEvent));
+                byte [] userEvent = stateResult.getEventData();
+                if (userEvent != null) {
+                    events.add(new Event(EventType.ON_USER_EVENT, userEvent));
+                }
             }
             Iterator<WaitingResponse> iterator = waitingResponses.iterator();
             while (iterator.hasNext()) {

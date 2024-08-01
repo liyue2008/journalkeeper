@@ -26,7 +26,6 @@ import io.journalkeeper.monitor.ServerMonitorInfo;
 import io.journalkeeper.utils.spi.ServiceSupport;
 import io.journalkeeper.utils.test.TestPathUtils;
 import org.junit.Assert;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -877,8 +876,8 @@ public class KvTest {
         }
     }
     @Test
-    public void eventTest() throws Exception {
-        Path path = TestPathUtils.prepareBaseDir("EventTest");
+    public void leaderEventTest() throws Exception {
+        Path path = TestPathUtils.prepareBaseDir("LeaderEventTest");
         final CountDownLatch latch = new CountDownLatch(1);
         final LeaderChangeListener leaderChangeListener = new LeaderChangeListener(latch);
         List<BootStrap> kvServers = createServers(3, path);
@@ -904,6 +903,39 @@ public class KvTest {
             TestPathUtils.destroyBaseDir(path.toFile());
         }
     }
+
+    @Test
+    public void userEventTest() throws Exception {
+        Path path = TestPathUtils.prepareBaseDir("UserEventTest");
+        final CountDownLatch latch = new CountDownLatch(1);
+        final LeaderChangeListener leaderChangeListener = new LeaderChangeListener(latch);
+        List<BootStrap> kvServers = createServers(3, path);
+
+        try {
+            List<URI> servers = kvServers.stream().map(BootStrap::getServer).map(RaftServer::serverUri).collect(Collectors.toList());
+            BootStrap clientBootStrap = BootStrap.builder().servers(servers).build();
+            JkEventBus eventBus = new JkEventBus(clientBootStrap.getRaftClient());
+            Consumer<String> eventListener = msg -> {
+                Assert.assertEquals("hello", msg);
+                latch.countDown();
+            };
+            eventBus.addUserEventListener(eventListener);
+
+            JkClient jkClient = new JkClient(clientBootStrap.getRaftClient());
+
+
+            AdminClient adminClient = clientBootStrap.getAdminClient();
+            adminClient.waitForClusterReady(10000L);
+            jkClient.update("FIRE_EVENT", "hello").get(10000L, TimeUnit.MILLISECONDS);
+            boolean ret = latch.await(10L, TimeUnit.SECONDS);
+            Assert.assertTrue(ret);
+            eventBus.removeUserEventListener(eventListener);
+        } finally {
+            stopServers(kvServers);
+            TestPathUtils.destroyBaseDir(path.toFile());
+        }
+    }
+
 
     private void stopServers(List<BootStrap> kvServers) {
         kvServers.parallelStream().forEach(s -> {

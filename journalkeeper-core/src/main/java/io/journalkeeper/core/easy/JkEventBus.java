@@ -3,6 +3,7 @@ package io.journalkeeper.core.easy;
 import io.journalkeeper.core.api.RaftClient;
 import io.journalkeeper.core.entry.internal.InternalEntriesSerializeSupport;
 import io.journalkeeper.core.entry.internal.OnLeaderChangeEvent;
+import io.journalkeeper.core.entry.internal.OnStateChangeEvent;
 import io.journalkeeper.core.serialize.JavaSerializeExtensionPoint;
 import io.journalkeeper.core.serialize.SerializeExtensionPoint;
 import io.journalkeeper.utils.event.EventType;
@@ -20,7 +21,8 @@ public class JkEventBus {
     private final SerializeExtensionPoint serializer = ServiceSupport.tryLoad(SerializeExtensionPoint.class).orElse(new JavaSerializeExtensionPoint());
 
     private final Set<Consumer<OnLeaderChangeEvent>> leaderChangeListeners = new HashSet<>();
-    private final Set<Consumer<Event>> stateChangeListeners = new HashSet<>();
+    private final Set<Consumer<OnStateChangeEvent>> stateChangeListeners = new HashSet<>();
+    private final Set<Consumer<?>> userEventListeners = new HashSet<>();
     private final AtomicInteger listenerCounter = new AtomicInteger(0);
     private final EventWatcher eventWatcher ;
 
@@ -39,15 +41,20 @@ public class JkEventBus {
                 case EventType.ON_STATE_CHANGE:
                     synchronized (stateChangeListeners) {
                         if (!stateChangeListeners.isEmpty()) {
-                            Object eventData = serializer.parse(event.getEventData());
-                            this.stateChangeListeners.forEach(listener -> listener.accept(new Event(eventData)));
+                            OnStateChangeEvent onStateChangeEvent = InternalEntriesSerializeSupport.parse(event.getEventData());
+                            this.stateChangeListeners.forEach(listener -> listener.accept(onStateChangeEvent));
                         }
                     }
                     break;
 
-                case EventType.ON_SERVER_SHUTDOWN:
-                    reWatch();
+                case EventType.ON_USER_EVENT:
+                    synchronized (userEventListeners) {
+                        if (!userEventListeners.isEmpty()) {
+                            this.userEventListeners.forEach(listener -> listener.accept(serializer.parse(event.getEventData())));
+                        }
+                    }
                     break;
+
 
                 default:
                     // nothing to do
@@ -75,21 +82,39 @@ public class JkEventBus {
             }
         }
     }
-    public <T> void watch(Consumer<T> listener) {
+
+    public void addStateChangeListener(Consumer<OnStateChangeEvent> listener) {
         synchronized (stateChangeListeners) {
-            if (stateChangeListeners.add(new EventListener(listener)) && listenerCounter.getAndIncrement() == 0) {
+            if (stateChangeListeners.add(listener) && listenerCounter.getAndIncrement() == 0) {
                 this.raftClient.watch(eventWatcher);
             }
         }
     }
 
-    public <T> void unwatch(Consumer<T> listener) {
+    public void removeStateChangeListener(Consumer<OnStateChangeEvent> listener) {
         synchronized (stateChangeListeners) {
-            if (stateChangeListeners.remove(new EventListener(listener)) && listenerCounter.decrementAndGet() == 0) {
+            if (stateChangeListeners.remove(listener) && listenerCounter.decrementAndGet() == 0) {
                 this.raftClient.unWatch(eventWatcher);
             }
         }
     }
+
+    public <T> void  addUserEventListener(Consumer<T> listener) {
+        synchronized (userEventListeners) {
+            if (userEventListeners.add(listener) && listenerCounter.getAndIncrement() == 0) {
+                this.raftClient.watch(eventWatcher);
+            }
+        }
+    }
+
+    public <T> void removeUserEventListener(Consumer<T> listener) {
+        synchronized (userEventListeners) {
+            if (userEventListeners.remove(listener) && listenerCounter.decrementAndGet() == 0) {
+                this.raftClient.unWatch(eventWatcher);
+            }
+        }
+    }
+
 
     public void close() {
         if (listenerCounter.get() > 0) {

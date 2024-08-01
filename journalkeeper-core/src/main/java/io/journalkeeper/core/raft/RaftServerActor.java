@@ -192,6 +192,7 @@ public class RaftServerActor implements  RaftServer {
             throw new IllegalStateException();
         }
         this.serverState = ServerState.STOPPING;
+
         return actor.pubThen("onStop").thenRunAsync(() -> {
             context.getPostOffice().stop();
             removeMonitorProviderToCollectors();

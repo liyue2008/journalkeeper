@@ -16,6 +16,7 @@ package io.journalkeeper.core.state;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
+import io.journalkeeper.core.easy.JkFireable;
 import io.journalkeeper.core.easy.JkState;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,6 +45,7 @@ public class KvState extends JkState implements Flushable {
     private static final String CMD_SET = "SET";
     private static final String CMD_DEL = "DEL";
     private static final String CMD_LIST = "KEYS";
+    private static final String CMD_FIRE_EVENT = "FIRE_EVENT";
     private final Gson gson = new Gson();
     private Map<String, String> stateMap = new HashMap<>();
     private Path statePath;
@@ -54,6 +56,7 @@ public class KvState extends JkState implements Flushable {
     public KvState() {
         registerExecuteCommandHandler(CMD_SET, this::set);
         registerExecuteCommandHandler(CMD_DEL, this::del);
+        registerExecuteCommandHandler(CMD_FIRE_EVENT, this::fireEvent);
         registerQueryCommandHandler(CMD_GET, this::get);
         registerQueryCommandHandler(CMD_LIST, this::list);
     }
@@ -98,6 +101,11 @@ public class KvState extends JkState implements Flushable {
     private String get(String key) {
         return stateMap.get(key);
     }
+
+    private void fireEvent(String msg, JkFireable fireable) {
+        fireable.fireEvent(msg);
+    }
+
 
     private String list() {
         return String.join(", ", stateMap.keySet());
