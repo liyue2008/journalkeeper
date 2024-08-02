@@ -2,10 +2,9 @@ package io.journalkeeper.core;
 
 import io.journalkeeper.core.api.QueryConsistency;
 import io.journalkeeper.core.api.RaftServer;
-import io.journalkeeper.core.api.State;
-import io.journalkeeper.core.api.StateFactory;
 import io.journalkeeper.core.easy.JkClient;
 import io.journalkeeper.core.easy.JkState;
+import io.journalkeeper.core.easy.JkStateFactory;
 import io.journalkeeper.utils.test.TestPathUtils;
 import org.junit.Assert;
 import org.junit.Test;
@@ -126,7 +125,8 @@ public class ConsistencyTest {
         return serverBootStraps;
     }
 
-    private static class ConsistencyState extends JkState {
+
+    private static class ConsistencyState {
         private int value = 0;
         public Integer doExecute(Integer entry) {
             return value += entry;
@@ -135,23 +135,15 @@ public class ConsistencyTest {
         public Integer doQuery(Integer query) {
             return value;
         }
-
-        public ConsistencyState () {
-            super();
-            registerQueryCommandHandler(this::doQuery);
-            registerExecuteCommandHandler(this::doExecute);
-        }
-        @Override
-        public void recover(Path path, Properties properties) {
-
-        }
     }
-
-    private static class ConsistencyStateFactory implements StateFactory {
+    private static class ConsistencyStateFactory extends JkStateFactory {
 
         @Override
-        public State createState() {
-            return new ConsistencyState();
+        protected void onStateCreated(JkState state) {
+            super.onStateCreated(state);
+            ConsistencyState consistencyState = new ConsistencyState();
+            state.registerQueryCommandHandler(consistencyState::doQuery);
+            state.registerExecuteCommandHandler(consistencyState::doExecute);
         }
     }
 }

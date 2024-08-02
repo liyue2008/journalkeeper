@@ -13,18 +13,106 @@
  */
 package io.journalkeeper.examples.kv;
 
-import io.journalkeeper.core.api.StateFactory;
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 import io.journalkeeper.core.easy.JkState;
+import io.journalkeeper.core.easy.JkStateFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
+import java.nio.file.Path;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Properties;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * @author LiYue
  * Date: 2019-04-03
  */
-public class KvStateFactory implements StateFactory {
-
+public class KvStateFactory extends JkStateFactory {
+    private static final Logger logger = LoggerFactory.getLogger(JkStateFactory.class);
+    private static final String FILENAME = "map";
+    private static final String CMD_GET = "GET";
+    private static final String CMD_SET = "SET";
+    private static final String CMD_DEL = "DEL";
+    private static final String CMD_LIST = "KEYS";
 
     @Override
-    public JkState createState() {
-        return new KvState();
+    protected void onStateCreated(JkState state) {
+        super.onStateCreated(state);
+        State myState = new State();
+        state.registerExecuteCommandHandler(CMD_SET, myState::set);
+        state.registerExecuteCommandHandler(CMD_DEL, myState::del);
+        state.registerQueryCommandHandler(CMD_GET, myState::get);
+        state.registerQueryCommandHandler(CMD_LIST, myState::list);
+        state.registerRecoverHandler(myState::doRecover);
+        state.registerFlushable(myState::flush);
     }
+
+    private static class State {
+
+        private final Gson gson = new Gson();
+        private Map<String, String> stateMap = new HashMap<>();
+        private Path statePath;
+
+        private final AtomicBoolean isDirty = new AtomicBoolean(false);
+
+
+        public void doRecover(Path statePath, Properties properties) {
+            this.statePath = statePath;
+            try {
+                stateMap = gson.fromJson(new String(Files.readAllBytes(statePath.resolve(FILENAME)), StandardCharsets.UTF_8),
+                        new TypeToken<HashMap<String, String>>() {
+                        }.getType());
+                int keys = stateMap == null ? -1 : stateMap.size();
+                isDirty.set(false);
+                logger.info("State map recovered from {}, keys {} ", statePath, keys);
+            } catch (NoSuchFileException e) {
+                stateMap = new HashMap<>();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
+
+        private void checkInput(String[] input, int count) {
+            if (input.length < count) {
+                throw new IllegalArgumentException("Bad request: " + String.join(" ", input) + "!");
+            }
+        }
+
+        private void set(String param) {
+            String[] splt = param.split("\\s");
+            checkInput(splt, 2);
+            stateMap.put(splt[0], splt[1]);
+            isDirty.compareAndSet(false, true);
+
+        }
+
+        private void del(String key) {
+            stateMap.remove(key);
+            isDirty.compareAndSet(false, true);
+
+        }
+
+        private String get(String key) {
+            return stateMap.get(key);
+        }
+
+        private String list() {
+            return String.join(", ", stateMap.keySet());
+        }
+
+
+        public void flush() throws IOException {
+            if (isDirty.compareAndSet(true, false)) {
+                Files.write(statePath.resolve(FILENAME), gson.toJson(stateMap).getBytes(StandardCharsets.UTF_8));
+            }
+        }
+    }
+
 }
