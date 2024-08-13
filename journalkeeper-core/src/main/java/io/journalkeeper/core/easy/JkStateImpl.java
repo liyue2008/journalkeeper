@@ -14,7 +14,7 @@ import java.util.*;
 import java.util.function.*;
 
 
-public  class JkStateImpl implements State, JkState , Flushable {
+class JkStateImpl implements State, JkState , Flushable {
 
     private final SerializeExtensionPoint serializer = ServiceSupport.tryLoad(SerializeExtensionPoint.class).orElse(new JavaSerializeExtensionPoint());
     private final Map<String, Function<JkRequest, JkResponse >> queryCommandHandlers = new HashMap<>();

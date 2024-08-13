@@ -74,6 +74,7 @@
         <module>journalkeeper-metric-dropwizard</module>
         <module>journalkeeper-examples</module>
         <module>journalkeeper-test</module>
+        <module>journalkeeper-rocksdb</module>
 
     </modules>
     <properties>
