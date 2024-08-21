@@ -23,6 +23,7 @@ class JkStateImpl implements State, JkState , Flushable {
     private final List<BiConsumer<Path, Properties>> recoverHandlers = new ArrayList<>();
 
     private final List<Flushable> flushableList = new ArrayList<>();
+    private final List<Runnable> closeRunnableList = new ArrayList<>();
     private Path statePath = null;
     private Properties properties = null;
 
@@ -92,13 +93,26 @@ class JkStateImpl implements State, JkState , Flushable {
     }
 
     @Override
-    public void registerRecoverHandler(BiConsumer<Path, Properties> handler) {
+    public void onRecover(BiConsumer<Path, Properties> handler) {
         this.recoverHandlers.add(handler);
     }
 
     @Override
-    public void registerFlushable(Flushable flushable) {
+    public void onFlush(Flushable flushable) {
         this.flushableList.add(flushable);
+    }
+
+    @Override
+    public void onClose(Runnable runnable) {
+        this.closeRunnableList.add(runnable);
+    }
+
+    @Override
+    public void close() {
+        State.super.close();
+        for (Runnable runnable : closeRunnableList) {
+            runnable.run();
+        }
     }
 
     @Override

@@ -50,8 +50,8 @@ public class KvStateFactory extends JkStateFactory {
         state.registerExecuteCommandHandler(CMD_DEL, myState::del);
         state.registerQueryCommandHandler(CMD_GET, myState::get);
         state.registerQueryCommandHandler(CMD_LIST, myState::list);
-        state.registerRecoverHandler(myState::doRecover);
-        state.registerFlushable(myState::flush);
+        state.onRecover(myState::doRecover);
+        state.onFlush(myState::flush);
     }
 
     private static class State {

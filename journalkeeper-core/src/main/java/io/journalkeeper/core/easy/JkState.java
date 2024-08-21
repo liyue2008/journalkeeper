@@ -30,7 +30,9 @@ public interface JkState {
 
     <P> void registerExecuteCommandHandler(String command, Consumer<P> handler);
 
-    void registerRecoverHandler(BiConsumer<Path, Properties> handler);
+    void onRecover(BiConsumer<Path, Properties> handler);
 
-    void registerFlushable(Flushable flushable);
+    void onFlush(Flushable flushable);
+
+    void onClose(Runnable runnable);
 }

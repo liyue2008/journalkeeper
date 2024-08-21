@@ -45,13 +45,13 @@
             <groupId>io.journalkeeper</groupId>
             <artifactId>journalkeeper-persistence-local</artifactId>
             <version>${project.version}</version>
-            <scope>runtime</scope>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>io.journalkeeper</groupId>
             <artifactId>journalkeeper-rpc-netty</artifactId>
             <version>${project.version}</version>
-            <scope>runtime</scope>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>
