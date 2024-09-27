@@ -17,10 +17,10 @@ package io.journalkeeper.core.journal;
  * @author LiYue
  * Date: 2019-04-25
  */
-public class NosuchPartitionException extends RuntimeException {
+public class NoSuchPartitionException extends RuntimeException {
     private final int partition;
 
-    public NosuchPartitionException(int partition) {
+    public NoSuchPartitionException(int partition) {
         super("No such partition: " + partition + "!");
         this.partition = partition;
     }

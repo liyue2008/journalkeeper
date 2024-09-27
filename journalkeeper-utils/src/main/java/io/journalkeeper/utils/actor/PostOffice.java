@@ -4,7 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
+
 
 public class PostOffice{
 
@@ -12,7 +12,6 @@ public class PostOffice{
     private final Map<String, ActorInbox> inboxMap = new HashMap<>();
     private final List<Postman> postmanList;
     private final static int DEFAULT_POSTMAN_COUNT = 1;
-    private final Map<String, Set<ActorInbox>> pubSubMap = new ConcurrentHashMap<>();
     private final ScheduleActor scheduleActor;
     private final List<Actor> actorList;
     private final String name;

@@ -27,6 +27,7 @@ public class JournalEntryParseSupport extends EntryParser {
 
     public static final int FIXED_LENGTH_8 = 8;
     private final static int VARIABLE_LENGTH = -1;
+    @SuppressWarnings("unused")
     private final static int FIXED_LENGTH_1 = 1;
     private final static int FIXED_LENGTH_2 = 2;
     private final static int FIXED_LENGTH_4 = 4;
@@ -81,6 +82,7 @@ public class JournalEntryParseSupport extends EntryParser {
         return attribute.getOffset();
     }
 
+    @SuppressWarnings("unused")
     private static class Attribute {
         private final int length;
         private final String name;

@@ -19,8 +19,6 @@ import io.journalkeeper.core.api.JournalEntryParser;
 import io.journalkeeper.core.api.RaftServer;
 import io.journalkeeper.core.entry.DefaultJournalEntryParser;
 import io.journalkeeper.utils.state.StateServer;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 import java.util.List;
@@ -32,7 +30,7 @@ import java.util.Set;
  * Date: 2019-05-09
  */
 public class JournalStoreServer implements StateServer {
-    private static final Logger logger = LoggerFactory.getLogger(JournalStoreServer.class);
+
     private final BootStrap bootStrap;
 
     public JournalStoreServer(Properties properties) {
@@ -56,8 +54,8 @@ public class JournalStoreServer implements StateServer {
         bootStrap.getServer().init(uri, voters, partitions);
     }
 
-    public void init(URI uri, List<URI> voters, Set<Integer> partitions, URI preferredleader) {
-        bootStrap.getServer().init(uri, voters, partitions, preferredleader);
+    public void init(URI uri, List<URI> voters, Set<Integer> partitions, URI preferredLeader) {
+        bootStrap.getServer().init(uri, voters, partitions, preferredLeader);
     }
 
     public boolean isInitialized() {

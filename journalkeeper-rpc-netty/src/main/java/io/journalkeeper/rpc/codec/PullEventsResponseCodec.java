@@ -16,10 +16,7 @@ package io.journalkeeper.rpc.codec;
 import io.journalkeeper.rpc.client.PullEventsResponse;
 import io.journalkeeper.rpc.header.JournalKeeperHeader;
 import io.journalkeeper.rpc.remoting.serialize.CodecSupport;
-import io.journalkeeper.rpc.remoting.transport.codec.Decoder;
-import io.journalkeeper.rpc.remoting.transport.codec.Encoder;
 import io.journalkeeper.rpc.remoting.transport.command.Type;
-import io.journalkeeper.rpc.remoting.transport.exception.TransportException;
 import io.journalkeeper.utils.event.PullEvent;
 import io.netty.buffer.ByteBuf;
 

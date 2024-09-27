@@ -37,7 +37,7 @@ import java.util.concurrent.locks.StampedLock;
 /**
  * 支持并发、带缓存页、顺序写入的文件
  */
-@SuppressWarnings("ResultOfMethodCallIgnored")
+@SuppressWarnings({ "ResultOfMethodCallIgnored", "restriction" })
 public class LocalStoreFile implements StoreFile, BufferHolder {
     private static final Logger logger = LoggerFactory.getLogger(LocalStoreFile.class);
     // 缓存页类型

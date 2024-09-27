@@ -19,8 +19,6 @@ import io.journalkeeper.core.api.JournalEntryParser;
 import io.journalkeeper.core.api.RaftJournal;
 import io.journalkeeper.core.api.State;
 import io.journalkeeper.core.api.StateResult;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.Flushable;
 import java.io.IOException;
@@ -40,7 +38,7 @@ import static io.journalkeeper.journalstore.JournalStoreQuery.CMD_QUERY_PARTITIO
  * Date: 2019-05-09
  */
 public class JournalStoreState implements State, Flushable {
-    private static final Logger logger = LoggerFactory.getLogger(JournalStoreState.class);
+
     private final static String STATE_FILE_NAME = "applied_indices";
     private final Serializer<Long> appendResultSerializer;
     private final Serializer<JournalStoreQuery> querySerializer;

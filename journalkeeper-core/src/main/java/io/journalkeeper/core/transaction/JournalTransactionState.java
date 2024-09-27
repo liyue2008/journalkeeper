@@ -247,6 +247,8 @@ class JournalTransactionState extends ServerStateMachine {
                     future.complete(null);
                 }
                 break;
+            default:
+                break;
         }
 
 

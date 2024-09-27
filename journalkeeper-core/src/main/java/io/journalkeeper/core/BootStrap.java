@@ -42,7 +42,6 @@ import java.util.Properties;
  * Date: 2019-03-25
  */
 public class BootStrap implements ClusterAccessPoint {
-    private final static int SCHEDULE_EXECUTOR_QUEUE_SIZE = 128;
 
     private final StateFactory stateFactory;
 

@@ -11,8 +11,6 @@ import io.journalkeeper.exceptions.StateQueryException;
 import io.journalkeeper.exceptions.StateRecoverException;
 import io.journalkeeper.persistence.MetadataPersistence;
 import io.journalkeeper.utils.files.FileUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
@@ -30,7 +28,7 @@ import java.util.stream.Collectors;
  * Date: 2020/4/17
  */
 public class Snapshot extends JournalKeeperState implements Replicable {
-private static final Logger logger = LoggerFactory.getLogger(Snapshot.class);
+
     private static final String SNAPSHOT_FILE = "snapshot";
     private final AtomicBoolean isUserStateAvailable = new AtomicBoolean(false);
     private static final int MAX_TRUNK_SIZE = 1024 * 1024;

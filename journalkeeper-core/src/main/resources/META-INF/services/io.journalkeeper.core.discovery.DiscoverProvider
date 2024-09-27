@@ -1,0 +1,2 @@
+io.journalkeeper.core.discovery.InMemoryDiscoverProvider
+io.journalkeeper.core.discovery.MulticastSocketDiscoverProvider

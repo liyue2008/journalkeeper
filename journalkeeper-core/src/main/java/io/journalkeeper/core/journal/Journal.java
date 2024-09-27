@@ -365,7 +365,7 @@ public class Journal implements RaftJournal, Flushable, Closeable {
     private JournalPersistence getPartitionPersistence(int partition) {
         JournalPersistence partitionPersistence = partitionMap.get(partition);
         if (null == partitionPersistence) {
-            throw new NosuchPartitionException(partition);
+            throw new NoSuchPartitionException(partition);
         }
         return partitionPersistence;
     }
@@ -1046,10 +1046,6 @@ public class Journal implements RaftJournal, Flushable, Closeable {
 
     private void withReadLock(LockedCode lockedCode) {
         withLock(lockedCode, readWriteLock.readLock());
-    }
-
-    private <T> T withWriteLock(Callable<T> callable) {
-        return withLock(callable, readWriteLock.writeLock());
     }
 
     private void withWriteLock(LockedCode lockedCode) {

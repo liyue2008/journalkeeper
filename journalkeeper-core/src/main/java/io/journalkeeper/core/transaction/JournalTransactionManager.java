@@ -67,7 +67,7 @@ public class JournalTransactionManager extends ServerStateMachine {
         TransactionEntry entry = new TransactionEntry(transactionId, context);
         final long timestamp = entry.getTimestamp();
         byte[] serializedEntry = transactionEntrySerializer.serialize(entry);
-        CompletableFuture<UpdateClusterStateResponse> future = null;
+
         UpdateClusterStateRequest request = new UpdateClusterStateRequest(new UpdateRequest(serializedEntry, partition, 1));
 
         return actor.<UpdateClusterStateResponse>sendThen("Voter", "updateClusterStateInternal", request)

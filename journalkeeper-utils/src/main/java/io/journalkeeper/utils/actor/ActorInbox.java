@@ -91,6 +91,16 @@ class ActorInbox {
             throw new RuntimeException(e);
         }
     }
+
+
+    <T> void addActorListener(String topic, Consumer<T> consumer, Class<T> tClass) {
+        try {
+            addActorListener(topic, consumer, consumer.getClass().getDeclaredMethod("accept", tClass));
+        } catch (NoSuchMethodException e) {
+            throw new RuntimeException(e);
+        }
+    }
+    
     <T> void addActorListener(String topic, Consumer<T> consumer) {
         try {
             addActorListener(topic, consumer, consumer.getClass().getDeclaredMethod("accept", Object.class));

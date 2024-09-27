@@ -19,8 +19,7 @@ import io.journalkeeper.rpc.remoting.transport.command.Command;
 import io.journalkeeper.rpc.remoting.transport.command.handler.CommandHandler;
 import io.journalkeeper.rpc.remoting.transport.command.handler.CommandHandlerFactory;
 import io.journalkeeper.rpc.utils.CommandSupport;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
 
 import java.net.URI;
 import java.util.Map;
@@ -32,7 +31,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * Date: 2019/9/30
  */
 public class UriRoutedCommandHandlerFactory implements CommandHandlerFactory {
-    private static final Logger logger = LoggerFactory.getLogger(UriRoutedCommandHandlerFactory.class);
+
     private final static CommandHandler defaultHandler = new NoUriCommandHandler();
     private final Map<URI, DefaultCommandHandlerFactory> handlerFactoryMap = new ConcurrentHashMap<>();
 

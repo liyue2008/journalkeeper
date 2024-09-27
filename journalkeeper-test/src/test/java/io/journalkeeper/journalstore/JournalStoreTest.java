@@ -691,6 +691,7 @@ public class JournalStoreTest {
     }
 
 
+    @SuppressWarnings("unused")
     private void asyncWrite(Set<Integer> partitions, int batchSize, int batchCount, JournalStoreClient client, byte[] rawEntries) throws InterruptedException {
         ExecutorService executors = Executors.newFixedThreadPool(10, new NamedThreadFactory("ClientRetryThreads"));
         CountDownLatch latch = new CountDownLatch(partitions.size() * batchCount);
@@ -736,6 +737,7 @@ public class JournalStoreTest {
                 });
     }
 
+    @SuppressWarnings("unused")
     private void syncWrite(Set<Integer> partitions, int batchSize, int batchCount, JournalStoreClient client, byte[] rawEntries) throws InterruptedException, ExecutionException {
         // write
         for (int partition : partitions) {

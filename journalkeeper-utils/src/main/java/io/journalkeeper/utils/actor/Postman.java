@@ -1,14 +1,12 @@
 package io.journalkeeper.utils.actor;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
 public class Postman implements Runnable {
-    private static final Logger logger = LoggerFactory.getLogger( Postman.class );
+
     private final PostOffice postOffice;
 
     private final Object ring = new Object();

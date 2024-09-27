@@ -141,13 +141,14 @@ private static final Logger logger = LoggerFactory.getLogger(ActorTest.class);
 
     // TOPIC 同名方法
 
-    @SuppressWarnings("SameReturnValue")
+    @SuppressWarnings({"SameReturnValue", "unused"})
     private static class TopicNameHandlerFunctions {
         private final CountDownLatch latch;
 
         public TopicNameHandlerFunctions(CountDownLatch latch) {
             this.latch = latch;
         }
+
 
         private void noArg() {
             latch.countDown();
@@ -308,6 +309,7 @@ private static final Logger logger = LoggerFactory.getLogger(ActorTest.class);
 
     // @ActorMessage
 
+    @SuppressWarnings("unused")
     private static class ActorMsgClass {
         private final CountDownLatch latch;
 
@@ -658,6 +660,7 @@ private static final Logger logger = LoggerFactory.getLogger(ActorTest.class);
 
     // 同名方法
 
+    @SuppressWarnings("unused")
     private static class ResponseHandlerClass {
         private final CountDownLatch latch;
 
@@ -935,7 +938,7 @@ private static final Logger logger = LoggerFactory.getLogger(ActorTest.class);
                 .build();
         Actor receiver = Actor.builder()
                 .addr("receiver")
-                .addActorListener("topic", rquest->"World").build();
+                .addActorListener("topic", request->"World").build();
         PostOffice.builder()
                 .addActor(sender)
                 .addActor(receiver)

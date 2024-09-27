@@ -11,7 +11,6 @@ import io.journalkeeper.utils.event.EventWatcher;
 import io.journalkeeper.utils.spi.ServiceSupport;
 
 import java.util.HashSet;
-import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
@@ -60,11 +59,6 @@ public class JkEventBus {
                     // nothing to do
             }
         };
-    }
-
-    private void reWatch() {
-        this.raftClient.unWatch(this.eventWatcher);
-        this.raftClient.watch(this.eventWatcher);
     }
 
     public void addLeaderChangeListener(Consumer<OnLeaderChangeEvent> listener) {
@@ -125,47 +119,10 @@ public class JkEventBus {
 
     }
 
-    private static class Event {
-        private final Object eventData;
-
-        public Event(Object eventData) {
-            this.eventData = eventData;
-        }
-
-        @SuppressWarnings("unchecked")
-        public <T> T get() {
-            return (T) eventData;
-
-        }
-    }
 
 
 
-    private static class EventListener implements Consumer<Event> {
-        private final Consumer<?> listener;
 
-        private EventListener(Consumer<?> listener) {
-            this.listener = listener;
-        }
-
-        @Override
-        public void accept(Event event) {
-            listener.accept(event.get());
-        }
-
-        @Override
-        public boolean equals(Object object) {
-            if (this == object) return true;
-            if (object == null || getClass() != object.getClass()) return false;
-            EventListener that = (EventListener) object;
-            return Objects.equals(listener, that.listener);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(listener);
-        }
-    }
 
 
 }

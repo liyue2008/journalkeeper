@@ -37,7 +37,8 @@ class ActorResponseSupport {
     ActorResponseSupport(ActorInbox inbox, ActorOutbox outbox) {
         responseHandlers = new HashMap<>();
         this.outbox = outbox;
-        inbox.addActorListener(RESPONSE, new ResponseMessageConsumer());
+        ResponseMessageConsumer responseMessageConsumer = new ResponseMessageConsumer();
+        inbox.addActorListener(RESPONSE, responseMessageConsumer, ActorMsg.class);
     }
 
     <T> CompletableFuture<T> send(String addr, String topic, ActorRejectPolicy rejectPolicy, Object... payloads){

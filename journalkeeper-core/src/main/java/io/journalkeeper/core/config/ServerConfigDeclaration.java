@@ -39,6 +39,12 @@ public class ServerConfigDeclaration {
         config.declare("persistence.index.max_dirty_size", Long.class, 0L, true, "脏数据最大长度，超过这个长度append将阻塞");
 
         // Voter
+        config.declare("discovery.provider", String.class, "io.journalkeeper.core.discovery.MulticastSocketDiscoverProvider", true, "发现类型");
+        config.declare("discovery.multicast.port", Integer.class, 4000, true, "多播端口");
+        config.declare("discovery.multicast.group", String.class, "230.0.0.1", true, "多播组");
+        config.declare("discovery.voter_count", Integer.class, 3, true, "集群成员节点数量");
+        config.declare("discovery.token", String.class, "journalkeeper", true, "发现Token");
+        config.declare("discovery.timeout_sec", Long.class, 60L, true, "发现超时，单位：秒");
         config.declare("heartbeat_interval_ms", Long.class, 100L, true, "心跳间隔，单位：毫秒");
         config.declare("election_timeout_ms", Long.class, 300L, true, "选举超时，单位：毫秒");
         config.declare("replication_batch_size", Integer.class, 128, true, "复制批次大小");

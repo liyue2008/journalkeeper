@@ -46,6 +46,7 @@ import java.util.stream.Stream;
  * @author LiYue
  * Date: 2018-12-20
  */
+@SuppressWarnings("restriction")
 @Singleton
 public class PreloadBufferPool implements MemoryCacheManager {
     private static final Logger logger = LoggerFactory.getLogger(PreloadBufferPool.class);

@@ -14,16 +14,17 @@ class RocksState {
     private RocksDB rocksDB = null;
     private final static String ROCKS_PATH = "rocksdb";
 
+    @SuppressWarnings("resource")
     void recover(Path statePath, Properties properties) {
         try {
             Path rocksPath = statePath.resolve(ROCKS_PATH);
             RocksDB.loadLibrary();
             options = new Options().setCreateIfMissing(true);
             rocksDB = RocksDB.open(options, rocksPath.toString());
-
+            
         } catch (Exception e) {
             throw new RecoverException(e);
-        }
+        } 
 
     }
 

@@ -23,7 +23,7 @@ import io.journalkeeper.utils.spi.ServiceSupport;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.Closeable;
+
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -44,7 +44,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * @author LiYue
  * Date: 2018/8/14
  */
-public class PositioningStore implements JournalPersistence, MonitoredPersistence, Closeable {
+public class PositioningStore implements JournalPersistence, MonitoredPersistence {
     private final Logger logger = LoggerFactory.getLogger(PositioningStore.class);
     private final MemoryCacheManager bufferPool;
     private final NavigableMap<Long, StoreFile> storeFileMap = new ConcurrentSkipListMap<>();

@@ -1,6 +1,5 @@
 package io.journalkeeper.core.rpc;
 
-import io.journalkeeper.rpc.client.AddPullWatchResponse;
 import io.journalkeeper.rpc.client.CheckLeadershipResponse;
 import io.journalkeeper.rpc.client.ClientServerRpc;
 import io.journalkeeper.rpc.client.CompleteTransactionRequest;
@@ -18,8 +17,6 @@ import io.journalkeeper.rpc.client.PullEventsRequest;
 import io.journalkeeper.rpc.client.PullEventsResponse;
 import io.journalkeeper.rpc.client.QueryStateRequest;
 import io.journalkeeper.rpc.client.QueryStateResponse;
-import io.journalkeeper.rpc.client.RemovePullWatchRequest;
-import io.journalkeeper.rpc.client.RemovePullWatchResponse;
 import io.journalkeeper.rpc.client.UpdateClusterStateRequest;
 import io.journalkeeper.rpc.client.UpdateClusterStateResponse;
 import io.journalkeeper.rpc.client.UpdateVotersRequest;

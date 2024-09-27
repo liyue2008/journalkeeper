@@ -42,6 +42,7 @@ public class FileLock implements LockablePersistence {
         this.lockFile = lockPath.toFile();
     }
 
+    @SuppressWarnings("resource")
     public void lock() throws IOException {
         if(!lockFile.getParentFile().isDirectory() && !lockFile.getParentFile().mkdirs()) {
             throw new IOException(

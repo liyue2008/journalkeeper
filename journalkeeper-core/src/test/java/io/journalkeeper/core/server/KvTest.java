@@ -13,8 +13,10 @@
  */
 package io.journalkeeper.core.server;
 
+import io.journalkeeper.core.AutoDiscoverBootStrap;
 import io.journalkeeper.core.BootStrap;
 import io.journalkeeper.core.api.*;
+import io.journalkeeper.core.discovery.InMemoryDiscoverProvider;
 import io.journalkeeper.core.easy.JkClient;
 import io.journalkeeper.core.easy.JkEventBus;
 import io.journalkeeper.core.entry.internal.OnLeaderChangeEvent;
@@ -34,12 +36,14 @@ import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
+
 
 /**
  * @author LiYue
@@ -908,7 +912,7 @@ public class KvTest {
     public void userEventTest() throws Exception {
         Path path = TestPathUtils.prepareBaseDir("UserEventTest");
         final CountDownLatch latch = new CountDownLatch(1);
-        final LeaderChangeListener leaderChangeListener = new LeaderChangeListener(latch);
+
         List<BootStrap> kvServers = createServers(3, path);
 
         try {
@@ -978,15 +982,35 @@ public class KvTest {
 
 
     private List<BootStrap> createServers(List<URI> serverURIs, List<Properties> propertiesList, RaftServer.Roll roll, boolean waitForLeader) {
-
+        String token = UUID.randomUUID().toString();
         List<BootStrap> serverBootStraps = new ArrayList<>(serverURIs.size());
-        for (int i = 0; i < serverURIs.size(); i++) {
-            BootStrap serverBootStrap = BootStrap.builder().roll(roll).stateFactory(new KvStateFactory()).properties(propertiesList.get(i)).build();            serverBootStraps.add(serverBootStrap);
 
-            serverBootStrap.getServer().init(serverURIs.get(i), serverURIs);
-            serverBootStrap.getServer().recover();
-            serverBootStrap.getServer().start();
+        propertiesList.forEach(properties -> {
+            properties.setProperty("discovery.token", token);
+            properties.setProperty("discovery.provider", InMemoryDiscoverProvider.class.getName());
+            properties.setProperty("discovery.voter_count", String.valueOf(serverURIs.size()));
+        });
+
+        List<CompletableFuture<BootStrap>> futures = new ArrayList<>(serverURIs.size());
+        for (int i = 0; i < serverURIs.size(); i++) {
+            URI serverURI = serverURIs.get(i);
+            AutoDiscoverBootStrap autoDiscoverBootStrap = AutoDiscoverBootStrap.builder()
+                .properties(propertiesList.get(i))
+                .stateFactory(new KvStateFactory())
+                .uri(serverURI)
+                .build();
+
+            futures.add(autoDiscoverBootStrap.discover().thenApply(bootStrap -> {
+                bootStrap.getServer().init(serverURI, serverURIs);
+                bootStrap.getServer().recover();
+                bootStrap.getServer().start();
+                return bootStrap;
+            }));
+
         }
+        serverBootStraps = futures.stream().map(CompletableFuture::join).collect(Collectors.toList());
+
+
         if (waitForLeader) {
             serverBootStraps.get(0).getAdminClient().waitForClusterReady();
         }

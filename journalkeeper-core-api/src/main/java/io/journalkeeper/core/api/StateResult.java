@@ -25,9 +25,6 @@
  */
 package io.journalkeeper.core.api;
 
-import java.util.Arrays;
-
-import static io.journalkeeper.core.api.RaftJournal.DEFAULT_PARTITION;
 
 /**
  * @author LiYue
